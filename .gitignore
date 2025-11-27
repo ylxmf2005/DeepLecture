@@ -1,0 +1,90 @@
+# Python
+__pycache__/
+*.py[oc]
+*.pyd
+*.so
+*.dll
+*.egg-info/
+build/
+dist/
+wheels/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+.uv/
+
+# Application / runtime data (do not commit)
+data/
+uploads/
+outputs/
+notes/
+temp_audio/
+logs/
+reports/
+
+# Configuration (user-specific)
+config/conf.yaml
+
+# Node / Next.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/tsconfig.tsbuildinfo
+frontend/.vercel/
+
+# Environment & secrets
+.env
+.env.*
+frontend/.env
+frontend/.env.*
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local tooling
+.python-version
+.serena
+
+# Logs & misc
+*.log
+
+# Vendored tools
+whisper.cpp/
+
+# Others
+.ruff_cache
+.serena
+.claude
+live2d_models/
+_archive/
+
+# AI assistant configs (local only)
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+
+# Claude generated docs
+claudedocs/
+
+# Temporary/internal docs
+API_REFACTOR_SUMMARY.md

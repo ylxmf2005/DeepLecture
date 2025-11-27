@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+:root {
+  /* Light Theme - Clean & Modern */
+  --background: #ffffff;
+  --foreground: #0f172a;
+  /* Slate 900 */
+
+  /* Primary Brand Colors (Blue/Indigo) */
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+
+  /* Surface Colors */
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+
+  /* Muted/Secondary */
+  --muted: #f1f5f9;
+  /* Slate 100 */
+  --muted-foreground: #64748b;
+  /* Slate 500 */
+
+  /* Borders */
+  --border: #e2e8f0;
+  /* Slate 200 */
+  --input: #e2e8f0;
+  --ring: #3b82f6;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root.dark {
+  /* Dark Theme - Deep & Rich */
+  --background: #020617;
+  /* Slate 950 */
+  --foreground: #f8fafc;
+  /* Slate 50 */
+
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+
+  --card: #0f172a;
+  /* Slate 900 */
+  --card-foreground: #f8fafc;
+
+  --muted: #1e293b;
+  /* Slate 800 */
+  --muted-foreground: #94a3b8;
+  /* Slate 400 */
+
+  --border: #1e293b;
+  --input: #1e293b;
+  --ring: #1d4ed8;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  opacity: 0.5;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground);
+  opacity: 0.8;
+}
+
+/* Utility for hiding scrollbar but keeping functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Subtitle Styling */
+/* Subtitle Styling */
+video::cue {
+  font-size: 16px;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* Hide native fullscreen button to force use of custom one */
+video::-webkit-media-controls-fullscreen-button {
+  display: none !important;
+}

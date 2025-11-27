@@ -1,0 +1,66 @@
+[project]
+name = "deeplecture"
+version = "0.1.0"
+description = "AI-powered lecture video understanding and learning enhancement"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+    "flask>=3.1.0",
+    "flask-cors>=5.0.1",
+    "flask-limiter>=3.8.0",
+    "fish-audio-sdk>=1.0.0,<2.0.0",
+    "edge-tts>=6.1.0",
+    "yt-dlp>=2025.1.1",
+    "google-genai>=1.2.0",
+    "openai>=1.65.2",
+    "pydantic-settings>=2.0.0",
+    "pyyaml>=6.0.2",
+    "tenacity>=9.0.0",
+    "json-repair==0.*",
+    "pypdfium2>=4.30.0",
+    "pillow>=10.0.0",
+    "sqlalchemy>=2.0.44",
+]
+
+[project.optional-dependencies]
+# Optional dependencies for different transcription engines
+whisper-cpp = []  # No Python dependencies, requires manual compilation
+faster-whisper = [
+    "faster-whisper>=1.0.0",
+    "torch>=2.0.0",
+]
+# GPU support for faster-whisper (CUDA 12)
+gpu = [
+    "faster-whisper>=1.0.0",
+    "torch>=2.0.0",
+    "nvidia-cublas-cu12",
+    "nvidia-cudnn-cu12",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[project.scripts]
+deeplecture = "deeplecture.app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/deeplecture"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-v"
+
+[tool.ruff]
+src = ["src", "tests"]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]

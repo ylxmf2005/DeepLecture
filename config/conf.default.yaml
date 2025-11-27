@@ -1,0 +1,117 @@
+server:
+  max_upload_bytes: 10737418240  # 10GB
+  max_note_image_bytes: 104857600  # 100MB
+  cors_allow_origins:
+    - "http://localhost:3000"
+  rate_limit_storage_uri: "memory://"
+  api_key: ""
+  run_worker: true
+
+rate_limits:
+  default_per_day: 100000
+  default_per_hour: 10000
+  upload_per_minute: 100
+  generate_per_hour: 1000
+
+app:
+  debug: false
+  data_dir: data
+
+llm:
+  max_rpm: 10000
+  max_retries: 3
+  retry_min_wait: 1.0
+  retry_max_wait: 60.0
+  models:
+    - name: default
+      provider: openai
+      model: gpt-4.1
+      api_key: ""
+      base_url: https://api.openai.com/v1
+      temperature: 0.7
+  task_models:
+    ask_video: default
+    default: default
+    note_generation: default
+    slide_lecture: default
+    subtitle_enhancement: default
+    subtitle_timeline: default
+    subtitle_translation: default
+
+slides:
+  lecture:
+    cleanup_temp: true
+    neighbor_images: next
+    page_break_silence_seconds: 1.0
+    summary_lookback_pages: -1
+    transcript_lookback_pages: 3
+    tts_language: source
+  explanation:
+    subtitle_context_window_seconds: 30.0
+
+subtitle:
+  engine: whisper_cpp
+  source_language: en
+  use_mock: false
+  whisper_cpp:
+    # Model selection: tiny, base, small, medium, large-v2, large-v3, large-v3-turbo
+    model_name: large-v3-turbo
+    # Optional: override auto-resolved paths (leave empty for auto)
+    model_path: ""
+    whisper_bin: ""
+    whisper_cpp_dir: whisper.cpp
+    # Auto-download model and build whisper.cpp if not present
+    auto_download: true
+    # threads: auto-detected based on hardware
+    flash_attn: true  # Metal/CUDA Flash Attention acceleration
+    # Anti-hallucination settings (see _archive/notes/whisper.md)
+    beam_size: 1      # beam_size=1 minimizes hallucination (arXiv 2501.11378)
+    best_of: 1        # consistent with beam_size=1
+  faster_whisper:
+    # Model selection: tiny, base, small, medium, large-v2, large-v3, large-v3-turbo
+    model_size: large-v3-turbo
+    device: auto
+    compute_type: auto
+    download_root: ""
+  translation:
+    batch_size: 10
+    target_language: zh
+  enhancement:
+    merge_window: 3
+    overlap: 1
+    max_output_chars: 160
+    background_max_chars: 8000
+    temperature: 0.2
+  timeline:
+    output_language: zh
+    temperature: 0.3
+
+tts:
+  max_rpm: 10000
+  max_retries: 3
+  retry_min_wait: 1.0
+  retry_max_wait: 60.0
+  sample_rate: 24000
+  max_sentence_duration: 8.0
+  providers:
+    - name: fishaudio-default
+      provider: fishaudio
+      fishaudio:
+        api_key: ""
+        base_url: https://api.fish.audio
+        model: s1
+        reference_id: ""
+        base_speed: 1.0
+        format: wav
+        latency: balanced
+    - name: edge-default
+      provider: edge_tts
+      edge_tts:
+        voice: zh-CN-XiaoxiaoNeural
+  task_models:
+    default: fishaudio-default
+    slide_lecture: fishaudio-default
+    voiceover: fishaudio-default
+
+tasks:
+  timeout_seconds: null
