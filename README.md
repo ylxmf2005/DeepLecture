@@ -190,8 +190,6 @@ tts:
 **启动后端**（端口 11393）：
 ```bash
 uv run deeplecture
-# 或者
-make run
 ```
 
 **启动前端**（新终端，端口 3000）：
