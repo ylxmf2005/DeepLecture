@@ -201,6 +201,7 @@ class WhisperCppEngine(SubtitleEngine):
         flash_attn: bool = True,
         beam_size: int = 1,  # Default to 1 for minimal hallucination
         best_of: int = 1,    # Consistent with beam_size=1
+        max_context: int = 0,  # 0 = disable context conditioning (anti-hallucination), -1 = use all context
         logger: Optional[logging.Logger] = None,
     ) -> None:
         self._logger = logger or logging.getLogger(__name__)
@@ -211,6 +212,7 @@ class WhisperCppEngine(SubtitleEngine):
         self._flash_attn = flash_attn
         self._beam_size = beam_size
         self._best_of = best_of
+        self._max_context = max_context
 
         # Resolve model path and whisper binary
         self._model_path = model_path or str(self._whisper_cpp_dir / "models" / f"ggml-{model_name}.bin")
@@ -304,6 +306,10 @@ class WhisperCppEngine(SubtitleEngine):
         # Beam search parameters
         args.extend(["-bs", str(self._beam_size)])
         args.extend(["-bo", str(self._best_of)])
+
+        # Max context: 0 = no context conditioning (equivalent to condition_on_previous_text=False)
+        # This is the most important anti-hallucination parameter
+        args.extend(["-mc", str(self._max_context)])
 
         # Language
         args.extend(["-l", language])
@@ -483,14 +489,16 @@ class WhisperEngine(SubtitleEngine):
             auto_download = whisper_cfg.get("auto_download", True)
             threads = whisper_cfg.get("threads")  # None = auto-detect
             flash_attn = whisper_cfg.get("flash_attn", True)
-            # Anti-hallucination defaults: beam_size=1
+            # Anti-hallucination defaults: beam_size=1, max_context=0 (disable context conditioning)
             beam_size = whisper_cfg.get("beam_size", 1)
             best_of = whisper_cfg.get("best_of", 1)
+            max_context = whisper_cfg.get("max_context", 0)  # 0 = condition_on_previous_text=False
             self._logger.info(
-                "Using WhisperCppEngine (model=%s, dir=%s, auto_download=%s)",
+                "Using WhisperCppEngine (model=%s, dir=%s, auto_download=%s, max_context=%d)",
                 model_name,
                 whisper_cpp_dir,
                 auto_download,
+                max_context,
             )
             return WhisperCppEngine(
                 model_name=model_name,
@@ -502,6 +510,7 @@ class WhisperEngine(SubtitleEngine):
                 flash_attn=flash_attn,
                 beam_size=beam_size,
                 best_of=best_of,
+                max_context=max_context,
                 logger=self._logger,
             )
 

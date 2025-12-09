@@ -48,10 +48,7 @@ class DefaultPathResolver:
 
     def _content_path(self, content_id: str, *subpaths: str) -> str:
         """Get path under {content_dir}/{content_id}/[subpaths]"""
-        base = safe_join(self._content_dir, str(content_id))
-        if subpaths:
-            return safe_join(base, *subpaths)
-        return base
+        return safe_join(self._content_dir, str(content_id), *subpaths)
 
     def ensure_content_dir(self, content_id: str, namespace: str) -> str:
         """Ensure content directory exists and return path."""
