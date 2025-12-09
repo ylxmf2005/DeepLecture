@@ -1,19 +1,16 @@
+"""SQLite-based metadata storage with automatic locking."""
 from __future__ import annotations
 
-import json
 import logging
-import os
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional
+from typing import List, Literal, Optional
+
+from sqlalchemy import select
 
 from deeplecture.app_context import AppContext, get_app_context
 from deeplecture.dto.storage import ContentMetadata
-
-try:
-    import json_repair
-except ImportError:
-    json_repair = None
-
+from deeplecture.storage.database import get_session, init_db
+from deeplecture.storage.models import ContentMetadataModel
 
 logger = logging.getLogger(__name__)
 UTC = getattr(datetime, "UTC", timezone.utc)
@@ -25,184 +22,165 @@ FeatureStatus = Literal["none", "processing", "ready", "error"]
 FeatureName = Literal["video", "subtitle", "translation", "enhanced", "timeline", "notes"]
 
 
-def _migrate_legacy_metadata(data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Migrate legacy metadata format to new feature-based status model.
+def _model_to_dto(model: ContentMetadataModel) -> ContentMetadata:
+    """Convert SQLAlchemy model to DTO."""
+    # Timestamps are stored as naive UTC, output with Z suffix for consistency
+    created_at = f"{model.created_at.isoformat()}Z" if model.created_at else ""
+    updated_at = f"{model.updated_at.isoformat()}Z" if model.updated_at else ""
+    return ContentMetadata(
+        id=model.id,
+        type=model.type,
+        original_filename=model.original_filename,
+        created_at=created_at,
+        updated_at=updated_at,
+        source_file=model.source_file,
+        video_file=model.video_file,
+        subtitle_path=model.subtitle_path,
+        translated_subtitle_path=model.translated_subtitle_path,
+        enhanced_subtitle_path=model.enhanced_subtitle_path,
+        source_type=model.source_type,
+        source_url=model.source_url,
+        pdf_page_count=model.pdf_page_count,
+        notes_path=model.notes_path,
+        ask_conversations_dir=model.ask_conversations_dir,
+        screenshots_dir=model.screenshots_dir,
+        timeline_path=model.timeline_path,
+        video_status=model.video_status,
+        subtitle_status=model.subtitle_status,
+        translation_status=model.translation_status,
+        enhanced_status=model.enhanced_status,
+        timeline_status=model.timeline_status,
+        notes_status=model.notes_status,
+        video_job_id=model.video_job_id,
+        subtitle_job_id=model.subtitle_job_id,
+        translation_job_id=model.translation_job_id,
+        enhanced_job_id=model.enhanced_job_id,
+        timeline_job_id=model.timeline_job_id,
+        notes_job_id=model.notes_job_id,
+    )
 
-    Legacy format:
-        status: "ready" | "processing"
-        has_subtitles: bool
-        has_translation: bool
-        has_enhanced_subtitles: bool
-        processing_job_id: str
 
-    New format:
-        video_status: "none" | "processing" | "ready" | "error"
-        subtitle_status: "none" | "processing" | "ready" | "error"
-        translation_status: "none" | "processing" | "ready" | "error"
-        enhanced_status: "none" | "processing" | "ready" | "error"
-        timeline_status: "none" | "processing" | "ready" | "error"
-        notes_status: "none" | "processing" | "ready" | "error"
-        {feature}_job_id: str | None
-    """
-    # Check if already migrated (has new status fields)
-    if "video_status" in data:
-        # Remove legacy fields if present
-        for legacy_field in ["status", "processing_job_id", "has_subtitles", "has_translation", "has_enhanced_subtitles"]:
-            data.pop(legacy_field, None)
-        return data
+def _dto_to_model(dto: ContentMetadata) -> ContentMetadataModel:
+    """Convert DTO to SQLAlchemy model."""
+    created_at = dto.created_at
+    if isinstance(created_at, str):
+        created_at = datetime.fromisoformat(created_at.rstrip("Z"))
+    updated_at = dto.updated_at
+    if isinstance(updated_at, str):
+        updated_at = datetime.fromisoformat(updated_at.rstrip("Z"))
 
-    # Migrate video status
-    legacy_status = data.pop("status", None)
-    video_file = data.get("video_file")
-    if video_file:
-        if legacy_status == "processing":
-            data["video_status"] = "processing"
-        else:
-            data["video_status"] = "ready"
-    else:
-        if legacy_status == "processing":
-            data["video_status"] = "processing"
-        else:
-            data["video_status"] = "none"
-
-    # Migrate subtitle status
-    has_subtitles = data.pop("has_subtitles", None)
-    if has_subtitles or data.get("subtitle_path"):
-        data["subtitle_status"] = "ready"
-    else:
-        data["subtitle_status"] = "none"
-
-    # Migrate translation status
-    has_translation = data.pop("has_translation", None)
-    if has_translation or data.get("translated_subtitle_path"):
-        data["translation_status"] = "ready"
-    else:
-        data["translation_status"] = "none"
-
-    # Migrate enhanced status
-    has_enhanced = data.pop("has_enhanced_subtitles", None)
-    if has_enhanced or data.get("enhanced_subtitle_path"):
-        data["enhanced_status"] = "ready"
-    else:
-        data["enhanced_status"] = "none"
-
-    # Migrate timeline status
-    if data.get("timeline_path"):
-        data["timeline_status"] = "ready"
-    else:
-        data["timeline_status"] = "none"
-
-    # Migrate notes status
-    if data.get("notes_path"):
-        data["notes_status"] = "ready"
-    else:
-        data["notes_status"] = "none"
-
-    # Remove legacy processing_job_id
-    data.pop("processing_job_id", None)
-
-    logger.info("Migrated legacy metadata for content %s", data.get("id"))
-
-    return data
+    return ContentMetadataModel(
+        id=dto.id,
+        type=dto.type,
+        original_filename=dto.original_filename,
+        created_at=created_at,
+        updated_at=updated_at,
+        source_file=dto.source_file,
+        video_file=dto.video_file,
+        subtitle_path=dto.subtitle_path,
+        translated_subtitle_path=dto.translated_subtitle_path,
+        enhanced_subtitle_path=dto.enhanced_subtitle_path,
+        source_type=dto.source_type,
+        source_url=dto.source_url,
+        pdf_page_count=dto.pdf_page_count,
+        notes_path=dto.notes_path,
+        ask_conversations_dir=dto.ask_conversations_dir,
+        screenshots_dir=dto.screenshots_dir,
+        timeline_path=dto.timeline_path,
+        video_status=dto.video_status,
+        subtitle_status=dto.subtitle_status,
+        translation_status=dto.translation_status,
+        enhanced_status=dto.enhanced_status,
+        timeline_status=dto.timeline_status,
+        notes_status=dto.notes_status,
+        video_job_id=dto.video_job_id,
+        subtitle_job_id=dto.subtitle_job_id,
+        translation_job_id=dto.translation_job_id,
+        enhanced_job_id=dto.enhanced_job_id,
+        timeline_job_id=dto.timeline_job_id,
+        notes_job_id=dto.notes_job_id,
+    )
 
 
 class MetadataStorage:
-    """
-    Storage abstraction for content metadata.
-
-    New structure: data/content/{content_id}/metadata.json
-    """
+    """SQLite-based storage for content metadata with automatic locking."""
 
     def __init__(
         self,
         *,
         app_context: Optional[AppContext] = None,
-        metadata_folder: Optional[str] = None,
+        metadata_folder: Optional[str] = None,  # Kept for API compatibility, ignored
     ) -> None:
-        if metadata_folder:
-            self._content_dir = metadata_folder
-            os.makedirs(self._content_dir, exist_ok=True)
-        else:
-            ctx = app_context or get_app_context()
-            ctx.init_paths()
-            self._content_dir = ctx.content_dir
-
-    def _get_metadata_path(self, content_id: str) -> str:
-        """Get the metadata file path: data/content/{content_id}/metadata.json"""
-        content_path = os.path.join(self._content_dir, content_id)
-        os.makedirs(content_path, exist_ok=True)
-        return os.path.join(content_path, "metadata.json")
-
-    def metadata_path(self, content_id: str) -> str:
-        return self._get_metadata_path(content_id)
+        self._ctx = app_context or get_app_context()
+        self._ctx.init_paths()
+        init_db(self._ctx)
 
     def save(self, metadata: ContentMetadata) -> None:
-        path = self._get_metadata_path(metadata.id)
+        """Save or update metadata."""
         try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(metadata.to_dict(), f, ensure_ascii=False, indent=2)
+            with get_session(self._ctx) as session:
+                existing = session.get(ContentMetadataModel, metadata.id)
+                if existing:
+                    # Update existing record
+                    model = _dto_to_model(metadata)
+                    for key in ContentMetadataModel.__table__.columns.keys():
+                        if key != "id":
+                            setattr(existing, key, getattr(model, key))
+                    existing.updated_at = datetime.now(UTC).replace(tzinfo=None)
+                else:
+                    # Insert new record
+                    model = _dto_to_model(metadata)
+                    session.add(model)
             logger.info("Saved metadata for content %s", metadata.id)
         except Exception as exc:
             logger.error("Failed to save metadata for %s: %s", metadata.id, exc)
             raise
 
     def get(self, content_id: str) -> Optional[ContentMetadata]:
-        path = self._get_metadata_path(content_id)
-        if not os.path.exists(path):
-            return None
-
+        """Get metadata by content ID."""
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                if json_repair:
-                    data = json_repair.load(f)
-                else:
-                    data = json.load(f)
-
-            # Migrate legacy format if needed
-            data = _migrate_legacy_metadata(data)
-
-            return ContentMetadata.from_dict(data)
+            with get_session(self._ctx) as session:
+                model = session.get(ContentMetadataModel, content_id)
+                if model:
+                    return _model_to_dto(model)
+                return None
         except Exception as exc:
             logger.error("Failed to load metadata for %s: %s", content_id, exc)
             return None
 
     def exists(self, content_id: str) -> bool:
-        return os.path.exists(self._get_metadata_path(content_id))
-
-    def delete(self, content_id: str) -> bool:
-        path = self._get_metadata_path(content_id)
-        if not os.path.exists(path):
+        """Check if content exists."""
+        try:
+            with get_session(self._ctx) as session:
+                model = session.get(ContentMetadataModel, content_id)
+                return model is not None
+        except Exception:
             return False
 
+    def delete(self, content_id: str) -> bool:
+        """Delete metadata by content ID."""
         try:
-            os.remove(path)
-            logger.info("Deleted metadata for content %s", content_id)
-            return True
+            with get_session(self._ctx) as session:
+                model = session.get(ContentMetadataModel, content_id)
+                if model:
+                    session.delete(model)
+                    logger.info("Deleted metadata for content %s", content_id)
+                    return True
+                return False
         except Exception as exc:
             logger.error("Failed to delete metadata for %s: %s", content_id, exc)
             return False
 
     def list_all(self) -> List[ContentMetadata]:
         """List all content metadata, sorted by created_at descending."""
-        if not os.path.exists(self._content_dir):
-            return []
-
-        metadata_list: List[ContentMetadata] = []
         try:
-            for content_id in os.listdir(self._content_dir):
-                content_path = os.path.join(self._content_dir, content_id)
-                if not os.path.isdir(content_path):
-                    continue
-
-                metadata = self.get(content_id)
-                if metadata:
-                    metadata_list.append(metadata)
+            with get_session(self._ctx) as session:
+                stmt = select(ContentMetadataModel).order_by(ContentMetadataModel.created_at.desc())
+                result = session.execute(stmt).scalars().all()
+                return [_model_to_dto(m) for m in result]
         except Exception as exc:
             logger.error("Failed to list metadata: %s", exc)
-
-        metadata_list.sort(key=lambda m: m.created_at, reverse=True)
-        return metadata_list
+            return []
 
     def update_feature_status(
         self,
@@ -211,43 +189,37 @@ class MetadataStorage:
         status: FeatureStatus,
         job_id: Optional[str] = None,
     ) -> bool:
-        """
-        Update the status of a specific feature.
+        """Update the status of a specific feature."""
+        try:
+            with get_session(self._ctx) as session:
+                model = session.get(ContentMetadataModel, content_id)
+                if not model:
+                    return False
 
-        Args:
-            content_id: The content ID
-            feature: The feature name (video, subtitle, translation, etc.)
-            status: The new status (none, processing, ready, error)
-            job_id: Optional job ID for processing tasks
-
-        Returns:
-            True if update succeeded, False otherwise
-        """
-        metadata = self.get(content_id)
-        if not metadata:
+                setattr(model, f"{feature}_status", status)
+                setattr(model, f"{feature}_job_id", job_id)
+                model.updated_at = datetime.now(UTC).replace(tzinfo=None)
+                return True
+        except Exception as exc:
+            logger.error("Failed to update feature status for %s: %s", content_id, exc)
             return False
-
-        status_attr = f"{feature}_status"
-        job_attr = f"{feature}_job_id"
-
-        setattr(metadata, status_attr, status)
-        setattr(metadata, job_attr, job_id)
-        metadata.updated_at = datetime.now(UTC).replace(tzinfo=None).isoformat()
-
-        self.save(metadata)
-        return True
 
     def update_video_file(self, content_id: str, video_file: str) -> bool:
-        metadata = self.get(content_id)
-        if not metadata:
-            return False
+        """Update video file path and status."""
+        try:
+            with get_session(self._ctx) as session:
+                model = session.get(ContentMetadataModel, content_id)
+                if not model:
+                    return False
 
-        metadata.video_file = video_file
-        metadata.video_status = "ready"
-        metadata.video_job_id = None
-        metadata.updated_at = datetime.now(UTC).replace(tzinfo=None).isoformat()
-        self.save(metadata)
-        return True
+                model.video_file = video_file
+                model.video_status = "ready"
+                model.video_job_id = None
+                model.updated_at = datetime.now(UTC).replace(tzinfo=None)
+                return True
+        except Exception as exc:
+            logger.error("Failed to update video file for %s: %s", content_id, exc)
+            return False
 
     def update_subtitles(
         self,
@@ -256,28 +228,38 @@ class MetadataStorage:
         translated_path: Optional[str] = None,
         enhanced_path: Optional[str] = None,
     ) -> bool:
-        metadata = self.get(content_id)
-        if not metadata:
+        """Update subtitle paths and statuses."""
+        try:
+            with get_session(self._ctx) as session:
+                model = session.get(ContentMetadataModel, content_id)
+                if not model:
+                    return False
+
+                if subtitle_path:
+                    model.subtitle_path = subtitle_path
+                    model.subtitle_status = "ready"
+                    model.subtitle_job_id = None
+
+                if translated_path:
+                    model.translated_subtitle_path = translated_path
+                    model.translation_status = "ready"
+                    model.translation_job_id = None
+
+                if enhanced_path:
+                    model.enhanced_subtitle_path = enhanced_path
+                    model.enhanced_status = "ready"
+                    model.enhanced_job_id = None
+
+                model.updated_at = datetime.now(UTC).replace(tzinfo=None)
+                return True
+        except Exception as exc:
+            logger.error("Failed to update subtitles for %s: %s", content_id, exc)
             return False
 
-        if subtitle_path:
-            metadata.subtitle_path = subtitle_path
-            metadata.subtitle_status = "ready"
-            metadata.subtitle_job_id = None
-
-        if translated_path:
-            metadata.translated_subtitle_path = translated_path
-            metadata.translation_status = "ready"
-            metadata.translation_job_id = None
-
-        if enhanced_path:
-            metadata.enhanced_subtitle_path = enhanced_path
-            metadata.enhanced_status = "ready"
-            metadata.enhanced_job_id = None
-
-        metadata.updated_at = datetime.now(UTC).replace(tzinfo=None).isoformat()
-        self.save(metadata)
-        return True
+    def db_path(self) -> str:
+        """Return the SQLite database path."""
+        import os
+        return os.path.join(self._ctx.data_dir, "deeplecture.db")
 
 
 def get_default_metadata_storage() -> MetadataStorage:
