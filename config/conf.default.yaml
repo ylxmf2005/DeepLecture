@@ -67,6 +67,7 @@ subtitle:
     # Anti-hallucination settings (see _archive/notes/whisper.md)
     beam_size: 1      # beam_size=1 minimizes hallucination (arXiv 2501.11378)
     best_of: 1        # consistent with beam_size=1
+    max_context: 0    # 0 = disable context conditioning (equivalent to condition_on_previous_text=False)
   faster_whisper:
     # Model selection: tiny, base, small, medium, large-v2, large-v3, large-v3-turbo
     model_size: large-v3-turbo
