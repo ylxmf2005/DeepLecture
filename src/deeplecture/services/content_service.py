@@ -11,11 +11,11 @@ from typing import Any, Dict, List, Optional
 from deeplecture.app_context import AppContext, get_app_context
 from deeplecture.dto.content import ContentUploadResult, VideoImportJobResult, VideoMergeJobResult
 from deeplecture.dto.storage import ContentMetadata
-from deeplecture.services.media_merge import merge_pdfs, merge_videos, probe_videos_compatibility
+from deeplecture.services.media_merge import merge_pdfs, merge_videos
 from deeplecture.storage.artifact_registry import ArtifactRegistry, get_default_artifact_registry
 from deeplecture.storage.metadata_storage import MetadataStorage, get_default_metadata_storage
-from deeplecture.workers import TaskManager
 from deeplecture.utils.fs import safe_join
+from deeplecture.workers import TaskManager
 
 UTC = getattr(datetime, "UTC", timezone.utc)
 logger = logging.getLogger(__name__)
@@ -67,10 +67,7 @@ class ContentService:
 
     def _content_path(self, content_id: str, *subpaths: str) -> str:
         """Get path under data/content/{content_id}/[subpaths]"""
-        base = safe_join(self._content_dir, str(content_id))
-        if subpaths:
-            return safe_join(base, *subpaths)
-        return base
+        return safe_join(self._content_dir, str(content_id), *subpaths)
 
     def _ensure_content_dir(self, content_id: str) -> str:
         """Ensure content directory exists"""
@@ -524,11 +521,6 @@ class ContentService:
                 file_obj.save(temp_path)
                 temp_paths.append(temp_path)
 
-            # Check video format compatibility
-            compat_result = probe_videos_compatibility(temp_paths)
-            requires_reencode = not compat_result["compatible"]
-            reencode_reason = compat_result.get("reason")
-
             display_name = custom_name if custom_name else "Merged Video"
             if not display_name.endswith(('.mp4', '.mov', '.avi', '.mkv', '.webm')):
                 display_name = f"{display_name}.mp4"
@@ -570,8 +562,6 @@ class ContentService:
                 status="processing",
                 message="Video merge started",
                 job_id=task_id,
-                requires_reencode=requires_reencode,
-                reencode_reason=reencode_reason,
             )
         except Exception:
             if os.path.exists(temp_dir):
@@ -674,12 +664,18 @@ class ContentService:
     # ------------------------------------------------------------------
 
     def get_content(self, content_id: str) -> Optional[ContentMetadata]:
-        return self._metadata.get(content_id)
+        metadata = self._metadata.get(content_id)
+        if metadata:
+            self._validate_processing_status(metadata)
+        return metadata
 
     def list_all_content(self) -> List[ContentMetadata]:
         # Trigger lazy artifact load on first access
         self._ensure_artifacts_loaded()
-        return self._metadata.list_all()
+        contents = self._metadata.list_all()
+        for metadata in contents:
+            self._validate_processing_status(metadata)
+        return contents
 
     def content_exists(self, content_id: str) -> bool:
         return self._metadata.exists(content_id)
@@ -696,12 +692,18 @@ class ContentService:
         content_dir = self._content_path(content_id)
         errors: List[str] = []
 
+        # Delete files first (can re-query metadata if this fails)
         try:
             if os.path.exists(content_dir):
                 shutil.rmtree(content_dir)
         except Exception as exc:
             errors.append(f"{content_dir}: {exc}")
 
+        # Delete from SQLite after files are gone
+        if not self._metadata.delete(content_id):
+            errors.append(f"Failed to delete metadata record for {content_id}")
+
+        # Clean up artifact registry
         self._artifact_registry.remove_content(content_id)
 
         return {
@@ -866,9 +868,6 @@ class ContentService:
             "enhancedStatus": metadata.enhanced_status,
             "timelineStatus": metadata.timeline_status,
             "notesStatus": metadata.notes_status,
-            # Video merge info
-            "requiresReencode": metadata.requires_reencode,
-            "reencodeReason": metadata.reencode_reason,
         }
 
         if metadata.type == "slide":
@@ -900,9 +899,46 @@ class ContentService:
         except Exception:
             pass
 
+    def _validate_processing_status(self, metadata: ContentMetadata) -> None:
+        """
+        Validate processing status against TaskManager.
+
+        If a feature is in "processing" state but its job_id doesn't exist in
+        TaskManager, mark it as "error" and persist to disk.
+        """
+        if not self._task_manager:
+            return
+
+        features = ["video", "subtitle", "translation", "enhanced", "timeline", "notes"]
+        needs_save = False
+
+        for feature in features:
+            status = getattr(metadata, f"{feature}_status", None)
+            if status != "processing":
+                continue
+
+            job_id = getattr(metadata, f"{feature}_job_id", None)
+            if not job_id:
+                # No job_id but status is processing -> orphaned
+                setattr(metadata, f"{feature}_status", "error")
+                needs_save = True
+                continue
+
+            # Check if job exists in TaskManager
+            task = self._task_manager.get_task(job_id)
+            if not task:
+                # Job doesn't exist in memory -> orphaned by crash
+                setattr(metadata, f"{feature}_status", "error")
+                setattr(metadata, f"{feature}_job_id", None)
+                needs_save = True
+
+        if needs_save:
+            metadata.updated_at = datetime.now(UTC).replace(tzinfo=None).isoformat()
+            self._metadata.save(metadata)
+
     def _persist_metadata(self, metadata: ContentMetadata) -> ContentMetadata:
         self._metadata.save(metadata)
-        self._register_artifact(metadata.id, self._metadata.metadata_path(metadata.id), kind="metadata")
+        # SQLite database is registered once during backfill, not per-content
         return metadata
 
     def _register_artifact(
@@ -934,18 +970,7 @@ class ContentService:
         with self._artifacts_lock:
             if self._artifacts_loaded:
                 return
-
-            try:
-                for metadata in self._metadata.list_all():
-                    self._register_artifact(
-                        metadata.id,
-                        self._metadata.metadata_path(metadata.id),
-                        kind="metadata"
-                    )
-                self._artifacts_loaded = True
-                logger.info("Artifacts backfill completed")
-            except Exception as exc:
-                logger.warning("Artifacts backfill failed: %s", exc)
+            self._artifacts_loaded = True
 
     def _ensure_artifacts_loaded(self) -> None:
         """Ensure artifacts are loaded (lazy-load trigger point)."""
