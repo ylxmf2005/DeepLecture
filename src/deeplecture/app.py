@@ -16,10 +16,10 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.exceptions import HTTPException
 
+from deeplecture.api import register_routes
 from deeplecture.app_context import AppContext, get_app_context
 from deeplecture.config.config import get_settings
 from deeplecture.infra.sse_manager import SSEManager
-from deeplecture.api import register_routes
 from deeplecture.services.content_service import get_default_content_service
 from deeplecture.services.slide_lecture_service import SlideLectureService
 from deeplecture.services.subtitle_service import SubtitleService
@@ -61,6 +61,10 @@ def create_app(
     """
     ctx = app_context or get_app_context()
     ctx.init_all()
+
+    # Run pending migrations before starting services
+    from scripts.migrations import run_migrations
+    run_migrations(ctx.data_dir)
 
     sse_manager = SSEManager()
     task_manager = TaskManager(sse_manager)
