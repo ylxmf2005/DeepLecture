@@ -81,10 +81,6 @@ class ContentMetadata:
     timeline_job_id: Optional[str] = None
     notes_job_id: Optional[str] = None
 
-    # Video merge metadata
-    requires_reencode: bool = False
-    reencode_reason: Optional[str] = None
-
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
         return {k: v for k, v in data.items() if v is not None}

@@ -298,12 +298,9 @@ def register_content_routes(
                 "contentType": result.content_type,
                 "message": result.message,
                 "status": result.status,
-                "requiresReencode": result.requires_reencode,
             }
             if result.job_id:
                 payload["job_id"] = result.job_id
-            if result.reencode_reason:
-                payload["reencodeReason"] = result.reencode_reason
 
             return jsonify(payload)
         except ValueError as e:

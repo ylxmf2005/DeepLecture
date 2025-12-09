@@ -4,7 +4,7 @@ import { forwardRef, useState, useRef, useEffect } from "react";
 import { VideoPlayer, VideoPlayerRef } from "@/components/VideoPlayer";
 import { ContentItem, API_BASE_URL } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { FileText, BookOpen, Loader2, Maximize, Minimize, AlertTriangle } from "lucide-react";
+import { FileText, BookOpen, Loader2, Maximize, Minimize } from "lucide-react";
 import type { PlayerTrack, SubtitleMode } from "@/hooks/useSubtitleManagement";
 import { Subtitle } from "@/lib/srt";
 
@@ -211,26 +211,6 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                                 <p className="text-sm text-gray-500 mb-4">
                                     Your video is being processed. This may take a moment...
                                 </p>
-                                {content.requiresReencode && (
-                                    <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-left">
-                                        <div className="flex items-start gap-3">
-                                            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                                            <div className="flex-1">
-                                                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                                                    Re-encoding required
-                                                </p>
-                                                <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-                                                    Videos have different formats and require re-encoding. This may take significantly longer.
-                                                </p>
-                                                {content.reencodeReason && (
-                                                    <p className="mt-2 text-xs text-amber-600 dark:text-amber-400 font-mono">
-                                                        {content.reencodeReason}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     ) : (

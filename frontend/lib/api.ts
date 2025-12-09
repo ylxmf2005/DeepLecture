@@ -16,9 +16,6 @@ export interface ContentItem {
     enhancedStatus?: FeatureStatus;
     timelineStatus?: FeatureStatus;
     notesStatus?: FeatureStatus;
-    // Video merge info
-    requiresReencode?: boolean;
-    reencodeReason?: string;
     // Other fields
     pageCount?: number;
     sourceType?: string;

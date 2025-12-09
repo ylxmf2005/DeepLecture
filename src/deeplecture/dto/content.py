@@ -31,5 +31,3 @@ class VideoMergeJobResult:
     status: str
     message: str
     job_id: Optional[str]
-    requires_reencode: bool = False
-    reencode_reason: Optional[str] = None
