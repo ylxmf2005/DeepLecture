@@ -6,9 +6,7 @@
 
 ## 为什么需要 DeepLecture?
 
-![](/Users/EthanLee/Library/Application Support/typora-user-images/image-20251207193606905.png)
-
-
+<img src="demo/images/why-deeplecture.png" width="600" />
 
 ## 解决方案: DeepLecture
 
@@ -253,6 +251,45 @@ data/
 ├── temp/         # 临时文件
 └── logs/         # 应用日志
 ```
+
+## Roadmap
+
+我们正在积极开发以下功能，欢迎贡献代码或提出建议！
+
+### 🔴 高优先级
+
+- [ ] `Feature:` **学习统计仪表盘** - 观看时长、学习天数、完成进度等数据可视化
+- [ ] `Feature:` **任务统计** - 转录/翻译/配音任务耗时、LLM Token 消耗量追踪
+- [ ] `Feature:` **字幕全局搜索** - 跨视频搜索字幕内容，快速定位知识点
+- [ ] `Feature:` **内容导出** - 字幕导出 (SRT/VTT)、嵌入字幕的视频导出
+- [ ] `Enhancement:` **Prompt & Workflow 优化** - 优化现有任务的提示词和处理流程
+- [ ] `Integration:` **更多 TTS 引擎** - OpenAI TTS、Azure Neural TTS、ElevenLabs
+- [ ] `DevOps:` **Docker 部署** - 一键部署、GPU passthrough 支持
+
+### 🟡 中优先级
+
+- [ ] `Feature:` **课程组织** - 课程 > 章节 > 视频的层级管理
+- [ ] `Feature:` **标签系统** - 给视频打标签、按标签筛选
+- [ ] `Feature:` **收藏夹** - 收藏重要视频或片段
+- [ ] `Feature:` **视频拖拽排序** - 自定义视频列表顺序
+- [ ] `Feature:` **Flashcard 闪卡** - 基于时间线节点生成记忆卡片
+- [ ] `Feature:` **Quiz 小测验** - AI 根据视频内容生成测验题
+- [ ] `Feature:` **Cheatsheet 速查表** - 自动提取关键概念生成速查表
+- [ ] `Feature:` **学习报告 Report** - 生成学习总结报告
+- [ ] `Feature:` **Podcast 模式** - 将视频转为纯音频播客格式
+- [ ] `Enhancement:` **笔记生成优化** - 更智能的 AI 笔记生成
+- [ ] `UI:` **移动端适配** - 响应式布局、触摸友好
+
+### 🟢 待定 / 探索中
+
+- [ ] `Feature:` **Live2D 虚拟讲师** - 口型同步、表情响应、多模型切换
+- [ ] `Integration:` **Obsidian 集成** - 双向同步笔记、知识图谱联动
+- [ ] `Performance:` **性能优化** - CPU 密集任务优化、并行处理、缓存策略
+- [ ] `UI:` **其他 UI/UX 增强** - 快捷键、主题定制、无障碍优化
+
+---
+
+> 💡 有想法或建议？欢迎 [提交 Issue](https://github.com/your-username/DeepLecture/issues) 或 [参与讨论](https://github.com/your-username/DeepLecture/discussions)！
 
 ## License
 
