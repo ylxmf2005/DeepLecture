@@ -34,6 +34,7 @@ import {
 
 const Live2DCanvas = dynamic(() => import("@/components/Live2DCanvas"), { ssr: false });
 import { useLearnerProfile } from "@/components/LearnerProfileProvider";
+import { useConfirmDialog } from "@/contexts/ConfirmDialogContext";
 import { VideoPlayerSection, NotesPanel, SidebarTabs } from "@/components/video";
 import { HeaderActionPortal } from "@/components/HeaderActionPortal";
 import { FocusModeHandler } from "@/components/FocusModeHandler";
@@ -52,6 +53,7 @@ export default function VideoPage() {
 
     // Learner profile
     const { profile: learnerProfile, setProfile: setLearnerProfile } = useLearnerProfile();
+    const { confirm } = useConfirmDialog();
     const [draftLearnerProfile, setDraftLearnerProfile] = useState<string>(learnerProfile);
 
     // Video settings
@@ -329,6 +331,17 @@ export default function VideoPage() {
             return;
         }
 
+        // Show confirmation dialog before generating
+        const confirmed = await confirm({
+            title: "Generate AI Note",
+            message: "This will overwrite any existing notes you have written. Are you sure you want to continue?",
+            confirmLabel: "Generate",
+            cancelLabel: "Cancel",
+            variant: "warning",
+        });
+
+        if (!confirmed) return;
+
         try {
             setGeneratingNote(true);
             const start = await generateVideoNote({ videoId, contextMode: "auto", learnerProfile });
@@ -371,7 +384,7 @@ export default function VideoPage() {
             alert("Failed to generate note. Please check the console for details.");
             setGeneratingNote(false);
         }
-    }, [videoId, learnerProfile, generatingNote, setGeneratingNote]);
+    }, [videoId, learnerProfile, generatingNote, setGeneratingNote, confirm]);
 
     // Toggle Smart Skip handler
     const handleToggleSkipRambling = useCallback(() => {

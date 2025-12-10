@@ -259,6 +259,14 @@ export function useVideoPageState({
                 ) {
                     setProcessing(false);
                     setProcessingAction(null);
+                } else if (task.type === "voiceover_generation") {
+                    // Refresh voiceover list and release UI lock
+                    setVoiceoverProcessing(null);
+                    setVoiceoversLoading(true);
+                    listVoiceovers(videoId)
+                        .then((data) => setVoiceovers(data.voiceovers))
+                        .catch((error) => console.error("Failed to refresh voiceovers after SSE:", error))
+                        .finally(() => setVoiceoversLoading(false));
                 } else if (task.type === "slide_explanation") {
                     setRefreshExplanations((prev) => prev + 1);
                 }
@@ -305,6 +313,30 @@ export function useVideoPageState({
 
         return () => clearInterval(interval);
     }, [isConnected, processing, processingAction, videoId]);
+
+    // Fallback polling for voiceover when SSE not connected
+    useEffect(() => {
+        if (isConnected || !voiceoverProcessing) return;
+
+        const interval = setInterval(async () => {
+            try {
+                setVoiceoversLoading(true);
+                const data = await listVoiceovers(videoId);
+                setVoiceovers(data.voiceovers);
+
+                const hasProcessing = (data.voiceovers || []).some((v) => v.status === "processing");
+                if (!hasProcessing) {
+                    setVoiceoverProcessing(null);
+                }
+            } catch (error) {
+                console.error("Voiceover polling failed", error);
+            } finally {
+                setVoiceoversLoading(false);
+            }
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [isConnected, voiceoverProcessing, videoId]);
 
     // Load timeline when timelineStatus becomes ready
     const hasTimeline = content?.timelineStatus === "ready";

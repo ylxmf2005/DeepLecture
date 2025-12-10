@@ -293,7 +293,7 @@ export function ActionsDialog({
                                                 key={vo.id}
                                                 className={cn(
                                                     "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
-                                                    selectedVoiceoverId === vo.id
+                                                    selectedVoiceoverId === vo.id && vo.status === "done"
                                                         ? "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 ring-1 ring-purple-500/20"
                                                         : "bg-gray-50 dark:bg-gray-900 border-transparent hover:bg-gray-100 dark:hover:bg-gray-800"
                                                 )}
@@ -302,15 +302,29 @@ export function ActionsDialog({
                                                     type="radio"
                                                     name="voiceover-selection"
                                                     value={vo.id}
-                                                    checked={selectedVoiceoverId === vo.id}
-                                                    onChange={() => setSelectedVoiceoverId(vo.id)}
-                                                    className="text-purple-600 focus:ring-purple-500"
+                                                    checked={selectedVoiceoverId === vo.id && vo.status === "done"}
+                                                    onChange={() => vo.status === "done" && setSelectedVoiceoverId(vo.id)}
+                                                    disabled={vo.status !== "done"}
+                                                    className="text-purple-600 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                                 />
                                                 <div className="flex flex-col">
                                                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{vo.name}</span>
-                                                    <span className="text-[10px] text-gray-400">
+                                                    <span className="text-[10px] text-gray-400 flex items-center gap-2">
                                                         {vo.language} · {vo.subtitle_source} · {new Date(vo.created_at).toLocaleDateString()}
+                                                        {vo.status === "processing" && (
+                                                            <span className="inline-flex items-center gap-1 text-amber-500">
+                                                                <Loader2 className="w-3 h-3 animate-spin" /> processing
+                                                            </span>
+                                                        )}
+                                                        {vo.status === "error" && (
+                                                            <span className="inline-flex items-center gap-1 text-red-500">
+                                                                • error
+                                                            </span>
+                                                        )}
                                                     </span>
+                                                    {vo.error && (
+                                                        <span className="text-[10px] text-red-500 line-clamp-2">{vo.error}</span>
+                                                    )}
                                                 </div>
                                             </label>
                                         ))}

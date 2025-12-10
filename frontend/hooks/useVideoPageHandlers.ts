@@ -259,11 +259,11 @@ export function useVideoPageHandlers({
                 setVoiceoverProcessing(source);
                 await generateVoiceover(videoId, source, name, translatedLanguage);
 
+                // Immediately reflect new entry (likely status=processing); SSE/polling will finalize
                 const data = await listVoiceovers(videoId);
                 setVoiceovers(data.voiceovers);
             } catch (error) {
                 console.error("Failed to generate voiceover:", error);
-            } finally {
                 setVoiceoverProcessing(null);
             }
         },

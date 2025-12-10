@@ -192,9 +192,9 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                     <source
                         src={
                             voiceoverId
-                                ? `${API_BASE_URL}/api/get-voiceover-video?video_id=${videoId}&voiceover_id=${encodeURIComponent(
-                                    voiceoverId
-                                )}`
+                                ? `${API_BASE_URL}/api/content/${videoId}/voiceovers/${encodeURIComponent(
+                                      voiceoverId
+                                  )}/video`
                                 : `${API_BASE_URL}/api/content/${videoId}/video`
                         }
                         type="video/mp4"

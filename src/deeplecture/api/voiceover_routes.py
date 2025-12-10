@@ -270,11 +270,17 @@ def register_voiceover_routes(
 
     @app.route("/api/content/<content_id>/voiceovers/<voiceover_id>/video", methods=["GET"])
     @app.route("/api/voiceovers/<voiceover_id>/video", methods=["GET"])
+    @app.route("/api/get-voiceover-video", methods=["GET"])  # backward-compatible shim
     def voiceover_video_resource(voiceover_id: str, content_id: str | None = None):
         """
         RESTful endpoint for voiceover video resource.
         Stream a generated voiceover (dubbed) video file for a specific voiceover ID.
         """
+        # Allow legacy query-param based route for compatibility
+        if request.path.endswith("/get-voiceover-video"):
+            voiceover_id = request.args.get("voiceover_id", voiceover_id)
+            content_id = request.args.get("video_id", content_id)
+
         video_id = content_id or request.args.get("video_id")
         if not video_id:
             return jsonify({"error": "Missing video_id"}), 400

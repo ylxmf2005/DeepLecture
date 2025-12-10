@@ -96,6 +96,9 @@ export interface VoiceoverEntry {
     voiceover_audio_path: string;
     dubbed_video_path: string;
     created_at: string;
+    status?: "processing" | "done" | "error";
+    error?: string | null;
+    updated_at?: string;
 }
 
 export interface ListVoiceoversResponse {
