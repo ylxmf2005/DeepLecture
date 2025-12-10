@@ -43,6 +43,15 @@ export interface SubtitleDisplaySettings {
     bottomOffset: number;
 }
 
+export interface NotificationSettings {
+    // Enable browser notifications (requires permission)
+    browserNotificationsEnabled: boolean;
+    // Enable toast notifications in-app
+    toastNotificationsEnabled: boolean;
+    // Enable title flash when tab is in background
+    titleFlashEnabled: boolean;
+}
+
 export interface GlobalSettings {
     // Playback behavior
     playback: PlaybackSettings;
@@ -55,6 +64,9 @@ export interface GlobalSettings {
 
     // Subtitle display preferences (applies to all videos)
     subtitleDisplay: SubtitleDisplaySettings;
+
+    // Notification preferences
+    notifications: NotificationSettings;
 
     // Live2D avatar settings
     live2d: Live2DSettings;
@@ -74,6 +86,11 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     subtitleDisplay: {
         fontSize: 16,
         bottomOffset: 56, // roughly Tailwind bottom-14 (3.5rem)
+    },
+    notifications: {
+        browserNotificationsEnabled: false,
+        toastNotificationsEnabled: true,
+        titleFlashEnabled: true,
     },
     language: {
         original: "en",
@@ -163,6 +180,11 @@ export interface GlobalSettingsActions {
 
     // UI
     toggleHideSidebars: () => void;
+
+    // Notifications
+    setBrowserNotificationsEnabled: (value: boolean) => void;
+    setToastNotificationsEnabled: (value: boolean) => void;
+    setTitleFlashEnabled: (value: boolean) => void;
 
     // Live2D
     toggleLive2d: () => void;

@@ -9,6 +9,7 @@ export interface TaskStatus {
     progress: number;
     result_path?: string;
     error?: string;
+    _eventType?: string; // "initial" for history, "update" for live events
 }
 
 interface UseTaskStatusReturn {
@@ -59,7 +60,7 @@ export function useTaskStatus(contentId: string | null): UseTaskStatusReturn {
                         if (id) {
                             setTasks(prev => ({
                                 ...prev,
-                                [id]: { ...task, task_id: id }
+                                [id]: { ...task, task_id: id, _eventType: eventType }
                             }));
                         }
                     }

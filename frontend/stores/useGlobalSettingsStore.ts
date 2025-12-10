@@ -104,6 +104,21 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
             toggleHideSidebars: () =>
                 set((state) => ({ hideSidebars: !state.hideSidebars })),
 
+            setBrowserNotificationsEnabled: (value) =>
+                set((state) => ({
+                    notifications: { ...state.notifications, browserNotificationsEnabled: value },
+                })),
+
+            setToastNotificationsEnabled: (value) =>
+                set((state) => ({
+                    notifications: { ...state.notifications, toastNotificationsEnabled: value },
+                })),
+
+            setTitleFlashEnabled: (value) =>
+                set((state) => ({
+                    notifications: { ...state.notifications, titleFlashEnabled: value },
+                })),
+
             toggleLive2d: () =>
                 set((state) => ({
                     live2d: { ...state.live2d, enabled: !state.live2d.enabled },
@@ -146,6 +161,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
                 playback: state.playback,
                 language: state.language,
                 subtitleDisplay: state.subtitleDisplay,
+                notifications: state.notifications,
                 hideSidebars: state.hideSidebars,
                 live2d: state.live2d,
                 learnerProfile: state.learnerProfile,
@@ -187,6 +203,10 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
                         ...DEFAULT_GLOBAL_SETTINGS.subtitleDisplay,
                         ...(state.subtitleDisplay ?? DEFAULT_GLOBAL_SETTINGS.subtitleDisplay),
                     },
+                    notifications: {
+                        ...DEFAULT_GLOBAL_SETTINGS.notifications,
+                        ...((state as GlobalSettingsState & { notifications?: typeof DEFAULT_GLOBAL_SETTINGS.notifications }).notifications ?? DEFAULT_GLOBAL_SETTINGS.notifications),
+                    },
                 } as GlobalSettingsState;
             },
         }
@@ -201,6 +221,9 @@ export const useLanguageSettings = () =>
 
 export const useLive2dSettings = () =>
     useGlobalSettingsStore((state) => state.live2d);
+
+export const useNotificationSettings = () =>
+    useGlobalSettingsStore((state) => state.notifications);
 
 export const useLearnerProfile = () =>
     useGlobalSettingsStore((state) => state.learnerProfile);
