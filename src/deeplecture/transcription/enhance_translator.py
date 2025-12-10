@@ -138,8 +138,63 @@ class SubtitleEnhanceTranslator:
         for batch_res in results:
             if batch_res:
                 flat_results.extend(batch_res)
-        
-        return flat_results
+
+        # Post-process: merge overlapping subtitles
+        return self._merge_overlapping(flat_results)
+
+    def _merge_overlapping(self, entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Merge subtitles that have overlapping or identical timestamps.
+
+        Two subtitles are considered overlapping if:
+        - They have the same start time, OR
+        - The second starts before the first ends (with 0.1s tolerance)
+        """
+        if not entries:
+            return entries
+
+        # Sort by start time
+        sorted_entries = sorted(entries, key=lambda x: x["start"])
+        merged = [sorted_entries[0]]
+
+        for current in sorted_entries[1:]:
+            prev = merged[-1]
+
+            # Check for overlap: same start OR current starts before prev ends
+            # Use 0.1s tolerance
+            overlap = (
+                abs(current["start"] - prev["start"]) < 0.1 or
+                current["start"] < prev["end"] - 0.1
+            )
+
+            if overlap:
+                # Merge: extend end time, concatenate text
+                prev["end"] = max(prev["end"], current["end"])
+
+                prev_en = prev.get("text_en", "").strip()
+                curr_en = current.get("text_en", "").strip()
+                if curr_en and curr_en not in prev_en:
+                    prev["text_en"] = f"{prev_en} {curr_en}".strip()
+
+                prev_zh = prev.get("text_zh", "").strip()
+                curr_zh = current.get("text_zh", "").strip()
+                if curr_zh and curr_zh not in prev_zh:
+                    prev["text_zh"] = f"{prev_zh} {curr_zh}".strip()
+
+                logger.debug(
+                    "Merged overlapping subtitles at %.2fs-%.2fs",
+                    prev["start"], prev["end"]
+                )
+            else:
+                merged.append(current)
+
+        if len(merged) < len(entries):
+            logger.info(
+                "Merged %d overlapping subtitles (%d -> %d)",
+                len(entries) - len(merged), len(entries), len(merged)
+            )
+
+        return merged
 
     def _process_batch(
         self,
