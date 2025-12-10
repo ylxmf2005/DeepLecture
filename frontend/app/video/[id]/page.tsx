@@ -14,6 +14,7 @@ import { useVideoPageHandlers } from "@/hooks/useVideoPageHandlers";
 import { useSubtitleManagement, type SubtitleMode } from "@/hooks/useSubtitleManagement";
 import { useVideoProgress, RESUME_TOLERANCE_SECONDS, RESUME_MAX_ATTEMPTS } from "@/hooks/useVideoProgress";
 import { useThrottledTimeUpdate } from "@/hooks/useThrottledTimeUpdate";
+import { useTaskNotification } from "@/hooks/useTaskNotification";
 import { Settings, Wand2, Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { Live2DCanvasHandle } from "@/components/Live2DCanvas";
@@ -36,7 +37,7 @@ import { useLearnerProfile } from "@/components/LearnerProfileProvider";
 import { VideoPlayerSection, NotesPanel, SidebarTabs } from "@/components/video";
 import { HeaderActionPortal } from "@/components/HeaderActionPortal";
 import { FocusModeHandler } from "@/components/FocusModeHandler";
-import { useSidebarSubtitleMode as useSidebarSubtitleModeStore, useVideoDeck, useSmartSkipEnabled, useVideoStateStore, useTabLayoutStore, findTabPanel, type TabId, type PanelId } from "@/stores";
+import { useSidebarSubtitleMode as useSidebarSubtitleModeStore, useVideoDeck, useSmartSkipEnabled, useVideoStateStore, useTabLayoutStore, useNotificationSettings, useGlobalSettingsStore, findTabPanel, type TabId, type PanelId } from "@/stores";
 import { TAB_CONFIG } from "@/components/dnd/DraggableTabBar";
 import type { CrepeEditor } from "@/components/MarkdownNoteEditor";
 
@@ -133,6 +134,13 @@ export default function VideoPage() {
     const setDeckStore = useVideoStateStore((store) => store.setDeck);
     const setSmartSkipEnabledStore = useVideoStateStore((store) => store.setSmartSkipEnabled);
     const toggleSmartSkipStore = useVideoStateStore((store) => store.toggleSmartSkip);
+
+    // Notification settings
+    const notificationSettings = useNotificationSettings();
+    const setBrowserNotificationsEnabled = useGlobalSettingsStore((s) => s.setBrowserNotificationsEnabled);
+    const setToastNotificationsEnabled = useGlobalSettingsStore((s) => s.setToastNotificationsEnabled);
+    const setTitleFlashEnabled = useGlobalSettingsStore((s) => s.setTitleFlashEnabled);
+    const { requestNotificationPermission, browserPermissionStatus } = useTaskNotification();
 
     // Tab layout store for DnD
     const tabPanels = useTabLayoutStore((state) => state.panels);
@@ -277,10 +285,19 @@ export default function VideoPage() {
         setDraftLearnerProfile(learnerProfile);
     }, [learnerProfile]);
 
-    // Reset Smart Skip when learner profile changes
+    // Reset Smart Skip when learner profile intentionally changes (not on hydration)
+    const prevLearnerProfileRef = useRef<string | null>(null);
     useEffect(() => {
-        if (!videoId) return;
-        setSmartSkipEnabledStore(videoId, false);
+        // On first mount or hydration, just record the value without resetting
+        if (prevLearnerProfileRef.current === null) {
+            prevLearnerProfileRef.current = learnerProfile;
+            return;
+        }
+        // Only reset if the profile actually changed from its previous value
+        if (prevLearnerProfileRef.current !== learnerProfile && videoId) {
+            setSmartSkipEnabledStore(videoId, false);
+        }
+        prevLearnerProfileRef.current = learnerProfile;
     }, [learnerProfile, videoId, setSmartSkipEnabledStore]);
 
     // Reconnect Live2D audio on model change
@@ -700,6 +717,14 @@ export default function VideoPage() {
                 setLive2dModelPath={setLive2dModelPath}
                 live2dSyncWithVideoAudio={live2dSyncWithVideoAudio}
                 handleToggleLive2dSyncWithVideo={toggleLive2dSyncWithVideo}
+                browserNotificationsEnabled={notificationSettings.browserNotificationsEnabled}
+                setBrowserNotificationsEnabled={setBrowserNotificationsEnabled}
+                toastNotificationsEnabled={notificationSettings.toastNotificationsEnabled}
+                setToastNotificationsEnabled={setToastNotificationsEnabled}
+                titleFlashEnabled={notificationSettings.titleFlashEnabled}
+                setTitleFlashEnabled={setTitleFlashEnabled}
+                browserPermissionStatus={browserPermissionStatus}
+                requestNotificationPermission={requestNotificationPermission}
             />
 
             <ActionsDialog

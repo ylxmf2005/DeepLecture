@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useNotificationSettings } from "@/stores/useGlobalSettingsStore";
 
@@ -14,6 +14,9 @@ type TaskType =
     | "video_import_url"
     | "pdf_merge"
     | "slide_explanation";
+
+const readNotificationPermission = () =>
+    typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported";
 
 const TASK_LABELS: Record<TaskType, { success: string; error: string }> = {
     subtitle_generation: {
@@ -65,6 +68,10 @@ export function useTaskNotification(): UseTaskNotificationReturn {
     const originalTitleRef = useRef<string>("");
     const titleIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+    const [browserPermissionStatus, setBrowserPermissionStatus] = useState<NotificationPermission | "unsupported">(
+        readNotificationPermission
+    );
+
     // Store original title on mount
     useEffect(() => {
         originalTitleRef.current = document.title;
@@ -91,27 +98,31 @@ export function useTaskNotification(): UseTaskNotificationReturn {
         return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
     }, []);
 
+    // Keep local permission state in sync so consumers re-render immediately after user decision
+    useEffect(() => {
+        setBrowserPermissionStatus(readNotificationPermission());
+    }, []);
+
     const requestNotificationPermission = useCallback(async (): Promise<boolean> => {
         if (!("Notification" in window)) {
+            setBrowserPermissionStatus("unsupported");
             return false;
         }
 
         if (Notification.permission === "granted") {
+            setBrowserPermissionStatus("granted");
             return true;
         }
 
         if (Notification.permission === "denied") {
+            setBrowserPermissionStatus("denied");
             return false;
         }
 
         const permission = await Notification.requestPermission();
+        setBrowserPermissionStatus(permission);
         return permission === "granted";
     }, []);
-
-    const browserPermissionStatus: NotificationPermission | "unsupported" =
-        typeof window !== "undefined" && "Notification" in window
-            ? Notification.permission
-            : "unsupported";
 
     const flashTitle = useCallback((message: string) => {
         if (document.visibilityState === "visible") {

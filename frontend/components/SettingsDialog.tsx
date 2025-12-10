@@ -1,4 +1,4 @@
-import { X, Globe, Sparkles, BrainCircuit, MessageSquare, User, Loader2, Cpu, Settings, PlayCircle, Subtitles, Zap, ListVideo, Volume2 } from "lucide-react";
+import { X, Globe, Sparkles, BrainCircuit, MessageSquare, User, Loader2, Cpu, Settings, PlayCircle, Subtitles, Zap, ListVideo, Volume2, Bell } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { CustomSelect } from "@/components/ui/CustomSelect";
@@ -57,9 +57,18 @@ export interface SettingsDialogProps {
     setLive2dModelPath: (path: string) => void;
     live2dSyncWithVideoAudio: boolean;
     handleToggleLive2dSyncWithVideo: () => void;
+    // Notification settings
+    browserNotificationsEnabled: boolean;
+    setBrowserNotificationsEnabled: (value: boolean) => void;
+    toastNotificationsEnabled: boolean;
+    setToastNotificationsEnabled: (value: boolean) => void;
+    titleFlashEnabled: boolean;
+    setTitleFlashEnabled: (value: boolean) => void;
+    browserPermissionStatus: NotificationPermission | "unsupported";
+    requestNotificationPermission: () => Promise<boolean>;
 }
 
-type TabId = "general" | "player" | "functions" | "model" | "live2d";
+type TabId = "general" | "notifications" | "player" | "functions" | "model" | "live2d";
 
 export function SettingsDialog({
     isOpen,
@@ -99,6 +108,14 @@ export function SettingsDialog({
     setLive2dModelPath,
     live2dSyncWithVideoAudio,
     handleToggleLive2dSyncWithVideo,
+    browserNotificationsEnabled,
+    setBrowserNotificationsEnabled,
+    toastNotificationsEnabled,
+    setToastNotificationsEnabled,
+    titleFlashEnabled,
+    setTitleFlashEnabled,
+    browserPermissionStatus,
+    requestNotificationPermission,
 }: SettingsDialogProps) {
     const [activeTab, setActiveTab] = useState<TabId>("general");
     const [live2dModels, setLive2dModels] = useState<Live2DModel[]>([]);
@@ -195,6 +212,7 @@ export function SettingsDialog({
 
     const tabs = [
         { id: "general" as const, label: "General", icon: Settings },
+        { id: "notifications" as const, label: "Notifications", icon: Bell },
         { id: "player" as const, label: "Player", icon: PlayCircle },
         { id: "functions" as const, label: "Functions", icon: Zap },
         { id: "model" as const, label: "Model", icon: Cpu },
@@ -353,6 +371,115 @@ export function SettingsDialog({
                                         </div>
                                     </section>
                                 </>
+                            )}
+
+                            {/* Notifications Tab */}
+                            {activeTab === "notifications" && (
+                                <section className="space-y-4">
+                                    <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400">
+                                        <Bell className="w-5 h-5" />
+                                        <h3 className="font-semibold text-gray-900 dark:text-gray-100">Task Notifications</h3>
+                                    </div>
+
+                                    <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex flex-col">
+                                                <span className="font-medium text-gray-900 dark:text-gray-100">Toast Notifications</span>
+                                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                    Show in-app notifications when tasks complete
+                                                </span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setToastNotificationsEnabled(!toastNotificationsEnabled)}
+                                                className={cn(
+                                                    "relative inline-flex h-6 w-11 items-center rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500/50",
+                                                    toastNotificationsEnabled ? "bg-orange-500 border-orange-500" : "bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600"
+                                                )}
+                                            >
+                                                <span
+                                                    className={cn(
+                                                        "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                                                        toastNotificationsEnabled ? "translate-x-5" : "translate-x-1"
+                                                    )}
+                                                />
+                                            </button>
+                                        </div>
+
+                                        <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-700">
+                                            <div className="flex flex-col">
+                                                <span className="font-medium text-gray-900 dark:text-gray-100">Title Flash</span>
+                                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                    Flash page title when tasks complete in background
+                                                </span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setTitleFlashEnabled(!titleFlashEnabled)}
+                                                className={cn(
+                                                    "relative inline-flex h-6 w-11 items-center rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500/50",
+                                                    titleFlashEnabled ? "bg-orange-500 border-orange-500" : "bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600"
+                                                )}
+                                            >
+                                                <span
+                                                    className={cn(
+                                                        "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                                                        titleFlashEnabled ? "translate-x-5" : "translate-x-1"
+                                                    )}
+                                                />
+                                            </button>
+                                        </div>
+
+                                        <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-700">
+                                            <div className="flex flex-col">
+                                                <span className="font-medium text-gray-900 dark:text-gray-100">Browser Notifications</span>
+                                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                    {browserPermissionStatus === "unsupported"
+                                                        ? "Not supported in this browser"
+                                                        : browserPermissionStatus === "denied"
+                                                          ? "Permission denied - enable in browser settings"
+                                                          : "System notifications when tab is in background"}
+                                                </span>
+                                            </div>
+                                            {browserPermissionStatus === "granted" ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setBrowserNotificationsEnabled(!browserNotificationsEnabled)}
+                                                    className={cn(
+                                                        "relative inline-flex h-6 w-11 items-center rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500/50",
+                                                        browserNotificationsEnabled ? "bg-orange-500 border-orange-500" : "bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600"
+                                                    )}
+                                                >
+                                                    <span
+                                                        className={cn(
+                                                            "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                                                            browserNotificationsEnabled ? "translate-x-5" : "translate-x-1"
+                                                        )}
+                                                    />
+                                                </button>
+                                            ) : browserPermissionStatus === "default" ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={async () => {
+                                                        const granted = await requestNotificationPermission();
+                                                        if (granted) {
+                                                            setBrowserNotificationsEnabled(true);
+                                                        }
+                                                    }}
+                                                    className="px-3 py-1.5 text-xs font-medium text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors"
+                                                >
+                                                    Enable
+                                                </button>
+                                            ) : (
+                                                <span className="text-xs text-gray-400 dark:text-gray-500">Unavailable</span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                                        Get notified when background tasks like subtitle generation, translation, or video processing complete.
+                                    </p>
+                                </section>
                             )}
 
                             {/* Player Tab */}
