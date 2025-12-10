@@ -68,6 +68,14 @@ export function VideoUpload({ onUploadSuccess }: VideoUploadProps) {
         }
     };
 
+    const ALLOWED_VIDEO_EXTS = ["mp4", "webm", "mov"];
+    const ALLOWED_VIDEO_MIMES = ["video/mp4", "video/webm", "video/quicktime"];
+
+    const isAllowedVideo = (file: File) => {
+        const ext = file.name.split(".").pop()?.toLowerCase() || "";
+        return ALLOWED_VIDEO_MIMES.includes(file.type) || ALLOWED_VIDEO_EXTS.includes(ext);
+    };
+
     const handleDrop = async (e: React.DragEvent) => {
         e.preventDefault();
         dragCounterRef.current = 0;
@@ -76,7 +84,7 @@ export function VideoUpload({ onUploadSuccess }: VideoUploadProps) {
 
         // Separate PDFs and videos
         const pdfFiles = files.filter(f => f.type === 'application/pdf');
-        const videoFiles = files.filter(f => f.type.startsWith('video/'));
+        const videoFiles = files.filter(isAllowedVideo);
 
         if (pdfFiles.length > 0) {
             handlePdfFilesAdded(pdfFiles);
@@ -90,7 +98,7 @@ export function VideoUpload({ onUploadSuccess }: VideoUploadProps) {
         if (e.target.files && e.target.files.length > 0) {
             const files = Array.from(e.target.files);
             const pdfFiles = files.filter(f => f.type === 'application/pdf');
-            const videoFiles = files.filter(f => f.type.startsWith('video/'));
+            const videoFiles = files.filter(isAllowedVideo);
 
             if (pdfFiles.length > 0) {
                 // Any PDFs selected - add to staging area
@@ -134,7 +142,7 @@ export function VideoUpload({ onUploadSuccess }: VideoUploadProps) {
 
         // Set default name from first file if not already set
         if (!videoCustomName && newVideoFiles.length > 0) {
-            const firstName = newVideoFiles[0].name.replace(/\.(mp4|mov|avi|mkv)$/i, '');
+            const firstName = newVideoFiles[0].name.replace(/\.(mp4|webm|mov)$/i, '');
             setVideoCustomName(firstName);
         }
     };
@@ -246,7 +254,7 @@ export function VideoUpload({ onUploadSuccess }: VideoUploadProps) {
             videoFiles.forEach((videoFile, index) => {
                 formData.append('videos', videoFile.file);
             });
-            formData.append('custom_name', videoCustomName || videoFiles[0].name.replace(/\.(mp4|mov|avi|mkv)$/i, ''));
+            formData.append('custom_name', videoCustomName || videoFiles[0].name.replace(/\.(mp4|webm|mov)$/i, ''));
 
             await api.post('/content/upload-multiple-videos', formData);
 
