@@ -571,6 +571,17 @@ export default function VideoPage() {
             <div className={`grid gap-6 h-[130vh] ${hideSidebars ? "grid-cols-1" : "grid-cols-1 md:grid-cols-3"}`}>
                 {/* Left Column: Video Player & Notes */}
                 <div className={`flex flex-col gap-4 h-full min-h-0 ${hideSidebars ? "col-span-1" : "md:col-span-2"}`}>
+                    {/* Video Title and Metadata */}
+                    <div className="flex items-baseline justify-between gap-4">
+                        <h1 className="text-xl font-semibold truncate">{content.filename}</h1>
+                        <span className="text-sm text-muted-foreground whitespace-nowrap">
+                            {new Date(content.createdAt).toLocaleDateString(undefined, {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric"
+                            })}
+                        </span>
+                    </div>
                     <VideoPlayerSection
                         ref={playerRef}
                         content={content}
