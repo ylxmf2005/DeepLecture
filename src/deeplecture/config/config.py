@@ -151,7 +151,7 @@ class TTSConfig(BaseModel):
     retry_max_wait: float = 60.0  # Exponential backoff maximum (seconds)
     sample_rate: int = 44100
     max_sentence_duration: float = 8.0
-    providers: List[TTSProviderConfig] = Field(default_factory=list)
+    models: List[TTSProviderConfig] = Field(default_factory=list)
     task_models: Dict[str, str] = Field(default_factory=lambda: {"default": "edge-default"})
 
 

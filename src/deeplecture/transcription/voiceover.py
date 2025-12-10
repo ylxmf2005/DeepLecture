@@ -100,7 +100,7 @@ class SubtitleVoiceoverGenerator:
         self._tts_factory = tts_factory or TTSFactory()
         self._custom_tts_provided = tts is not None
         self._tts_task_name = str(task_name or "voiceover")
-        # Route through the registry so task_providers controls the backend.
+        # Route through the registry so task_models controls the backend.
         self.tts: TTS = tts or self._tts_factory.get_tts_for_task(self._tts_task_name)
 
         self._tts_pool = ResourceWorkerPool(

@@ -59,7 +59,7 @@ subtitle:
     target_language: "zh"
 
 tts:
-  providers:
+  models:
     - name: edge-default
       provider: edge_tts
       edge_tts:

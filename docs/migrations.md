@@ -25,32 +25,38 @@ scripts/migrations/
 2. Implement `Migration` class with:
    - `id`: Unique identifier (e.g., `"v0.1.0_json_to_sqlite"`)
    - `description`: Short description
-   - `run(data_dir: str) -> int`: Execute migration, return count of affected items
+   - `run() -> int`: Execute migration, return count of affected items
 
 Example:
 ```python
+from pathlib import Path
+
 class Migration:
-    id = "v0.2.0_add_new_field"
-    description = "Add new_field to all content"
+    id = "v0.1.0_rename_config_key"
+    description = "Rename foo to bar in config"
 
     @staticmethod
-    def run(data_dir: str) -> int:
-        # Migration is fully self-contained
-        # Access database, files, whatever you need
-        from deeplecture.storage.database import get_session
-        from deeplecture.storage.models import ContentMetadataModel
+    def run() -> int:
+        # Migration is fully self-contained - no parameters
+        # Determine paths, access resources as needed
+        project_root = Path(__file__).parent.parent.parent.parent
+        config_path = project_root / "config" / "conf.yaml"
 
-        count = 0
-        with get_session() as session:
-            for model in session.query(ContentMetadataModel).all():
-                model.new_field = "default_value"
-                count += 1
-        return count
+        if not config_path.exists():
+            return 0
+
+        content = config_path.read_text()
+        if "foo:" not in content:
+            return 0
+
+        new_content = content.replace("foo:", "bar:")
+        config_path.write_text(new_content)
+        return 1
 ```
 
 ## Rules
 
-- **Self-contained**: Each migration handles its own data access
+- **Self-contained**: Each migration handles everything itself - no parameters passed in
 - **One-way**: No rollback support, design carefully
 - **Sequential**: Migrations run in version order
 - **Idempotent**: Safe to run multiple times (engine tracks completed migrations)

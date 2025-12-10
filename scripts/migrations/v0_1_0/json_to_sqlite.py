@@ -20,9 +20,10 @@ class Migration:
     description = "Import JSON metadata files into SQLite database"
 
     @staticmethod
-    def run(data_dir: str) -> int:
+    def run() -> int:
         """Import all JSON metadata into SQLite."""
         from contextlib import contextmanager
+        from pathlib import Path
         from typing import Generator
 
         from sqlalchemy import create_engine
@@ -30,13 +31,14 @@ class Migration:
 
         from deeplecture.storage.models import Base, ContentMetadataModel
 
-        content_dir = os.path.join(data_dir, "content")
-        if not os.path.exists(content_dir):
+        project_root = Path(__file__).parent.parent.parent.parent
+        data_dir = project_root / "data"
+        content_dir = data_dir / "content"
+        if not content_dir.exists():
             logger.info("No content directory found, skipping JSON import")
             return 0
 
-        # Self-contained: create own database connection for this data_dir
-        db_path = os.path.join(data_dir, "deeplecture.db")
+        db_path = data_dir / "deeplecture.db"
         engine = create_engine(f"sqlite:///{db_path}", echo=False)
         Base.metadata.create_all(engine)
         SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)

@@ -64,7 +64,7 @@ def create_app(
 
     # Run pending migrations before starting services
     from scripts.migrations import run_migrations
-    run_migrations(ctx.data_dir)
+    run_migrations()
 
     sse_manager = SSEManager()
     task_manager = TaskManager(sse_manager)

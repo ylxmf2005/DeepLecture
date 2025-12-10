@@ -43,12 +43,9 @@ def _get_llm_models_settings() -> Dict[str, Any]:
 def _get_tts_provider_settings() -> Dict[str, Any]:
     """Read TTS provider settings from configuration."""
     registry = _ctx().tts_factory.get_registry()
-    task_models = registry.get_task_models()
     return {
-        "providers": registry.list_providers(),
-        "task_models": task_models,
-        # Backward compatibility - keep both keys in response
-        "task_providers": task_models,
+        "models": registry.list_providers(),
+        "task_models": registry.get_task_models(),
         "default": registry.get_default_provider_name(),
     }
 

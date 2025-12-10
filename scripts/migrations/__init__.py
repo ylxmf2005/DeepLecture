@@ -5,7 +5,7 @@ Design:
 - Version-based: Migrations organized in folders by app version (v0_1_0/, v0_2_0/, ...)
 - Sequential: Only migrations for versions <= current app version are executed
 - Tracked: Each migration has a unique `id`, executed ids are stored in .migration_state.json
-- Self-contained: Each migration is responsible for its own data access
+- Self-contained: Each migration is fully autonomous - no parameters, no constraints
 
 Folder structure:
     scripts/migrations/
@@ -18,7 +18,7 @@ Folder structure:
 
 Usage:
     from scripts.migrations import run_migrations
-    run_migrations(data_dir)  # Called in app.py before create_app
+    run_migrations()  # Called in app.py before create_app
 """
 
 from __future__ import annotations
@@ -41,7 +41,9 @@ else:
 
 logger = logging.getLogger(__name__)
 
-MIGRATION_STATE_FILE = ".migration_state.json"
+# Project root for state file
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+MIGRATION_STATE_FILE = PROJECT_ROOT / "data" / ".migration_state.json"
 VERSION_PATTERN = re.compile(r"^v(\d+)_(\d+)_(\d+)$")
 
 
@@ -52,21 +54,19 @@ class Migration(Protocol):
     Each migration must have:
     - id: Unique identifier (e.g., "v0.1.0_json_to_sqlite")
     - description: Short description of what the migration does
-    - run(data_dir: str) -> int: Execute migration, return count of affected items
+    - run() -> int: Execute migration, return count of affected items
 
-    Migrations are fully self-contained - they handle their own data access.
+    Migrations are fully self-contained - they can do anything:
+    database migrations, config file changes, file system operations, etc.
     """
 
     id: str
     description: str
 
     @staticmethod
-    def run(data_dir: str) -> int:
+    def run() -> int:
         """
         Execute the migration.
-
-        Args:
-            data_dir: Path to the data directory
 
         Returns:
             Count of affected items (for logging purposes)
@@ -88,8 +88,7 @@ def _parse_version(version_str: str) -> tuple[int, int, int] | None:
 
 def _get_app_version() -> tuple[int, int, int]:
     """Get current app version from pyproject.toml."""
-    project_root = Path(__file__).parent.parent.parent
-    pyproject_path = project_root / "pyproject.toml"
+    pyproject_path = PROJECT_ROOT / "pyproject.toml"
 
     if not pyproject_path.exists():
         logger.warning("pyproject.toml not found, using version 0.0.0")
@@ -106,37 +105,40 @@ def _get_app_version() -> tuple[int, int, int]:
         return (0, 0, 0)
 
 
-def _load_migration_state(data_dir: str) -> dict[str, Any]:
+def _load_migration_state() -> dict[str, Any]:
     """Load migration state from data/.migration_state.json"""
-    state_path = os.path.join(data_dir, MIGRATION_STATE_FILE)
-    if not os.path.exists(state_path):
+    if not MIGRATION_STATE_FILE.exists():
         return {"completed": [], "last_run": None}
 
     try:
-        with open(state_path, encoding="utf-8") as f:
+        with open(MIGRATION_STATE_FILE, encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         logger.warning("Failed to load migration state: %s", e)
         return {"completed": [], "last_run": None}
 
 
-def _save_migration_state(data_dir: str, state: dict[str, Any]) -> None:
+def _save_migration_state(state: dict[str, Any]) -> None:
     """Save migration state to data/.migration_state.json atomically."""
-    import tempfile
     import shutil
+    import tempfile
 
-    state_path = os.path.join(data_dir, MIGRATION_STATE_FILE)
+    # Ensure data directory exists
+    MIGRATION_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+
     state["last_run"] = datetime.now(timezone.utc).isoformat()
 
     try:
         # Write to temp file first, then atomic rename
-        fd, temp_path = tempfile.mkstemp(dir=data_dir, prefix=".migration_state_", suffix=".tmp")
+        fd, temp_path = tempfile.mkstemp(
+            dir=MIGRATION_STATE_FILE.parent, prefix=".migration_state_", suffix=".tmp"
+        )
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(state, f, indent=2)
                 f.flush()
                 os.fsync(f.fileno())
-            shutil.move(temp_path, state_path)
+            shutil.move(temp_path, MIGRATION_STATE_FILE)
         except Exception:
             try:
                 os.remove(temp_path)
@@ -186,24 +188,14 @@ def _discover_migrations_in_folder(folder: Path) -> list[Migration]:
     return migrations
 
 
-def run_migrations(data_dir: str | None = None) -> dict[str, int]:
+def run_migrations() -> dict[str, int]:
     """
     Run all pending migrations for versions <= current app version.
-
-    Args:
-        data_dir: Path to data directory. If None, uses default from AppContext.
 
     Returns:
         Dict mapping migration_id -> count of affected items
     """
-    if data_dir is None:
-        from deeplecture.app_context import get_app_context
-
-        ctx = get_app_context()
-        ctx.init_paths()
-        data_dir = ctx.data_dir
-
-    state = _load_migration_state(data_dir)
+    state = _load_migration_state()
     completed = set(state.get("completed", []))
 
     app_version = _get_app_version()
@@ -226,12 +218,12 @@ def run_migrations(data_dir: str | None = None) -> dict[str, int]:
             logger.info("Running migration: %s - %s", migration.id, migration.description)
 
             try:
-                count = migration.run(data_dir)
+                count = migration.run()
                 results[migration.id] = count
 
                 completed.add(migration.id)
                 state["completed"] = sorted(completed)
-                _save_migration_state(data_dir, state)
+                _save_migration_state(state)
 
                 if count > 0:
                     logger.info("Migration %s: completed (%d items)", migration.id, count)

@@ -266,13 +266,13 @@ class TTSRegistry:
 
         base: Dict[str, Any] = {}
         for key, value in cfg.items():
-            if key in ("providers", "task_models", "task_providers"):
+            if key in ("models", "task_models"):
                 continue
             base[key] = value
 
-        raw_providers = cfg.get("providers")
-        if isinstance(raw_providers, list):
-            for entry in raw_providers:
+        raw_models = cfg.get("models")
+        if isinstance(raw_models, list):
+            for entry in raw_models:
                 if not isinstance(entry, dict):
                     continue
                 name = str(entry.get("name") or "").strip()
@@ -287,12 +287,11 @@ class TTSRegistry:
 
         if not self._providers:
             raise ValueError(
-                "No TTS providers configured. Please add at least one provider "
-                "to the 'tts.providers' list in your config file."
+                "No TTS models configured. Please add at least one model "
+                "to the 'tts.models' list in your config file."
             )
 
-        # Support both task_models (new) and task_providers (legacy)
-        task_cfg = cfg.get("task_models") or cfg.get("task_providers")
+        task_cfg = cfg.get("task_models")
         default_from_task: Optional[str] = None
         if isinstance(task_cfg, dict):
             raw_default = task_cfg.get("default")
@@ -353,9 +352,6 @@ class TTSRegistry:
         """Return the task-to-provider mapping."""
         return dict(self._task_models)
 
-    # Backward compatibility alias
-    get_task_providers = get_task_models
-
     def get_default_provider_name(self) -> str:
         """Return the logical default provider name."""
         return self._default_provider_name
@@ -369,9 +365,6 @@ class TTSRegistry:
                 continue
             if provider_name in self._providers:
                 self._task_models[task_name] = provider_name
-
-    # Backward compatibility alias
-    update_task_providers = update_task_models
 
 
 class TTSFactory:
@@ -433,9 +426,6 @@ class TTSFactory:
     def update_task_models(self, new_mappings: Dict[str, str]) -> None:
         """Hot-update task-to-provider mappings."""
         self._registry.update_task_models(new_mappings)
-
-    # Backward compatibility alias
-    update_task_providers = update_task_models
 
     def _create_tts_from_config(self, config: Dict[str, Any]) -> TTS:
         tts_cfg = (config or {}).get("tts") or {}

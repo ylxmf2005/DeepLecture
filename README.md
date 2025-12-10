@@ -6,7 +6,7 @@
 
 ## 为什么需要 DeepLecture?
 
-<img src="demo/images/why-deeplecture.png" width="600" />
+![](demo/images/why-deeplecture.png)
 
 ## 解决方案: DeepLecture
 
@@ -162,7 +162,7 @@ llm:
   models:
     - name: default
       provider: openai          # 或 gemini
-      model: gpt-4.1            # 或其他兼容模型
+      model: gpt-5.2            # 或其他兼容模型
       api_key: "your-api-key"
       base_url: "https://api.openai.com/v1"
   task_models:
@@ -232,11 +232,15 @@ DeepLecture/
 | 配置项 | 说明 |
 |--------|------|
 | `llm.models` | LLM 模型列表，支持 OpenAI 兼容 API 和 Gemini |
-| `llm.task_models` | 为不同任务指定模型（翻译、问答、时间线等） |
+| `llm.task_models` | 为不同任务指定 LLM 模型（翻译、问答、时间线等） |
 | `subtitle.engine` | ASR 引擎：`whisper_cpp` 或 `faster_whisper` |
-| `subtitle.whisper_cpp.model_name` | 模型：tiny/base/small/medium/large-v2/large-v3/large-v3-turbo（推荐） |
+| `subtitle.whisper_cpp.model_name` | Whisper 模型：tiny/base/small/medium/large-v2/large-v3/large-v3-turbo（推荐） |
 | `subtitle.whisper_cpp.auto_download` | 是否自动下载模型和编译（默认 true） |
-| `tts.providers` | TTS 引擎配置（Fish Audio、Edge-TTS） |
+| `subtitle.translation.target_language` | 翻译目标语言（默认 `zh`） |
+| `tts.models` | TTS 模型配置（Fish Audio、Edge-TTS） |
+| `tts.task_models` | 为不同任务指定 TTS 模型（配音、幻灯片讲解等） |
+| `server.api_key` | API 访问密钥（可选） |
+| `app.data_dir` | 数据存储目录（默认 `data`） |
 
 ## 数据存储
 
