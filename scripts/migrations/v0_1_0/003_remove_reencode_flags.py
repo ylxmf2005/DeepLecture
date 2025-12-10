@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class Migration:
-    id = "v0.1.0_remove_reencode_flags"
+    id = "v0_1_0_003_remove_reencode_flags"
     description = "Drop requires_reencode/reencode_reason from content_metadata"
 
     @staticmethod

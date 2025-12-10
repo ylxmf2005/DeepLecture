@@ -12,9 +12,11 @@ Folder structure:
     ├── __init__.py
     ├── v0_1_0/
     │   ├── __init__.py
-    │   └── json_to_sqlite.py
+    │   ├── 001_json_to_sqlite.py
+    │   ├── 002_tts_providers_to_models.py
+    │   └── 003_remove_reencode_flags.py
     └── v0_2_0/
-        └── some_migration.py
+        └── 001_some_migration.py
 
 Usage:
     from scripts.migrations import run_migrations
@@ -52,7 +54,7 @@ class Migration(Protocol):
     Protocol for migration scripts.
 
     Each migration must have:
-    - id: Unique identifier (e.g., "v0.1.0_json_to_sqlite")
+    - id: Unique identifier (e.g., "v0_1_0_001_json_to_sqlite")
     - description: Short description of what the migration does
     - run() -> int: Execute migration, return count of affected items
 

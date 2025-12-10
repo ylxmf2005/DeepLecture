@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class Migration:
-    id = "v0.1.0_tts_providers_to_models"
+    id = "v0_1_0_002_tts_providers_to_models"
     description = "Rename tts.providers to tts.models in config file"
 
     @staticmethod

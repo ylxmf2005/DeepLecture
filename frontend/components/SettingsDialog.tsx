@@ -8,8 +8,8 @@ import {
     Live2DModel,
     getLLMModels,
     LLMModelInfo,
-    getTTSProviders,
-    TTSProviderInfo,
+    getTTSModels,
+    TTSModelInfo,
 } from "@/lib/api";
 
 export interface SettingsDialogProps {
@@ -109,10 +109,10 @@ export function SettingsDialog({
     const [taskModels, setTaskModels] = useState<Record<string, string>>({});
     const [defaultModel, setDefaultModel] = useState<string>("");
     const [llmModelsLoading, setLlmModelsLoading] = useState(false);
-    // TTS Provider Settings state (read-only)
-    const [ttsProviders, setTtsProviders] = useState<TTSProviderInfo[]>([]);
-    const [ttsTaskProviders, setTtsTaskProviders] = useState<Record<string, string>>({});
-    const [defaultTtsProvider, setDefaultTtsProvider] = useState<string>("");
+    // TTS Model Settings state (read-only)
+    const [ttsModels, setTtsModels] = useState<TTSModelInfo[]>([]);
+    const [ttsTaskModels, setTtsTaskModels] = useState<Record<string, string>>({});
+    const [defaultTtsModel, setDefaultTtsModel] = useState<string>("");
     const [ttsLoading, setTtsLoading] = useState(false);
 
     useEffect(() => {
@@ -165,21 +165,30 @@ export function SettingsDialog({
 
     useEffect(() => {
         if (!isOpen) return;
-        const fetchTTSProviders = async () => {
+        const fetchTTSModels = async () => {
             setTtsLoading(true);
             try {
-                const data = await getTTSProviders();
-                setTtsProviders(data.providers);
-                // Use task_models (new) with fallback to task_providers (legacy)
-                setTtsTaskProviders(data.task_models || data.task_providers);
-                setDefaultTtsProvider(data.default);
+                const data = await getTTSModels();
+                // Defensive parsing: API should return models/task_models/default, but guard against null/shape drift
+                const models = Array.isArray(data?.models) ? data.models : [];
+                const taskModels =
+                    data && typeof data === "object" && "task_models" in data && typeof data.task_models === "object"
+                        ? data.task_models
+                        : {};
+
+                setTtsModels(models);
+                setTtsTaskModels(taskModels);
+                setDefaultTtsModel(typeof data?.default === "string" ? data.default : "");
             } catch (error) {
-                console.error("Failed to fetch TTS providers:", error);
+                console.error("Failed to fetch TTS models:", error);
+                setTtsModels([]);
+                setTtsTaskModels({});
+                setDefaultTtsModel("");
             } finally {
                 setTtsLoading(false);
             }
         };
-        fetchTTSProviders();
+        fetchTTSModels();
     }, [isOpen]);
 
     if (!isOpen) return null;
@@ -722,25 +731,25 @@ export function SettingsDialog({
                                         </div>
                                     </section>
 
-                                    {/* TTS Provider Settings (Read-Only) */}
+                                    {/* TTS Model Settings (Read-Only) */}
                                     <section className="space-y-4">
                                         <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
                                             <Volume2 className="w-5 h-5" />
-                                            <h3 className="font-semibold text-gray-900 dark:text-gray-100">TTS Provider Settings</h3>
+                                            <h3 className="font-semibold text-gray-900 dark:text-gray-100">TTS Model Settings</h3>
                                         </div>
 
                                         <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 space-y-6">
                                             {ttsLoading ? (
                                                 <div className="flex flex-col items-center justify-center py-6 space-y-3">
                                                     <Loader2 className="w-6 h-6 animate-spin text-rose-500" />
-                                                    <span className="text-sm text-gray-500 font-medium">Loading voice providers...</span>
+                                                    <span className="text-sm text-gray-500 font-medium">Loading voice models...</span>
                                                 </div>
-                                            ) : ttsProviders.length === 0 ? (
+                                            ) : ttsModels.length === 0 ? (
                                                 <div className="flex flex-col items-center justify-center py-6 text-center">
                                                     <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-full mb-3">
                                                         <Volume2 className="w-6 h-6 text-gray-400" />
                                                     </div>
-                                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">No Providers Found</p>
+                                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">No Models Found</p>
                                                 </div>
                                             ) : (
                                                 <>
@@ -750,16 +759,16 @@ export function SettingsDialog({
                                                                 Available Voices
                                                             </label>
                                                             <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 font-medium">
-                                                                {ttsProviders.length} Active
+                                                                {ttsModels.length} Active
                                                             </span>
                                                         </div>
                                                         <div className="grid grid-cols-2 gap-2">
-                                                            {ttsProviders.map((p) => (
+                                                            {ttsModels.map((p) => (
                                                                 <div
                                                                     key={p.name}
                                                                     className="relative flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-xs"
                                                                 >
-                                                                    {p.name === defaultTtsProvider && (
+                                                                    {p.name === defaultTtsModel && (
                                                                         <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[9px] font-bold uppercase tracking-wider shadow-sm">
                                                                             Default
                                                                         </span>
@@ -789,7 +798,7 @@ export function SettingsDialog({
                                                                         <span className="text-[10px] text-gray-400 truncate">{desc}</span>
                                                                     </div>
                                                                     <span className="text-xs font-medium text-rose-600 dark:text-rose-400 px-2 py-1 bg-rose-50 dark:bg-rose-900/20 rounded">
-                                                                        {ttsTaskProviders[key] || defaultTtsProvider}
+                                                                        {ttsTaskModels[key] || defaultTtsModel}
                                                                     </span>
                                                                 </div>
                                                             ))}

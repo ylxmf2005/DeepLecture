@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class Migration:
-    id = "v0.1.0_json_to_sqlite"
+    id = "v0_1_0_001_json_to_sqlite"
     description = "Import JSON metadata files into SQLite database"
 
     @staticmethod

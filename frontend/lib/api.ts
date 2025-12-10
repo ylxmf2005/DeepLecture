@@ -592,20 +592,18 @@ export const getLLMModels = async () => {
     return response.data;
 };
 
-export interface TTSProviderInfo {
+export interface TTSModelInfo {
     name: string;
     provider: string;
 }
 
-export interface TTSProvidersResponse {
-    providers: TTSProviderInfo[];
+export interface TTSModelsResponse {
+    models: TTSModelInfo[];
     task_models: Record<string, string>;
-    // Backward compatibility
-    task_providers: Record<string, string>;
     default: string;
 }
 
-export const getTTSProviders = async () => {
-    const response = await api.get<TTSProvidersResponse>("/config/tts-models");
+export const getTTSModels = async () => {
+    const response = await api.get<TTSModelsResponse>("/config/tts-models");
     return response.data;
 };
