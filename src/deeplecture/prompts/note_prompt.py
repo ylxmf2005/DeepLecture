@@ -22,10 +22,14 @@ def build_note_outline_prompts(
     system_prompt = (
         "You are an expert course note designer for university students.\n"
         f"- You write detailed, structured Markdown notes in {language}.\n"
-        "- Treat the student as a motivated but weak undergraduate who needs clear explanations.\n"
         "- Start from prerequisites and intuition, then move to more advanced ideas.\n"
         "- You only design the NOTE OUTLINE in this step, not the full content.\n"
         "- The final notes may include LaTeX math, tables, code blocks, and rich examples.\n\n"
+        "OUTLINE DESIGN PRINCIPLES:\n"
+        "- Group by conceptual coherence, not just chronological order.\n"
+        "- Earlier parts: prerequisites and foundational concepts.\n"
+        "- Later parts: advanced ideas, applications, and synthesis.\n"
+        "- Each part should be self-contained enough to study independently.\n\n"
         "Output rules:\n"
         "- Respond with a SINGLE JSON object.\n"
         '- Do NOT wrap JSON in markdown fences or add commentary.\n'
@@ -84,6 +88,14 @@ def build_note_outline_prompts(
         '      \"focus_points\": [\"concept A\", \"concept B\", \"concept C\"]\n'
         "    },\n"
         "    ...\n"
+        "  ]\n"
+        "}\n\n"
+        "EXAMPLE (for a machine learning lecture):\n"
+        "{\n"
+        '  \"parts\": [\n'
+        '    {\"id\": 1, \"title\": \"What is Supervised Learning\", \"summary\": \"Introduces the core idea of learning from labeled examples\", \"focus_points\": [\"input-output pairs\", \"training vs inference\", \"classification vs regression\"]},\n'
+        '    {\"id\": 2, \"title\": \"Linear Regression Basics\", \"summary\": \"The simplest model: fitting a line to data\", \"focus_points\": [\"hypothesis function\", \"parameters w and b\", \"prediction\"]},\n'
+        '    {\"id\": 3, \"title\": \"Loss Function and Optimization\", \"summary\": \"How to measure and minimize prediction error\", \"focus_points\": [\"MSE loss\", \"gradient descent\", \"learning rate\"]}\n'
         "  ]\n"
         "}\n",
     )

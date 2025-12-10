@@ -52,22 +52,32 @@ def build_enhance_and_translate_prompt(
         transcript_lines.append(f"[{i+1}] {seg.text.strip()}")
     transcript_text = "\n".join(transcript_lines)
 
-    system_prompt = (
-        f"You are a subtitle editor and translator ({target_language}). "
-        "Process raw ASR subtitles into bilingual subtitles.\n\n"
-        "Tasks:\n"
-        "1. Fix ASR errors (typos, punctuation, capitalization)\n"
-        "2. Merge short fragments into coherent sentences (2-4 segments max)\n"
-        "3. Translate to {target_language}\n\n"
-        "Output JSON:\n"
-        '{{"subtitles": [{{"start_index": 1, "end_index": 2, "text_en": "...", "text_zh": "..."}}]}}\n\n'
-        "Rules:\n"
-        "- Indices are 1-based\n"
-        "- Timeline must be contiguous: each start_index = previous end_index + 1\n"
-        "- No overlapping: each input segment belongs to exactly one output entry\n"
-        "- Keep text under 80 chars; if too long, merge fewer segments instead\n"
-        "- Cover all input segments"
-    )
+    system_prompt = f"""You are a subtitle editor and translator ({target_language}).
+Process raw ASR subtitles into bilingual subtitles.
+
+TASKS:
+1. Fix ASR errors (typos, punctuation, capitalization)
+2. Merge short fragments into coherent sentences (2-4 segments max)
+3. Translate to {target_language}
+
+OUTPUT FORMAT (strict JSON, no markdown):
+{{"subtitles": [{{"start_index": 1, "end_index": 2, "text_en": "...", "text_zh": "..."}}]}}
+
+MERGE RULES:
+- Merge fragments that form a complete thought
+- Keep each subtitle under 80 characters
+- Don't merge across topic changes
+- Preserve natural sentence boundaries
+
+EXAMPLE:
+Input: [1] So the [2] gradient descent [3] algorithm works by
+Output: {{"start_index": 1, "end_index": 3, "text_en": "So the gradient descent algorithm works by", "text_zh": "所以梯度下降算法的工作原理是"}}
+
+CONSTRAINTS:
+- Indices are 1-based
+- Timeline must be contiguous: each start_index = previous end_index + 1
+- No overlapping: each input segment belongs to exactly one output entry
+- Cover all input segments"""
 
     user_prompt = (
         f"Context:\n{background_str}\n\n"

@@ -55,23 +55,24 @@ Your job for each slice:
 - Decide whether students would benefit from ONE short extra explanation panel.
 - Only create an explanation when the slice introduces an important new concept,
   formula, definition, algorithm, or subtle point that is likely to confuse learners.
-- If the slice is simple, repetitive, or purely organizational, you must respond with
+- If the slice is simple, repetitive, or purely organizational, respond with
   "should_explain": false.
 
-When you decide to explain, follow these guidelines:
+DECISION GUIDE:
+- YES explain: new technical term, non-obvious insight, complex formula, algorithm step
+- NO explain: transitions, repetitions, greetings, simple statements, organizational remarks
+
+When you decide to explain:
 - Explain in {language}.
 - Use clear Markdown with headings, bullet points, and short paragraphs.
-- When you write formulas, you may use LaTeX-style math inside the Markdown, with $...$ for inline math and $$...$$ for block equations.
-- Focus strictly on the content in this slice (do not assume future context).
-- Be concise but concrete: include intuition, simple examples, or contrasts to related ideas.
+- Use LaTeX math ($...$ inline, $$...$$ block) when needed.
+- Be concise: 100-300 words is ideal.
+- Focus strictly on the content in this slice.
 
-Output format rules (very important):
-- Respond with a single JSON object.
-- Do NOT wrap the JSON in backticks or any other text.
-- JSON keys must be: should_explain, title, trigger_time, markdown.
-- trigger_time is a float in seconds between {chunk_start:.3f} and {chunk_end:.3f}
-  and should point to the moment in the slice where the explanation becomes relevant.
-"""
+Output format rules:
+- Respond with a single JSON object (no backticks).
+- Keys: should_explain, title, trigger_time, markdown.
+- trigger_time: float in seconds between {chunk_start:.3f} and {chunk_end:.3f}."""
 
     profile = (learner_profile or "").strip()
     if profile:
