@@ -266,9 +266,10 @@ export const generateSubtitles = async (videoId: string, language: string = 'en'
     return response.data;
 };
 
-export const enhanceAndTranslate = async (contentId: string, targetLanguage: string) => {
+export const enhanceAndTranslate = async (contentId: string, targetLanguage: string, force: boolean = false) => {
     const response = await api.post<TranslationResponse>(`/content/${contentId}/translate-subtitles`, {
         target_language: targetLanguage,
+        force,
     });
     return response.data;
 };

@@ -181,7 +181,7 @@ export function useVideoPageHandlers({
         try {
             setProcessing(true);
             setProcessingAction("translate");
-            const result = await enhanceAndTranslate(videoId, translatedLanguage);
+            const result = await enhanceAndTranslate(videoId, translatedLanguage, true);
 
             if (result.status === "ready") {
                 setProcessing(false);
