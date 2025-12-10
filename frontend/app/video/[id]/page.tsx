@@ -21,13 +21,15 @@ import {
     DndContext,
     DragOverlay,
     closestCenter,
+    pointerWithin,
     PointerSensor,
     useSensor,
     useSensors,
     type DragEndEvent,
     type DragStartEvent,
+    type DragOverEvent,
+    type CollisionDetection,
 } from "@dnd-kit/core";
-import { arrayMove } from "@dnd-kit/sortable";
 
 const Live2DCanvas = dynamic(() => import("@/components/Live2DCanvas"), { ssr: false });
 import { useLearnerProfile } from "@/components/LearnerProfileProvider";
@@ -146,6 +148,17 @@ export default function VideoPage() {
             },
         })
     );
+
+    // Custom collision detection: prioritize pointerWithin, fallback to closestCenter
+    const collisionDetection: CollisionDetection = useCallback((args) => {
+        // First try pointerWithin for precise pointer-based detection
+        const pointerCollisions = pointerWithin(args);
+        if (pointerCollisions.length > 0) {
+            return pointerCollisions;
+        }
+        // Fallback to closestCenter for better sortable behavior
+        return closestCenter(args);
+    }, []);
 
     // Subtitle management
     const {
@@ -354,6 +367,61 @@ export default function VideoPage() {
         setActiveId(event.active.id as TabId);
     }, []);
 
+    // Handle drag over for real-time preview during cross-panel dragging
+    const handleDragOver = useCallback(
+        (event: DragOverEvent) => {
+            const { active, over } = event;
+            if (!over) return;
+
+            const activeTabId = active.id as TabId;
+            const overId = over.id as string;
+
+            // Find which panel the active tab is currently in
+            const sourcePanel = findTabPanel(tabPanels, activeTabId);
+            if (!sourcePanel) return;
+
+            // Determine target panel
+            let targetPanel: PanelId;
+            if (overId === "sidebar" || overId === "bottom") {
+                targetPanel = overId as PanelId;
+            } else {
+                const overTabPanel = findTabPanel(tabPanels, overId as TabId);
+                if (!overTabPanel) return;
+                targetPanel = overTabPanel;
+            }
+
+            // Only handle cross-panel moves during drag over
+            // Same-panel reordering is handled by SortableContext automatically
+            if (sourcePanel === targetPanel) return;
+
+            // Check capacity constraint
+            const maxTarget = targetPanel === "sidebar" ? 4 : 7;
+            if (tabPanels[targetPanel].length >= maxTarget) return;
+
+            // Calculate target index
+            let targetIndex: number;
+            if (overId === "sidebar" || overId === "bottom") {
+                targetIndex = tabPanels[targetPanel].length;
+            } else {
+                const overIndex = tabPanels[targetPanel].indexOf(overId as TabId);
+                const activeRect = active.rect.current.translated;
+                const overRect = over.rect;
+
+                if (activeRect && overRect) {
+                    const activeCenterX = activeRect.left + activeRect.width / 2;
+                    const overCenterX = overRect.left + overRect.width / 2;
+                    targetIndex = activeCenterX > overCenterX ? overIndex + 1 : overIndex;
+                } else {
+                    targetIndex = overIndex;
+                }
+            }
+
+            // Move the tab immediately for preview effect
+            moveTab(activeTabId, sourcePanel, targetPanel, targetIndex);
+        },
+        [tabPanels, moveTab]
+    );
+
     const handleDragEnd = useCallback(
         (event: DragEndEvent) => {
             const { active, over } = event;
@@ -364,39 +432,55 @@ export default function VideoPage() {
             const activeTabId = active.id as TabId;
             const overId = over.id as string;
 
-            // Find source panel
+            // Find source panel (where the tab currently is after drag over)
             const sourcePanel = findTabPanel(tabPanels, activeTabId);
             if (!sourcePanel) return;
 
-            // Determine target panel and index
-            let targetPanel: PanelId;
+            // Skip if dropped on a panel directly - already handled by handleDragOver
+            if (overId === "sidebar" || overId === "bottom") return;
+
+            // Find which panel the over element belongs to
+            const overTabPanel = findTabPanel(tabPanels, overId as TabId);
+            if (!overTabPanel) return;
+
+            // Only handle same-panel reordering here
+            // Cross-panel moves are already handled in handleDragOver
+            if (sourcePanel !== overTabPanel) return;
+
+            const overIndex = tabPanels[sourcePanel].indexOf(overId as TabId);
+            const oldIndex = tabPanels[sourcePanel].indexOf(activeTabId);
+            const isLastItem = overIndex === tabPanels[sourcePanel].length - 1;
+
+            // Calculate target index based on drag position
+            const activeRect = active.rect.current.translated;
+            const overRect = over.rect;
+
             let targetIndex: number;
+            if (activeRect && overRect) {
+                const activeCenterX = activeRect.left + activeRect.width / 2;
+                const overCenterX = overRect.left + overRect.width / 2;
 
-            // Check if dropped on a panel directly
-            if (overId === "sidebar" || overId === "bottom") {
-                targetPanel = overId as PanelId;
-                targetIndex = tabPanels[targetPanel].length; // Append to end
-            } else {
-                // Dropped on another tab - find which panel it belongs to
-                const overTabPanel = findTabPanel(tabPanels, overId as TabId);
-                if (!overTabPanel) return;
+                if (oldIndex < overIndex) {
+                    targetIndex = overIndex;
+                } else if (oldIndex > overIndex) {
+                    targetIndex = overIndex;
+                } else {
+                    return; // Same position, no change
+                }
 
-                targetPanel = overTabPanel;
-                targetIndex = tabPanels[targetPanel].indexOf(overId as TabId);
-            }
-
-            // Same panel reorder
-            if (sourcePanel === targetPanel) {
-                const oldIndex = tabPanels[sourcePanel].indexOf(activeTabId);
-                if (oldIndex !== targetIndex && oldIndex !== -1) {
-                    reorderTab(sourcePanel, oldIndex, targetIndex);
+                // Special case: dragging to the right edge of the last item
+                if (isLastItem && activeCenterX > overCenterX) {
+                    targetIndex = tabPanels[sourcePanel].length;
                 }
             } else {
-                // Cross-panel move
-                moveTab(activeTabId, sourcePanel, targetPanel, targetIndex);
+                targetIndex = overIndex;
+            }
+
+            if (oldIndex !== targetIndex && oldIndex !== -1) {
+                reorderTab(sourcePanel, oldIndex, targetIndex);
             }
         },
-        [tabPanels, moveTab, reorderTab]
+        [tabPanels, reorderTab]
     );
 
     // Player ready handler
@@ -479,8 +563,9 @@ export default function VideoPage() {
     return (
         <DndContext
             sensors={sensors}
-            collisionDetection={closestCenter}
+            collisionDetection={collisionDetection}
             onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
         >
             <div className={`grid gap-6 h-[130vh] ${hideSidebars ? "grid-cols-1" : "grid-cols-1 md:grid-cols-3"}`}>
