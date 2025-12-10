@@ -20,7 +20,7 @@ import { formatTime } from "@/lib/timeFormat";
 import type { Subtitle } from "@/lib/srt";
 import { findSubtitleAtTime } from "@/lib/subtitleSearch";
 import type { CrepeEditor } from "@/components/MarkdownNoteEditor";
-import type { SidebarTabType } from "@/components/video";
+import { useTabLayoutStore, findTabPanel, type TabId } from "@/stores/tabLayoutStore";
 
 export interface UseVideoPageHandlersOptions {
     videoId: string;
@@ -37,7 +37,6 @@ export interface UseVideoPageHandlersOptions {
     // State setters
     setProcessing: (processing: boolean) => void;
     setProcessingAction: (action: ProcessingAction) => void;
-    setActiveTab: (tab: SidebarTabType) => void;
     setRefreshExplanations: (fn: (prev: number) => number) => void;
     setVoiceoverProcessing: (source: SubtitleSource | null) => void;
     setVoiceovers: (voiceovers: VoiceoverEntry[]) => void;
@@ -84,7 +83,6 @@ export function useVideoPageHandlers({
     noteEditorRef,
     setProcessing,
     setProcessingAction,
-    setActiveTab,
     setRefreshExplanations,
     setVoiceoverProcessing,
     setVoiceovers,
@@ -95,6 +93,13 @@ export function useVideoPageHandlers({
     hasSubtitles,
     hasEnhancedSubtitles,
 }: UseVideoPageHandlersOptions): UseVideoPageHandlersReturn {
+
+    const activateTab = useCallback((tabId: TabId) => {
+        const { panels, setActiveTab: setActiveTabInStore } = useTabLayoutStore.getState();
+        const panel = findTabPanel(panels, tabId);
+        if (!panel) return;
+        setActiveTabInStore(panel, tabId);
+    }, []);
 
     const buildSubtitleContextAroundTime = useCallback(
         (time: number): { text: string; startTime: number } => {
@@ -143,7 +148,7 @@ export function useVideoPageHandlers({
     const handleCapture = useCallback(
         async (timestamp: number, imagePath: string) => {
             try {
-                setActiveTab("explanations");
+                activateTab("explanations");
                 await explainSlide(
                     videoId,
                     imagePath,
@@ -156,7 +161,7 @@ export function useVideoPageHandlers({
                 console.error("Failed to generate explanation:", error);
             }
         },
-        [videoId, learnerProfile, subtitleContextWindowSeconds, setActiveTab, setRefreshExplanations]
+        [videoId, learnerProfile, subtitleContextWindowSeconds, activateTab, setRefreshExplanations]
     );
 
     const handleGenerateSubtitles = useCallback(async () => {
@@ -271,9 +276,9 @@ export function useVideoPageHandlers({
                 if (prev.some((i) => i.id === item.id)) return prev;
                 return [...prev, item];
             });
-            setActiveTab("ask");
+            activateTab("ask");
         },
-        [setAskContext, setActiveTab]
+        [setAskContext, activateTab]
     );
 
     const handleRemoveFromAsk = useCallback(

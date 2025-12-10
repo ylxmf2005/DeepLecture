@@ -10,7 +10,8 @@ import {
     VoiceoverEntry,
 } from "@/lib/api";
 import { useTaskStatus } from "@/hooks/useTaskStatus";
-import type { SidebarTabType } from "@/components/video";
+import { useTaskNotification } from "@/hooks/useTaskNotification";
+import type { TabId } from "@/stores/tabLayoutStore";
 import type { AskContextItem } from "@/lib/askTypes";
 
 export type ProcessingAction = "generate" | "enhance" | "translate" | "video" | "timeline" | null;
@@ -52,8 +53,8 @@ export interface UseVideoPageStateReturn {
     setTimelineLoading: (loading: boolean) => void;
 
     // UI state
-    activeTab: SidebarTabType;
-    setActiveTab: (tab: SidebarTabType) => void;
+    activeTab: TabId;
+    setActiveTab: (tab: TabId) => void;
     currentTime: number;
     setCurrentTime: (time: number) => void;
     refreshExplanations: number;
@@ -108,7 +109,7 @@ export function useVideoPageState({
     const [timelineLoading, setTimelineLoading] = useState(false);
 
     // UI state
-    const [activeTab, setActiveTab] = useState<SidebarTabType>("subtitles");
+    const [activeTab, setActiveTab] = useState<TabId>("subtitles");
     const [currentTime, setCurrentTime] = useState(0);
     const [refreshExplanations, setRefreshExplanations] = useState(0);
 
@@ -124,6 +125,7 @@ export function useVideoPageState({
 
     // SSE task status
     const { tasks, isConnected } = useTaskStatus(videoId);
+    const { notifyTaskComplete } = useTaskNotification();
     const handledTasksRef = useRef<Set<string>>(new Set());
 
     // Reset handled tasks when videoId changes
@@ -213,6 +215,12 @@ export function useVideoPageState({
             if (task.status === "ready" || task.status === "error") {
                 handledTasksRef.current.add(taskId);
 
+                // Only notify for live events, not initial history
+                const isLiveEvent = task._eventType !== "initial";
+                if (isLiveEvent) {
+                    notifyTaskComplete(task.type, task.status, task.error);
+                }
+
                 const shouldRefreshContent = [
                     "subtitle_generation",
                     "subtitle_enhancement",
@@ -256,7 +264,7 @@ export function useVideoPageState({
                 }
             }
         });
-    }, [tasks, videoId, processingAction, aiLanguage, learnerProfile]);
+    }, [tasks, videoId, processingAction, aiLanguage, learnerProfile, notifyTaskComplete]);
 
     // Fallback polling when SSE not connected
     useEffect(() => {

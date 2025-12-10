@@ -17,13 +17,25 @@ import { useThrottledTimeUpdate } from "@/hooks/useThrottledTimeUpdate";
 import { Settings, Wand2, Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { Live2DCanvasHandle } from "@/components/Live2DCanvas";
+import {
+    DndContext,
+    DragOverlay,
+    closestCenter,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    type DragEndEvent,
+    type DragStartEvent,
+} from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
 
 const Live2DCanvas = dynamic(() => import("@/components/Live2DCanvas"), { ssr: false });
 import { useLearnerProfile } from "@/components/LearnerProfileProvider";
 import { VideoPlayerSection, NotesPanel, SidebarTabs } from "@/components/video";
 import { HeaderActionPortal } from "@/components/HeaderActionPortal";
 import { FocusModeHandler } from "@/components/FocusModeHandler";
-import { useSidebarSubtitleMode as useSidebarSubtitleModeStore, useVideoDeck, useSmartSkipEnabled, useVideoStateStore } from "@/stores";
+import { useSidebarSubtitleMode as useSidebarSubtitleModeStore, useVideoDeck, useSmartSkipEnabled, useVideoStateStore, useTabLayoutStore, findTabPanel, type TabId, type PanelId } from "@/stores";
+import { TAB_CONFIG } from "@/components/dnd/DraggableTabBar";
 import type { CrepeEditor } from "@/components/MarkdownNoteEditor";
 
 export { type ProcessingAction } from "@/hooks/useVideoPageState";
@@ -98,8 +110,6 @@ export default function VideoPage() {
         setTimelineEntries,
         timelineLoading,
         setTimelineLoading,
-        activeTab,
-        setActiveTab,
         currentTime,
         setCurrentTime,
         refreshExplanations,
@@ -121,6 +131,21 @@ export default function VideoPage() {
     const setDeckStore = useVideoStateStore((store) => store.setDeck);
     const setSmartSkipEnabledStore = useVideoStateStore((store) => store.setSmartSkipEnabled);
     const toggleSmartSkipStore = useVideoStateStore((store) => store.toggleSmartSkip);
+
+    // Tab layout store for DnD
+    const tabPanels = useTabLayoutStore((state) => state.panels);
+    const moveTab = useTabLayoutStore((state) => state.moveTab);
+    const reorderTab = useTabLayoutStore((state) => state.reorderTab);
+
+    // DnD state
+    const [activeId, setActiveId] = useState<TabId | null>(null);
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        })
+    );
 
     // Subtitle management
     const {
@@ -196,7 +221,6 @@ export default function VideoPage() {
         noteEditorRef,
         setProcessing,
         setProcessingAction,
-        setActiveTab,
         setRefreshExplanations,
         setVoiceoverProcessing,
         setVoiceovers,
@@ -325,6 +349,56 @@ export default function VideoPage() {
         toggleSmartSkipStore(videoId);
     }, [content?.subtitleStatus, videoId, toggleSmartSkipStore]);
 
+    // DnD handlers
+    const handleDragStart = useCallback((event: DragStartEvent) => {
+        setActiveId(event.active.id as TabId);
+    }, []);
+
+    const handleDragEnd = useCallback(
+        (event: DragEndEvent) => {
+            const { active, over } = event;
+            setActiveId(null);
+
+            if (!over) return;
+
+            const activeTabId = active.id as TabId;
+            const overId = over.id as string;
+
+            // Find source panel
+            const sourcePanel = findTabPanel(tabPanels, activeTabId);
+            if (!sourcePanel) return;
+
+            // Determine target panel and index
+            let targetPanel: PanelId;
+            let targetIndex: number;
+
+            // Check if dropped on a panel directly
+            if (overId === "sidebar" || overId === "bottom") {
+                targetPanel = overId as PanelId;
+                targetIndex = tabPanels[targetPanel].length; // Append to end
+            } else {
+                // Dropped on another tab - find which panel it belongs to
+                const overTabPanel = findTabPanel(tabPanels, overId as TabId);
+                if (!overTabPanel) return;
+
+                targetPanel = overTabPanel;
+                targetIndex = tabPanels[targetPanel].indexOf(overId as TabId);
+            }
+
+            // Same panel reorder
+            if (sourcePanel === targetPanel) {
+                const oldIndex = tabPanels[sourcePanel].indexOf(activeTabId);
+                if (oldIndex !== targetIndex && oldIndex !== -1) {
+                    reorderTab(sourcePanel, oldIndex, targetIndex);
+                }
+            } else {
+                // Cross-panel move
+                moveTab(activeTabId, sourcePanel, targetPanel, targetIndex);
+            }
+        },
+        [tabPanels, moveTab, reorderTab]
+    );
+
     // Player ready handler
     const handlePlayerReady = useCallback(
         (videoElement: HTMLVideoElement) => {
@@ -403,64 +477,94 @@ export default function VideoPage() {
     }
 
     return (
-        <div className={`grid gap-6 h-[130vh] ${hideSidebars ? "grid-cols-1" : "grid-cols-1 md:grid-cols-3"}`}>
-            {/* Left Column: Video Player & Notes */}
-            <div className={`flex flex-col gap-4 h-full min-h-0 ${hideSidebars ? "col-span-1" : "md:col-span-2"}`}>
-                <VideoPlayerSection
-                    ref={playerRef}
-                    content={content}
-                    videoId={videoId}
-                    selectedVoiceoverId={selectedVoiceoverId}
-                    playerTracks={playerTracks}
-                    playerSubtitles={playerSubtitles}
-                    playerSubtitleMode={playerSubtitleMode}
-                    setPlayerSubtitleMode={setPlayerSubtitleMode}
-                    generatingVideo={generatingVideo}
-                    onTimeUpdate={handleTimeUpdate}
-                    onCapture={handlers.handleCapture}
-                    onAskAtTime={handlers.handleAskAtTime}
-                    onAddNoteAtTime={handlers.handleAddNoteAtTime}
-                    onPlayerReady={handlePlayerReady}
-                    onGenerateSlideLecture={handlers.handleGenerateSlideLecture}
-                    slideDeck={deck}
-                    onUploadSlide={handlers.handleUploadSlide}
-                />
-                {!hideSidebars && (
-                    <NotesPanel videoId={videoId} onEditorReady={handleNoteEditorReady} />
-                )}
-            </div>
+        <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+        >
+            <div className={`grid gap-6 h-[130vh] ${hideSidebars ? "grid-cols-1" : "grid-cols-1 md:grid-cols-3"}`}>
+                {/* Left Column: Video Player & Notes */}
+                <div className={`flex flex-col gap-4 h-full min-h-0 ${hideSidebars ? "col-span-1" : "md:col-span-2"}`}>
+                    <VideoPlayerSection
+                        ref={playerRef}
+                        content={content}
+                        videoId={videoId}
+                        selectedVoiceoverId={selectedVoiceoverId}
+                        playerTracks={playerTracks}
+                        playerSubtitles={playerSubtitles}
+                        playerSubtitleMode={playerSubtitleMode}
+                        setPlayerSubtitleMode={setPlayerSubtitleMode}
+                        generatingVideo={generatingVideo}
+                        onTimeUpdate={handleTimeUpdate}
+                        onCapture={handlers.handleCapture}
+                        onAskAtTime={handlers.handleAskAtTime}
+                        onAddNoteAtTime={handlers.handleAddNoteAtTime}
+                        onPlayerReady={handlePlayerReady}
+                        onGenerateSlideLecture={handlers.handleGenerateSlideLecture}
+                        slideDeck={deck}
+                        onUploadSlide={handlers.handleUploadSlide}
+                    />
+                    {!hideSidebars && (
+                        <NotesPanel
+                            videoId={videoId}
+                            onEditorReady={handleNoteEditorReady}
+                            content={content}
+                            currentTime={currentTime}
+                            sidebarSubtitleMode={sidebarSubtitleMode}
+                            setSidebarSubtitleMode={(mode) => setSubtitleModeSidebarStore(videoId, mode)}
+                            sidebarSubtitles={sidebarSubtitles}
+                            subtitlesZh={subtitlesZh}
+                            subtitlesEnZh={subtitlesEnZh}
+                            subtitlesZhEn={subtitlesZhEn}
+                            subtitlesLoading={subtitlesLoading}
+                            processing={processing}
+                            processingAction={processingAction}
+                            timelineEntries={timelineEntries}
+                            timelineLoading={timelineLoading}
+                            refreshExplanations={refreshExplanations}
+                            askContext={askContext}
+                            learnerProfile={learnerProfile}
+                            subtitleContextWindowSeconds={subtitleContextWindowSeconds}
+                            onSeek={handleSeek}
+                            onAddToAsk={handlers.handleAddToAsk}
+                            onAddToNotes={handlers.handleAddToNotes}
+                            onRemoveFromAsk={handlers.handleRemoveFromAsk}
+                            onGenerateSubtitles={handlers.handleGenerateSubtitles}
+                            onGenerateTimeline={handlers.handleGenerateTimeline}
+                        />
+                    )}
+                </div>
 
-            {/* Right Column: Tabs */}
-            {!hideSidebars && (
-                <SidebarTabs
-                    content={content}
-                    videoId={videoId}
-                    currentTime={currentTime}
-                    activeTab={activeTab}
-                    setActiveTab={setActiveTab}
-                    sidebarSubtitleMode={sidebarSubtitleMode}
-                    setSidebarSubtitleMode={(mode) => setSubtitleModeSidebarStore(videoId, mode)}
-                    sidebarSubtitles={sidebarSubtitles}
-                    subtitlesZh={subtitlesZh}
-                    subtitlesEnZh={subtitlesEnZh}
-                    subtitlesZhEn={subtitlesZhEn}
-                    subtitlesLoading={subtitlesLoading}
-                    processing={processing}
-                    processingAction={processingAction}
-                    timelineEntries={timelineEntries}
-                    timelineLoading={timelineLoading}
-                    refreshExplanations={refreshExplanations}
-                    askContext={askContext}
-                    learnerProfile={learnerProfile}
-                    subtitleContextWindowSeconds={subtitleContextWindowSeconds}
-                    onSeek={handleSeek}
-                    onAddToAsk={handlers.handleAddToAsk}
-                    onAddToNotes={handlers.handleAddToNotes}
-                    onRemoveFromAsk={handlers.handleRemoveFromAsk}
-                    onGenerateSubtitles={handlers.handleGenerateSubtitles}
-                    onGenerateTimeline={handlers.handleGenerateTimeline}
-                />
-            )}
+                {/* Right Column: Tabs */}
+                {!hideSidebars && (
+                    <SidebarTabs
+                        content={content}
+                        videoId={videoId}
+                        currentTime={currentTime}
+                        sidebarSubtitleMode={sidebarSubtitleMode}
+                        setSidebarSubtitleMode={(mode) => setSubtitleModeSidebarStore(videoId, mode)}
+                        sidebarSubtitles={sidebarSubtitles}
+                        subtitlesZh={subtitlesZh}
+                        subtitlesEnZh={subtitlesEnZh}
+                        subtitlesZhEn={subtitlesZhEn}
+                        subtitlesLoading={subtitlesLoading}
+                        processing={processing}
+                        processingAction={processingAction}
+                        timelineEntries={timelineEntries}
+                        timelineLoading={timelineLoading}
+                        refreshExplanations={refreshExplanations}
+                        askContext={askContext}
+                        learnerProfile={learnerProfile}
+                        subtitleContextWindowSeconds={subtitleContextWindowSeconds}
+                        onSeek={handleSeek}
+                        onAddToAsk={handlers.handleAddToAsk}
+                        onAddToNotes={handlers.handleAddToNotes}
+                        onRemoveFromAsk={handlers.handleRemoveFromAsk}
+                        onGenerateSubtitles={handlers.handleGenerateSubtitles}
+                        onGenerateTimeline={handlers.handleGenerateTimeline}
+                    />
+                )}
 
             <SettingsDialog
                 isOpen={isSettingsOpen}
@@ -569,6 +673,17 @@ export default function VideoPage() {
                     onClose={toggleLive2d}
                 />
             )}
+
+            {/* DragOverlay for smooth dragging visuals */}
+            <DragOverlay>
+                {activeId ? (
+                    <div className="px-3 py-2 text-sm font-medium rounded-md border border-primary/20 bg-popover shadow-xl ring-2 ring-primary/20 backdrop-blur-sm scale-105 rotate-2 opacity-90 flex items-center gap-1.5">
+                        {TAB_CONFIG[activeId]?.icon}
+                        <span>{TAB_CONFIG[activeId]?.label}</span>
+                    </div>
+                ) : null}
+            </DragOverlay>
         </div>
+        </DndContext>
     );
 }
