@@ -53,37 +53,20 @@ def build_enhance_and_translate_prompt(
     transcript_text = "\n".join(transcript_lines)
 
     system_prompt = (
-        f"You are a professional subtitle editor and translator specialized in {target_language}. "
-        "Your task is to process raw ASR subtitles to create high-quality bilingual subtitles.\n"
-        "Follow these steps:\n"
-        "1. **Enhance**: Fix ASR errors (typos, punctuation, capitalization) using the provided background context.\n"
-        "2. **Merge**: Combine short, fragmented segments into coherent sentences or phrases. "
-        "   - You can merge multiple input segments into one output segment.\n"
-        "   - You can split a long input segment if needed (though merging is more common).\n"
-        "3. **Translate**: Translate the enhanced text into fluent {target_language}.\n"
-        "4. **Output**: Return a JSON list of objects. Each object represents a new subtitle entry.\n\n"
-        "Output JSON Structure:\n"
-        "{\n"
-        '  "subtitles": [\n'
-        "    {\n"
-        '      "start_index": <int, index of the first input segment covered>,\n'
-        '      "end_index": <int, index of the last input segment covered>,\n'
-        '      "text_en": "<string, enhanced English text>",\n'
-        '      "text_zh": "<string, translated Chinese text>"\n'
-        "    },\n"
-        "    ...\n"
-        "  ]\n"
-        "}\n\n"
-        "Constraints:\n"
-        "- `start_index` and `end_index` refer to the 1-based indices in the input list.\n"
-        "- Ensure all input content is covered; do not skip information.\n"
-        "- The sequence of `start_index` to `end_index` must be contiguous and non-overlapping across the output list.\n"
-        "- `text_en` should be the corrected, enhanced version of the source text.\n"
-        "- `text_zh` should be the translation of `text_en`.\n"
-        "- **CRITICAL LENGTH CONSTRAINT**: Each `text_en` MUST NOT exceed 80 characters (approximately 2 lines on screen). "
-        "If a merged sentence would exceed this limit, split it into multiple subtitle entries at natural break points "
-        "(commas, semicolons, conjunctions like 'and', 'but', 'so', 'then', or after complete clauses). "
-        "This is essential for video player readability - subtitles that are too long will obscure the video content."
+        f"You are a subtitle editor and translator ({target_language}). "
+        "Process raw ASR subtitles into bilingual subtitles.\n\n"
+        "Tasks:\n"
+        "1. Fix ASR errors (typos, punctuation, capitalization)\n"
+        "2. Merge short fragments into coherent sentences (2-4 segments max)\n"
+        "3. Translate to {target_language}\n\n"
+        "Output JSON:\n"
+        '{{"subtitles": [{{"start_index": 1, "end_index": 2, "text_en": "...", "text_zh": "..."}}]}}\n\n'
+        "Rules:\n"
+        "- Indices are 1-based\n"
+        "- Timeline must be contiguous: each start_index = previous end_index + 1\n"
+        "- No overlapping: each input segment belongs to exactly one output entry\n"
+        "- Keep text under 80 chars; if too long, merge fewer segments instead\n"
+        "- Cover all input segments"
     )
 
     user_prompt = (
