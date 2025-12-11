@@ -147,6 +147,8 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
     const tickIdRef = useRef<number | null>(null);
     // Flag to suppress ratechange handler when tick adjusts video.playbackRate
     const suppressRateChangeRef = useRef<boolean>(false);
+    // Store pre-sync video state to restore when exiting voiceover mode
+    const preSyncVideoStateRef = useRef<{ muted: boolean; volume: number } | null>(null);
 
     const [isActive, setIsActive] = useState(false);
     const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
@@ -241,6 +243,12 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
         isActiveRef.current = true;
         setIsActive(true);
 
+        // Save pre-sync video state before modifying
+        preSyncVideoStateRef.current = {
+            muted: video.muted,
+            volume: video.volume,
+        };
+
         // Mute video, audio will play the voiceover
         video.muted = true;
 
@@ -290,7 +298,10 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
             // Wait for metadata
             const handleLoadedMetadata = () => {
                 audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
-                setupSync();
+                // Check if sync is still active - user may have toggled off while waiting
+                if (isActiveRef.current) {
+                    setupSync();
+                }
             };
             audio.addEventListener("loadedmetadata", handleLoadedMetadata);
         }
@@ -309,8 +320,16 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
         setIsActive(false);
 
         if (video) {
-            // Restore video
-            video.muted = false;
+            // Restore pre-sync video state instead of forcing unmute
+            const preSyncState = preSyncVideoStateRef.current;
+            if (preSyncState) {
+                video.muted = preSyncState.muted;
+                video.volume = preSyncState.volume;
+                preSyncVideoStateRef.current = null;
+            } else {
+                // Fallback: unmute if no saved state (should not happen)
+                video.muted = false;
+            }
             video.playbackRate = userRateRef.current;
         }
 
@@ -390,19 +409,29 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
 
         if (isActiveRef.current) {
             // Sync mode: audio leads
-            if (audio) await audio.play();
-            if (video) {
-                // Sync video position before playing
-                const timeline = timelineRef.current;
-                if (timeline && timeline.segments.length > 0) {
-                    const audioTime = audio?.currentTime ?? 0;
-                    const idx = findSegmentByAudioTime(timeline.segments, audioTime);
-                    const { videoTime } = mapAudioToVideo(timeline.segments, audioTime, idx);
-                    video.currentTime = videoTime;
+            try {
+                if (audio) await audio.play();
+                if (video) {
+                    // Sync video position before playing
+                    const timeline = timelineRef.current;
+                    if (timeline && timeline.segments.length > 0) {
+                        const audioTime = audio?.currentTime ?? 0;
+                        const idx = findSegmentByAudioTime(timeline.segments, audioTime);
+                        const { videoTime } = mapAudioToVideo(timeline.segments, audioTime, idx);
+                        video.currentTime = videoTime;
+                    }
+                    await video.play();
                 }
-                await video.play();
+                startTickLoop();
+            } catch (error) {
+                // Handle autoplay blocked by browser
+                console.warn("useVoiceoverSync: play() blocked by browser", error);
+                // Rollback: pause audio if video play failed to keep them in sync
+                if (audio && !audio.paused) {
+                    audio.pause();
+                }
+                throw error; // Re-throw so caller can handle (e.g., show play button)
             }
-            startTickLoop();
         } else {
             // Normal mode: just play video
             if (video) await video.play();
