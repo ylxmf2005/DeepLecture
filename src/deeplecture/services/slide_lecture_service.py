@@ -444,22 +444,24 @@ class SlideLectureService:
                 self._cleanup_temp_files(ctx)
 
     def resolve_subtitle_path(self, deck_id: str) -> str:
-        """Resolve subtitle path from unified metadata."""
+        """Resolve subtitle path from unified metadata or compute default."""
         metadata = self._get_deck_metadata(deck_id)
         if not metadata or metadata.type != "slide":
             raise FileNotFoundError(f"Slide deck not found: {deck_id}")
-        if not metadata.subtitle_path:
-            raise FileNotFoundError(f"Subtitle path missing for deck {deck_id}")
-        return str(metadata.subtitle_path)
+        if metadata.subtitle_path:
+            return str(metadata.subtitle_path)
+        # Compute default path for new decks that haven't generated subtitles yet
+        return self._subtitle_storage.build_original_path(deck_id)
 
     def resolve_lecture_video_path(self, deck_id: str) -> str:
-        """Resolve lecture video path from unified metadata."""
+        """Resolve lecture video path from unified metadata or compute default."""
         metadata = self._get_deck_metadata(deck_id)
         if not metadata or metadata.type != "slide":
             raise FileNotFoundError(f"Slide deck not found: {deck_id}")
-        if not metadata.video_file:
-            raise FileNotFoundError(f"Lecture video path missing for deck {deck_id}")
-        return str(metadata.video_file)
+        if metadata.video_file:
+            return str(metadata.video_file)
+        # Compute default path for new decks that haven't generated video yet
+        return os.path.join(self._video_output_dir, f"{deck_id}.mp4")
 
     def get_page_image_path(self, deck_id: str, page_index: int) -> str:
         """Resolve page image path with unified metadata awareness."""
