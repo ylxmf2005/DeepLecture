@@ -240,7 +240,9 @@ export function useVideoPageHandlers({
                 setProcessingAction("video");
                 const result = await generateSlideLecture(videoId, force);
 
-                if (result.status !== "processing") {
+                // Only stop processing if video is already ready
+                // "pending" and "processing" mean work is ongoing - SSE will handle completion
+                if (result.status === "ready") {
                     setProcessing(false);
                     setProcessingAction(null);
                 }
