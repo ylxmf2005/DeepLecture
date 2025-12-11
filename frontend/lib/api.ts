@@ -182,7 +182,7 @@ api.interceptors.response.use(
                 throw error;
             }
         }
-        // Return response for non-unified format (backward compatibility)
+        // Return response as-is for endpoints not using unified format
         return response;
     },
     (error) => {
@@ -293,6 +293,11 @@ export const generateVoiceover = async (
 
 export const listVoiceovers = async (videoId: string) => {
     const response = await api.get<ListVoiceoversResponse>(`/content/${videoId}/voiceovers`);
+    return response.data;
+};
+
+export const deleteVoiceover = async (videoId: string, voiceoverId: string) => {
+    const response = await api.delete(`/content/${videoId}/voiceovers/${voiceoverId}`);
     return response.data;
 };
 

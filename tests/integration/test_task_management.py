@@ -51,24 +51,6 @@ def test_task_dataclass():
     assert task.progress == 0
 
 
-def test_task_metadata_json_property():
-    """Test that metadata_json property returns JSON string."""
-    task = Task(
-        id="test_task_002",
-        type="timeline_generation",
-        content_id="video_456",
-        status="pending",
-        metadata={"language": "en", "force": True},
-        created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-01T00:00:00Z",
-    )
-    import json
-
-    metadata = json.loads(task.metadata_json)
-    assert metadata["language"] == "en"
-    assert metadata["force"] is True
-
-
 # ============================================================================
 # TaskManager Tests
 # ============================================================================

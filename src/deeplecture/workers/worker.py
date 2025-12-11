@@ -48,16 +48,6 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _load_metadata(raw: Optional[str]) -> Dict[str, Any]:
-    if not raw:
-        return {}
-    try:
-        return json.loads(raw)
-    except Exception:  # pragma: no cover - defensive
-        logger.warning("Failed to parse task metadata JSON: %s", raw)
-        return {}
-
-
 def dispatch_task(
     task_type: str,
     metadata: Dict[str, Any],
@@ -122,7 +112,7 @@ def worker_loop(task_manager: TaskManager) -> None:
                 logger.warning("Task %s disappeared before processing", task_id)
                 continue
 
-            metadata = _load_metadata(getattr(task, "metadata_json", None))
+            metadata = task.metadata
             task_type = str(getattr(task, "type", ""))
 
             # Mark that we picked up the job.
@@ -149,7 +139,7 @@ def worker_loop(task_manager: TaskManager) -> None:
 
 
 def start_worker(task_manager: TaskManager) -> threading.Thread:
-    """Start a single worker loop in a daemon thread (legacy API)."""
+    """Start a single worker loop in a daemon thread."""
 
     if task_manager is None:
         raise ValueError("TaskManager instance is required to start worker")
@@ -226,7 +216,7 @@ class WorkerPool:
                     logger.warning("[%s] Task %s disappeared", thread_name, task_id)
                     continue
 
-                metadata = _load_metadata(getattr(task, "metadata_json", None))
+                metadata = task.metadata
                 task_type = str(getattr(task, "type", ""))
 
                 logger.info("[%s] Processing task %s (%s)", thread_name, task_id, task_type)

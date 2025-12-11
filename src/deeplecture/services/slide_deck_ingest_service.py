@@ -38,8 +38,8 @@ class DeckIngestService:
         self._metadata_storage: MetadataStorage = (
             metadata_storage or get_default_metadata_storage()
         )
-        self._upload_folder = upload_folder or ctx.upload_folder
-        self._workspace_root = workspace_root or ctx.output_folder
+        self._upload_folder = upload_folder or ctx.content_dir
+        self._workspace_root = workspace_root or ctx.content_dir
 
     # Public API ---------------------------------------------------------
 

@@ -8,6 +8,7 @@ import {
     captureSlide,
     generateVoiceover,
     listVoiceovers,
+    deleteVoiceover,
     generateTimeline,
     SubtitleSource,
     VoiceoverEntry,
@@ -40,6 +41,8 @@ export interface UseVideoPageHandlersOptions {
     setRefreshExplanations: (fn: (prev: number) => number) => void;
     setVoiceoverProcessing: (source: SubtitleSource | null) => void;
     setVoiceovers: (voiceovers: VoiceoverEntry[]) => void;
+    selectedVoiceoverId: string | null;
+    setSelectedVoiceoverId: (id: string | null) => void;
     setTimelineLoading: (loading: boolean) => void;
     setTimelineEntries: (entries: import("@/lib/api").TimelineEntry[]) => void;
     setAskContext: React.Dispatch<React.SetStateAction<AskContextItem[]>>;
@@ -57,6 +60,7 @@ export interface UseVideoPageHandlersReturn {
     handleGenerateTimeline: () => Promise<void>;
     handleGenerateSlideLecture: (force?: boolean) => Promise<void>;
     handleGenerateVoiceover: (source: SubtitleSource) => Promise<void>;
+    handleDeleteVoiceover: (voiceoverId: string) => Promise<void>;
     handleAddToAsk: (item: AskContextItem) => void;
     handleRemoveFromAsk: (id: string) => void;
     handleAddToNotes: (markdown: string) => void;
@@ -86,6 +90,8 @@ export function useVideoPageHandlers({
     setRefreshExplanations,
     setVoiceoverProcessing,
     setVoiceovers,
+    selectedVoiceoverId,
+    setSelectedVoiceoverId,
     setTimelineLoading,
     setTimelineEntries,
     setAskContext,
@@ -270,6 +276,22 @@ export function useVideoPageHandlers({
         [videoId, voiceoverName, translatedLanguage, setVoiceoverProcessing, setVoiceovers]
     );
 
+    const handleDeleteVoiceover = useCallback(
+        async (voiceoverId: string) => {
+            try {
+                await deleteVoiceover(videoId, voiceoverId);
+                const data = await listVoiceovers(videoId);
+                setVoiceovers(data.voiceovers);
+                if (voiceoverId === selectedVoiceoverId) {
+                    setSelectedVoiceoverId(null);
+                }
+            } catch (error) {
+                console.error("Failed to delete voiceover:", error);
+            }
+        },
+        [videoId, selectedVoiceoverId, setSelectedVoiceoverId, setVoiceovers]
+    );
+
     const handleAddToAsk = useCallback(
         (item: AskContextItem) => {
             setAskContext((prev) => {
@@ -418,6 +440,7 @@ export function useVideoPageHandlers({
         handleGenerateTimeline,
         handleGenerateSlideLecture,
         handleGenerateVoiceover,
+        handleDeleteVoiceover,
         handleAddToAsk,
         handleRemoveFromAsk,
         handleAddToNotes,

@@ -1,8 +1,9 @@
 import os
 import shutil
 import unittest
-from unittest.mock import MagicMock
-from deeplecture.transcription.voiceover import SubtitleVoiceoverGenerator, SubtitleSegment
+
+from deeplecture.transcription.voiceover import SubtitleSegment, SubtitleVoiceoverGenerator
+
 
 class TestVoiceoverSync(unittest.TestCase):
     def setUp(self):
@@ -15,66 +16,183 @@ class TestVoiceoverSync(unittest.TestCase):
         if os.path.exists(self.output_dir):
             shutil.rmtree(self.output_dir)
 
-    def test_drift_correction(self):
+    def test_segment_alignment(self):
+        """Test that segment alignment produces correct timing with video speed-up."""
         # Subclass to mock ffmpeg interactions without touching real TTS/ffmpeg.
         class MockGenerator(SubtitleVoiceoverGenerator):
             def __init__(self):
                 self.durations = {}
+                self.sample_rate = 44100
+                self.silence_threshold = 1.0
+                self.max_speed_factor = 2.5
+                self._speed_buckets = [1.0, 1.25, 1.5, 1.75, 2.0, 2.5]
 
             def _generate_silence_wav(self, output_file: str, duration: float) -> None:
                 with open(output_file, "w") as f:
                     f.write("silence")
                 self.durations[output_file] = duration
 
-            def _adjust_audio_duration(self, input_file, output_file, target_duration, work_dir):
-                actual_duration = target_duration - 0.05  # 50ms short
-                if actual_duration < 0:
-                    actual_duration = 0
-
+            def _pad_audio_to_duration(self, input_file, output_file, target_duration, work_dir):
                 with open(output_file, "w") as f:
-                    f.write("adjusted")
+                    f.write("padded")
+                self.durations[output_file] = target_duration
 
-                self.durations[output_file] = actual_duration
-                return 0.0, actual_duration
+            def _speed_up_audio(self, input_file, output_file, speed, target_duration, work_dir):
+                with open(output_file, "w") as f:
+                    f.write("sped_up")
+                self.durations[output_file] = target_duration
 
         generator = MockGenerator()
 
         # Override _get_audio_duration to use the durations map.
         def get_duration(path):
-            return generator.durations.get(path, 1.0)  # Default 1s if not found
+            return generator.durations.get(path, 0.8)  # Default 0.8s (shorter than 1s slot)
         generator._get_audio_duration = get_duration
 
-        # Create segments:
-        # Segment 1: 0.0 - 1.0 (Target 1.0s) -> Actual 0.95s (Drift -0.05s)
-        # Segment 2: 1.0 - 2.0 (Target 1.0s) -> Start at 1.0, but track is at 0.95. Drift = 1.0 - 0.95 = 0.05s.
-        # Should trigger correction.
-        
+        # Create segments with 1s slots each
         segments = [
             SubtitleSegment(index=1, start=0.0, end=1.0, text="One"),
             SubtitleSegment(index=2, start=1.0, end=2.0, text="Two"),
         ]
-        
-        # Mock TTS to produce dummy files
-        generator.tts = MagicMock()
-        generator.tts.synthesize.return_value = b"audio"
 
         # Create dummy input wavs
         segments_dir = os.path.join(self.output_dir, "test_segments")
         os.makedirs(segments_dir)
         for i in range(len(segments)):
-            with open(os.path.join(segments_dir, f"subtitle_{i+1}.wav"), "wb") as f:
+            path = os.path.join(segments_dir, f"subtitle_{i+1}.wav")
+            with open(path, "wb") as f:
                 f.write(b"audio")
+            generator.durations[path] = 0.8  # TTS produces 0.8s audio for 1s slot
 
-        audio_files = generator._build_aligned_segment_files(segments, segments_dir)
-        
-        drift_files = [f for f in audio_files if "drift" in f]
-        print(f"Generated audio files: {audio_files}")
-        
-        self.assertTrue(len(drift_files) > 0, "Drift correction silence should have been generated")
-        
-        # Verify the drift file is for the second segment (index 1 in loop, so drift_2.wav?)
-        # The code uses f"drift_{i + 1}.wav". For i=1 (Segment 2), it should be drift_2.wav.
-        self.assertTrue(any("drift_2.wav" in f for f in drift_files))
+        audio_files, segment_timings = generator._build_aligned_segment_files(
+            segments, segments_dir, video_duration=2.0
+        )
+
+        # Should have 2 adjusted audio files (one per segment)
+        adjusted_files = [f for f in audio_files if "adjusted_" in f]
+        self.assertEqual(len(adjusted_files), 2, "Should have 2 adjusted audio files")
+
+        # Should have 2 segment timings
+        self.assertEqual(len(segment_timings), 2, "Should have 2 segment timings")
+
+        # Verify segment timings track source and output correctly
+        self.assertEqual(segment_timings[0].src_start, 0.0)
+        self.assertEqual(segment_timings[0].src_end, 1.0)
+        self.assertEqual(segment_timings[1].src_start, 1.0)
+        self.assertEqual(segment_timings[1].src_end, 2.0)
+
+    def test_video_speedup_threshold(self):
+        """Test that video speed-up is triggered when gap exceeds threshold."""
+        class MockGenerator(SubtitleVoiceoverGenerator):
+            def __init__(self):
+                self.durations = {}
+                self.sample_rate = 44100
+                self.silence_threshold = 0.5  # Low threshold to trigger speed-up
+                self.max_speed_factor = 2.5
+                self._speed_buckets = [1.0, 1.25, 1.5, 1.75, 2.0, 2.5]
+
+            def _generate_silence_wav(self, output_file: str, duration: float) -> None:
+                with open(output_file, "w") as f:
+                    f.write("silence")
+                self.durations[output_file] = duration
+
+            def _pad_audio_to_duration(self, input_file, output_file, target_duration, work_dir):
+                with open(output_file, "w") as f:
+                    f.write("padded")
+                self.durations[output_file] = target_duration
+
+            def _speed_up_audio(self, input_file, output_file, speed, target_duration, work_dir):
+                with open(output_file, "w") as f:
+                    f.write("sped_up")
+                self.durations[output_file] = target_duration
+
+        generator = MockGenerator()
+
+        def get_duration(path):
+            return generator.durations.get(path, 1.0)
+        generator._get_audio_duration = get_duration
+
+        # Segment with 2s slot but TTS only produces 1s audio
+        # Gap = 1s > threshold 0.5s, should trigger video speed-up
+        segments = [
+            SubtitleSegment(index=1, start=0.0, end=2.0, text="One"),
+        ]
+
+        segments_dir = os.path.join(self.output_dir, "test_segments")
+        os.makedirs(segments_dir)
+        path = os.path.join(segments_dir, "subtitle_1.wav")
+        with open(path, "wb") as f:
+            f.write(b"audio")
+        generator.durations[path] = 1.0  # TTS produces 1s for 2s slot
+
+        audio_files, segment_timings = generator._build_aligned_segment_files(
+            segments, segments_dir, video_duration=2.0
+        )
+
+        # Gap = 2.0 - 1.0 = 1.0s > threshold 0.5s
+        # Required speed = 2.0 / 1.0 = 2.0x
+        self.assertEqual(len(segment_timings), 1)
+        self.assertGreater(segment_timings[0].speed, 1.0, "Should trigger video speed-up")
+        self.assertAlmostEqual(segment_timings[0].speed, 2.0, places=1)
+
+    def test_leading_silence(self):
+        """Test that leading silence is generated when first subtitle doesn't start at 0."""
+        class MockGenerator(SubtitleVoiceoverGenerator):
+            def __init__(self):
+                self.durations = {}
+                self.sample_rate = 44100
+                self.silence_threshold = 1.0
+                self.max_speed_factor = 2.5
+                self._speed_buckets = [1.0, 1.25, 1.5, 1.75, 2.0, 2.5]
+
+            def _generate_silence_wav(self, output_file: str, duration: float) -> None:
+                with open(output_file, "w") as f:
+                    f.write("silence")
+                self.durations[output_file] = duration
+
+            def _pad_audio_to_duration(self, input_file, output_file, target_duration, work_dir):
+                with open(output_file, "w") as f:
+                    f.write("padded")
+                self.durations[output_file] = target_duration
+
+            def _speed_up_audio(self, input_file, output_file, speed, target_duration, work_dir):
+                with open(output_file, "w") as f:
+                    f.write("sped_up")
+                self.durations[output_file] = target_duration
+
+        generator = MockGenerator()
+
+        def get_duration(path):
+            return generator.durations.get(path, 1.0)
+        generator._get_audio_duration = get_duration
+
+        # First subtitle starts at 1.0s, not 0
+        segments = [
+            SubtitleSegment(index=1, start=1.0, end=2.0, text="One"),
+        ]
+
+        segments_dir = os.path.join(self.output_dir, "test_segments")
+        os.makedirs(segments_dir)
+        path = os.path.join(segments_dir, "subtitle_1.wav")
+        with open(path, "wb") as f:
+            f.write(b"audio")
+        generator.durations[path] = 1.0
+
+        audio_files, segment_timings = generator._build_aligned_segment_files(
+            segments, segments_dir, video_duration=2.0
+        )
+
+        # Should have leading silence + 1 subtitle segment = 2 segments
+        silence_files = [f for f in audio_files if "silence_0" in f]
+        self.assertEqual(len(silence_files), 1, "Should have leading silence")
+
+        # Should have 2 segment timings (leading + subtitle)
+        self.assertEqual(len(segment_timings), 2)
+        self.assertEqual(segment_timings[0].src_start, 0.0)
+        self.assertEqual(segment_timings[0].src_end, 1.0)
+        self.assertEqual(segment_timings[1].src_start, 1.0)
+        self.assertEqual(segment_timings[1].src_end, 2.0)
+
 
 if __name__ == "__main__":
     unittest.main()

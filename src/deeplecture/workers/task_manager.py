@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-import json
 import queue
 import threading
 import uuid
@@ -25,11 +24,6 @@ class Task:
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: str = ""
     updated_at: str = ""
-
-    # Alias for backward compatibility with worker.py
-    @property
-    def metadata_json(self) -> str:
-        return json.dumps(self.metadata)
 
 
 class TaskManager:

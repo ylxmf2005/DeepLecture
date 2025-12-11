@@ -58,7 +58,7 @@ def test_get_effective_lecture_config_reads_settings(monkeypatch) -> None:
             return object()
 
     svc = SlideLectureService(
-        task_runner=None,
+        task_manager=None,
         tts=object(),
         tts_factory=_MockTTSFactory(),
         metadata_storage=None,

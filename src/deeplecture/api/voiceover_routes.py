@@ -1,21 +1,21 @@
 from __future__ import annotations
 
+import json
+import logging
+import mimetypes
 import os
 import re
 import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-import json
 import json_repair
-import logging
 from flask import Flask, jsonify, request, send_file
 
-from deeplecture.config.config import load_config
-import mimetypes
-from deeplecture.workers import TaskManager
-from deeplecture.services.content_service import ContentService
 from deeplecture.api.error_utils import api_error
+from deeplecture.config.config import load_config
+from deeplecture.services.content_service import ContentService
+from deeplecture.workers import TaskManager
 
 logger = logging.getLogger(__name__)
 
@@ -109,11 +109,7 @@ def register_voiceover_routes(
             subtitle_path = data.get("subtitle_path")
             subtitle_source = data.get("subtitle_source")  # "original" or "translated"
             raw_language = data.get("language")
-            language = (
-                str(raw_language)
-                if raw_language
-                else _get_default_voiceover_language()
-            )
+            language = str(raw_language) if raw_language else _get_default_voiceover_language()
             voiceover_name = data.get("voiceover_name")
 
             if not video_id:
@@ -269,24 +265,12 @@ def register_voiceover_routes(
             return api_error(500, "Voiceover generation failed", logger=logger, exc=e)
 
     @app.route("/api/content/<content_id>/voiceovers/<voiceover_id>/video", methods=["GET"])
-    @app.route("/api/voiceovers/<voiceover_id>/video", methods=["GET"])
-    @app.route("/api/get-voiceover-video", methods=["GET"])  # backward-compatible shim
-    def voiceover_video_resource(voiceover_id: str, content_id: str | None = None):
+    def voiceover_video_resource(content_id: str, voiceover_id: str):
         """
-        RESTful endpoint for voiceover video resource.
         Stream a generated voiceover (dubbed) video file for a specific voiceover ID.
         """
-        # Allow legacy query-param based route for compatibility
-        if request.path.endswith("/get-voiceover-video"):
-            voiceover_id = request.args.get("voiceover_id", voiceover_id)
-            content_id = request.args.get("video_id", content_id)
-
-        video_id = content_id or request.args.get("video_id")
-        if not video_id:
-            return jsonify({"error": "Missing video_id"}), 400
-
         try:
-            voiceover_dir = content_service.build_content_path(video_id, "voiceover")
+            voiceover_dir = content_service.build_content_path(content_id, "voiceover")
             meta_path = os.path.join(voiceover_dir, "voiceovers.json")
             if not os.path.exists(meta_path):
                 return jsonify({"error": "No voiceovers found for this video"}), 404
@@ -316,8 +300,8 @@ def register_voiceover_routes(
             range_header = request.headers.get("Range")
             if range_header:
                 logger.info(
-                    "Voiceover video range request: video_id=%s voiceover_id=%s range=%s",
-                    video_id,
+                    "Voiceover video range request: content_id=%s voiceover_id=%s range=%s",
+                    content_id,
                     voiceover_id,
                     range_header,
                 )
@@ -332,3 +316,57 @@ def register_voiceover_routes(
 
         except Exception as e:
             return api_error(500, "Failed to retrieve voiceover video", logger=logger, exc=e)
+
+    @app.route("/api/content/<content_id>/voiceovers/<voiceover_id>", methods=["DELETE"])
+    def delete_voiceover(content_id: str, voiceover_id: str):
+        """
+        Delete a voiceover entry and its associated files.
+        """
+        try:
+            voiceover_dir = content_service.build_content_path(content_id, "voiceover")
+            meta_path = os.path.join(voiceover_dir, "voiceovers.json")
+
+            if not os.path.exists(meta_path):
+                return jsonify({"error": "No voiceovers found for this video"}), 404
+
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json_repair.load(f)
+
+            voiceovers = meta.get("voiceovers") or []
+            entry_to_delete = None
+            entry_index = -1
+
+            for i, item in enumerate(voiceovers):
+                if item.get("id") == voiceover_id:
+                    entry_to_delete = item
+                    entry_index = i
+                    break
+
+            if entry_to_delete is None:
+                return jsonify(
+                    {"error": f"Voiceover ID {voiceover_id} not found"},
+                ), 404
+
+            # Delete associated files
+            audio_path = entry_to_delete.get("voiceover_audio_path")
+            video_path = entry_to_delete.get("dubbed_video_path")
+
+            for file_path in [audio_path, video_path]:
+                if file_path and os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                        logger.info("Deleted voiceover file: %s", file_path)
+                    except OSError as e:
+                        logger.warning("Failed to delete file %s: %s", file_path, e)
+
+            # Remove entry from metadata
+            voiceovers.pop(entry_index)
+            meta["voiceovers"] = voiceovers
+
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, ensure_ascii=False, indent=2)
+
+            return jsonify({"message": "Voiceover deleted successfully", "id": voiceover_id})
+
+        except Exception as e:
+            return api_error(500, "Failed to delete voiceover", logger=logger, exc=e)

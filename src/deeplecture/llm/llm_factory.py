@@ -111,7 +111,7 @@ class ModelRegistry:
     """
     Registry for configured LLM models and task-to-model mappings.
 
-    Flattens both legacy single-model config and new models/task_models structure.
+    Supports both single-model config and multi-model config (models/task_models structure).
     """
 
     def __init__(self, llm_config: Optional[Dict[str, Any]] = None) -> None:
@@ -147,7 +147,7 @@ class ModelRegistry:
                 model_cfg.update(item)
                 self._models[name] = model_cfg
 
-        # Legacy config: no models list, treat as single "default" model
+        # If no models list provided, treat entire config as single "default" model
         if not self._models:
             self._models["default"] = dict(base)
             self._default_model_name = "default"

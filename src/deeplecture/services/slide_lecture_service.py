@@ -61,13 +61,11 @@ class SlideLectureService:
         upload_folder: Optional[str] = None,
         output_folder: Optional[str] = None,
         app_context: Optional[AppContext] = None,
-        task_runner: Optional[TaskManager] = None,
     ) -> None:
         ctx = app_context or get_app_context()
         ctx.init_paths()
 
-        # Accept legacy task_runner alias for backward compatibility with older callers/tests.
-        self._task_manager: Optional[TaskManager] = task_manager or task_runner
+        self._task_manager: Optional[TaskManager] = task_manager
         if tts_factory is None:
             ctx.ensure_initialized()
             tts_factory = ctx.tts_factory
@@ -80,8 +78,8 @@ class SlideLectureService:
         # Reuse the same content-scoped subtitle layout as SubtitleService so
         # that all content types share outputs/subtitles/<content_id>/...
         self._subtitle_storage: SubtitleStorage = get_default_subtitle_storage(self._content_service)
-        self._upload_folder = upload_folder or ctx.upload_folder
-        self._output_folder = output_folder or ctx.output_folder
+        self._upload_folder = upload_folder or ctx.content_dir
+        self._output_folder = output_folder or ctx.content_dir
 
         # Cache lecture config with TTL (time-to-live) refresh mechanism.
         self._lecture_cfg: Optional[Dict[str, Any]] = None

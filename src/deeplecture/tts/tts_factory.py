@@ -243,8 +243,8 @@ class TTSRegistry:
     Registry for configured TTS providers and task-to-provider mappings.
 
     Mirrors the LLM ModelRegistry pattern to allow multiple providers
-    to coexist with hot-swappable task routing while remaining backward
-    compatible with the legacy single-provider config.
+    to coexist with hot-swappable task routing. Supports both single-provider
+    and multi-provider config structures.
     """
 
     def __init__(self, tts_config: Optional[Dict[str, Any]] = None) -> None:

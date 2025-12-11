@@ -122,9 +122,6 @@ class RetryConfig:
         - max_retries / {prefix}_max_retries
         - retry_min_wait / {prefix}_retry_min_wait
         - retry_max_wait / {prefix}_retry_max_wait
-
-        For backward compatibility, also supports:
-        - retry_delay_seconds (used as min_wait)
         """
         def get_val(key: str, default: Any) -> Any:
             # Try prefixed key first, then unprefixed
@@ -135,14 +132,7 @@ class RetryConfig:
             return config.get(key, default)
 
         max_retries = int(get_val("max_retries", 3))
-
-        # Support legacy retry_delay_seconds as min_wait
-        legacy_delay = get_val("retry_delay_seconds", None)
-        if legacy_delay is not None:
-            min_wait = float(legacy_delay)
-        else:
-            min_wait = float(get_val("retry_min_wait", 1.0))
-
+        min_wait = float(get_val("retry_min_wait", 1.0))
         max_wait = float(get_val("retry_max_wait", 60.0))
 
         return cls(

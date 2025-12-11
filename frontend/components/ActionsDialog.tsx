@@ -1,4 +1,4 @@
-import { X, FileText, Globe, Volume2, Loader2, Sparkles, MessageSquare, Video } from "lucide-react";
+import { X, FileText, Globe, Volume2, Loader2, Sparkles, MessageSquare, Video, Trash2 } from "lucide-react";
 import { useEffect } from "react";
 import { ContentItem, SubtitleSource, VoiceoverEntry } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,7 @@ export interface ActionsDialogProps {
     setSelectedVoiceoverId: (id: string | null) => void;
     voiceovers: VoiceoverEntry[];
     voiceoversLoading: boolean;
+    handleDeleteVoiceover: (voiceoverId: string) => void;
     // Timeline
     timelineLoading: boolean;
     hasTimeline: boolean;
@@ -50,6 +51,7 @@ export function ActionsDialog({
     setSelectedVoiceoverId,
     voiceovers,
     voiceoversLoading,
+    handleDeleteVoiceover,
     timelineLoading,
     hasTimeline,
     handleGenerateTimeline,
@@ -307,7 +309,7 @@ export function ActionsDialog({
                                                     disabled={vo.status !== "done"}
                                                     className="text-purple-600 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                                 />
-                                                <div className="flex flex-col">
+                                                <div className="flex flex-col flex-1">
                                                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{vo.name}</span>
                                                     <span className="text-[10px] text-gray-400 flex items-center gap-2">
                                                         {vo.language} · {vo.subtitle_source} · {new Date(vo.created_at).toLocaleDateString()}
@@ -326,6 +328,20 @@ export function ActionsDialog({
                                                         <span className="text-[10px] text-red-500 line-clamp-2">{vo.error}</span>
                                                     )}
                                                 </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        if (confirm(`Delete voiceover "${vo.name}"?`)) {
+                                                            handleDeleteVoiceover(vo.id);
+                                                        }
+                                                    }}
+                                                    className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                    title="Delete voiceover"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
                                             </label>
                                         ))}
                                     </div>

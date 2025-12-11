@@ -114,10 +114,8 @@ class SubtitleService:
         return self._storage.get_original(content_id) is not None
 
     def _get_llm_for_enhancement(self) -> LLM:
-        """Get LLM for subtitle enhancement with backward compatibility."""
-        if hasattr(self._llm_factory, "get_llm_for_task"):
-            return self._llm_factory.get_llm_for_task("subtitle_enhancement")
-        return self._llm_factory.get_llm()
+        """Get LLM for subtitle enhancement."""
+        return self._llm_factory.get_llm_for_task("subtitle_enhancement")
 
     def generate_subtitles_sync(self, content_id: str, source_language: str) -> None:
         """Blocking subtitle generation for a content item."""
@@ -237,34 +235,6 @@ class SubtitleService:
             source_content = f.read()
 
         translator = self._get_or_create_translator()
-
-        # Older test doubles only implement process_subtitles; in that
-        # case, fall back to the simpler "translated-only" behaviour and
-        # skip enhanced/background outputs.
-        if not hasattr(translator, "process_to_entries"):
-            result_content = translator.process_subtitles(
-                source_content,
-                target_language,
-            )
-            translated_path = self._storage.build_translation_path(
-                content_id,
-                target_language,
-            )
-            os.makedirs(os.path.dirname(translated_path), exist_ok=True)
-            with open(translated_path, "w", encoding="utf-8") as f:
-                f.write(result_content)
-
-            # mark_translation_generated sets translation_status to ready
-            self._content_service.mark_translation_generated(
-                content_id,
-                translated_path,
-            )
-            logger.info(
-                "Subtitle enhance & translate (legacy translator) completed for %s at %s",
-                original_path,
-                translated_path,
-            )
-            return
 
         entries, background = translator.process_to_entries(
             source_content,

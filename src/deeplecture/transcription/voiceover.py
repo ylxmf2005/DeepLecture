@@ -48,6 +48,29 @@ class SubtitleSegment:
         return max(0.0, self.end - self.start)
 
 
+@dataclasses.dataclass
+class SegmentTiming:
+    """Timing info for a single segment in the output video."""
+
+    # Original video timing
+    src_start: float    # Source video start time
+    src_end: float      # Source video end time
+
+    # Output timing
+    out_start: float    # Output video start time
+    out_duration: float # Output duration after speed adjustment
+
+    # Speed factor (1.0 = normal, >1.0 = faster)
+    speed: float = 1.0
+
+    # Whether this is a silence/drift segment (no video content to speed up)
+    is_filler: bool = False
+
+    @property
+    def src_duration(self) -> float:
+        return max(0.0, self.src_end - self.src_start)
+
+
 # ---------------------------------------------------------------------------
 # Public entrypoint
 # ---------------------------------------------------------------------------
@@ -85,6 +108,7 @@ class SubtitleVoiceoverGenerator:
 
         config = config or {}
         tts_cfg = config.get("tts") or {}
+        voiceover_cfg = config.get("voiceover") or {}
 
         # Fixed worker count - actual rate limiting is handled by RateLimitedTTS
         max_workers = 16
@@ -92,6 +116,15 @@ class SubtitleVoiceoverGenerator:
         # Sample rate for generated silence / intermediate wav clips.
         # Default to 44100 for good compatibility with common media pipelines.
         self.sample_rate: int = int(tts_cfg.get("sample_rate", 44100))
+
+        # Voiceover-specific settings for silence handling
+        # If silence gap > threshold, speed up video instead of padding silence
+        self.silence_threshold: float = float(voiceover_cfg.get("silence_threshold", 1.0))
+        self.max_speed_factor: float = float(voiceover_cfg.get("max_speed_factor", 2.5))
+
+        # Speed quantization buckets for optimization (reduces ffmpeg filter complexity)
+        # By quantizing speeds to fixed buckets, adjacent segments with same speed can be merged
+        self._speed_buckets: List[float] = [1.0, 1.25, 1.5, 1.75, 2.0, 2.5]
 
         # Load retry settings from unified RetryConfig
         self._retry_config = RetryConfig.from_config(tts_cfg)
@@ -148,28 +181,41 @@ class SubtitleVoiceoverGenerator:
         voiceover_audio_path = os.path.join(output_dir, f"{base_name}.m4a")
         dubbed_video_path = os.path.join(output_dir, f"{base_name}.mp4")
 
+        # Get video duration for trailing segment handling
+        video_duration = self._get_video_duration(video_path)
+
         logger.info(
-            "Starting TTS voiceover generation: %s segments, audio_base=%s",
+            "Starting TTS voiceover generation: %s segments, audio_base=%s, "
+            "silence_threshold=%.2fs, max_speed=%.2fx, video_duration=%.2fs",
             len(segments),
             base_name,
+            self.silence_threshold,
+            self.max_speed_factor,
+            video_duration or 0.0,
         )
 
         # Step 2: concurrently generate one wav per subtitle: subtitle_1.wav, ...
         self._synthesize_segments_concurrently(segments, segments_dir)
 
-        # Step 3–4: align durations (pad/speed) and add any leading silence.
-        adjusted_files = self._build_aligned_segment_files(segments, segments_dir)
+        # Step 3–4: align durations and compute video speed adjustments.
+        # Returns (audio_files, segment_timings) where segment_timings contains
+        # the speed factor for each video segment.
+        adjusted_files, segment_timings = self._build_aligned_segment_files(
+            segments, segments_dir, video_duration=video_duration
+        )
 
         # Step 5: concatenate all clips into a single voiceover track.
         self._concat_audio_files(
             adjusted_files, voiceover_audio_path, segments_dir
         )
 
-        # Step 6: replace the video's audio track.
+        # Step 6: replace the video's audio track with optional video speed adjustment.
         self._replace_video_audio_track(
             video_path=video_path,
             audio_path=voiceover_audio_path,
             output_video_path=dubbed_video_path,
+            segment_timings=segment_timings,
+            work_dir=segments_dir,
         )
 
         logger.info(
@@ -382,6 +428,34 @@ class SubtitleVoiceoverGenerator:
                     )
 
     # ------------------------------------------------------------------ #
+    # Speed quantization for optimization
+    # ------------------------------------------------------------------ #
+
+    def _quantize_speed(self, speed: float) -> float:
+        """
+        Quantize speed to the smallest bucket >= speed for optimization.
+
+        By using ceil-style quantization (smallest bucket >= speed), we ensure:
+        1. Video is never slower than required (would cause audio to be longer than video)
+        2. Adjacent segments with same quantized speed can be merged
+        3. When speed is slightly above 1.0 (e.g., 1.05), we use the next bucket
+           rather than falling back to 1.0 which would defeat the speed-up purpose
+
+        If speed is <= 1.0, returns 1.0 (no speed-up needed).
+        """
+        if speed <= 1.0:
+            return 1.0
+        # Find the smallest bucket that is >= speed and doesn't exceed max_speed_factor
+        valid_buckets = [b for b in self._speed_buckets if b <= self.max_speed_factor and b >= speed]
+        if valid_buckets:
+            return min(valid_buckets)
+        # If no bucket >= speed exists (speed > all buckets), use the largest valid bucket
+        capped_buckets = [b for b in self._speed_buckets if b <= self.max_speed_factor]
+        if capped_buckets:
+            return max(capped_buckets)
+        return 1.0
+
+    # ------------------------------------------------------------------ #
     # Step 3 & 4: duration alignment + leading silence
     # ------------------------------------------------------------------ #
 
@@ -389,216 +463,330 @@ class SubtitleVoiceoverGenerator:
         self,
         segments: List[SubtitleSegment],
         segments_dir: str,
-    ) -> List[str]:
+        video_duration: Optional[float] = None,
+    ) -> Tuple[List[str], List[SegmentTiming]]:
         """
         Compute the target "slot" duration for each subtitle and adjust audio.
 
-        Rules:
-        - Base duration is end - start;
-        - If the next subtitle starts after the current one ends, extend the
-          slot from current start to next.start (gap becomes silence);
-        - If the first subtitle does not start at 0, add leading silence.
+        Returns:
+            (audio_files, segment_timings): List of adjusted audio files and
+            corresponding timing info for video speed adjustment.
+
+        Algorithm:
+        1. Each subtitle defines a "slot" from seg.start to slot_end (next subtitle start or seg.end)
+        2. TTS audio is generated for each slot
+        3. If TTS duration < slot duration:
+           - Gap <= threshold: Pad audio with silence, video plays at 1x
+           - Gap > threshold: Keep audio as-is, video speeds up to match
+        4. If TTS duration > slot duration: Speed up audio, video plays at 1x
+        5. Leading segment (0 to first subtitle): Video at 1x with silence audio
+        6. Trailing segment (after last subtitle to video end): Video at 1x with silence audio
         """
         if not segments:
-            return []
+            return [], []
 
         audio_files: List[str] = []
-        debug_rows: List[Dict[str, float]] = []
+        segment_timings: List[SegmentTiming] = []
+        debug_rows: List[Dict[str, Any]] = []
 
-        # Leading silence if the first subtitle does not start at 0.
+        out_time = 0.0  # Cumulative output timeline position
+
+        # Leading segment: video from 0 to first subtitle start
         first_start = max(0.0, segments[0].start)
-        track_time = 0.0
         if first_start > 0.01:
             silence_path = os.path.join(segments_dir, "silence_0.wav")
             self._generate_silence_wav(silence_path, first_start)
             audio_files.append(silence_path)
             silence_dur = self._get_audio_duration(silence_path)
-            track_time += silence_dur
-            debug_rows.append(
-                {
-                    "index": 0,
-                    "srt_start": 0.0,
-                    "srt_end": first_start,
-                    "slot_target": first_start,
-                    "raw_duration": first_start,
-                    "adjusted_duration": silence_dur,
-                    "track_start": 0.0,
-                    "track_end": track_time,
-                }
-            )
+
+            # Leading segment: video plays at 1x, audio is silence
+            segment_timings.append(SegmentTiming(
+                src_start=0.0,
+                src_end=first_start,
+                out_start=0.0,
+                out_duration=silence_dur,
+                speed=1.0,
+                is_filler=False,  # NOT filler - this is real video content
+            ))
+
+            out_time = silence_dur
+
+            debug_rows.append({
+                "index": 0,
+                "type": "leading",
+                "src_start": 0.0,
+                "src_end": first_start,
+                "slot_target": first_start,
+                "raw_duration": first_start,
+                "adjusted_duration": silence_dur,
+                "out_start": 0.0,
+                "out_end": out_time,
+                "video_speed": 1.0,
+            })
 
         n = len(segments)
         for i, seg in enumerate(segments):
-            # ---------------------------------------------------------------
-            # Drift correction: if the audio track is AHEAD of the subtitle start
-            # (i.e. track_time < seg.start), insert silence to catch up.
-            # ---------------------------------------------------------------
-            drift = seg.start - track_time
-            if drift > 0.002:  # 2ms threshold (tighter sync)
-                drift_silence_path = os.path.join(segments_dir, f"drift_{i + 1}.wav")
-                self._generate_silence_wav(drift_silence_path, drift)
-                audio_files.append(drift_silence_path)
-                
-                real_drift_dur = self._get_audio_duration(drift_silence_path)
-                drift_start = track_time
-                track_time += real_drift_dur
-                
-                debug_rows.append(
-                    {
-                        "index": float(i) + 0.5, # 0.5 indicates drift correction
-                        "srt_start": drift_start,
-                        "srt_end": track_time,
-                        "slot_target": drift,
-                        "raw_duration": drift,
-                        "adjusted_duration": real_drift_dur,
-                        "track_start": drift_start,
-                        "track_end": track_time,
-                    }
-                )
-
-            base_duration = max(0.0, seg.end - seg.start)
-            target_duration = base_duration
-
+            # Calculate slot: from seg.start to next subtitle start (or seg.end)
+            slot_end = seg.end
             if i < n - 1:
                 nxt = segments[i + 1]
                 if seg.end < nxt.start:
-                    # Extend the current slot to the next subtitle's start (cover the gap).
-                    target_duration = max(0.0, nxt.start - seg.start)
+                    # Extend slot to cover gap until next subtitle
+                    slot_end = nxt.start
+
+            slot_duration = max(0.0, slot_end - seg.start)
 
             input_wav = os.path.join(segments_dir, f"subtitle_{i + 1}.wav")
             if not os.path.exists(input_wav):
                 raise RuntimeError(f"Missing TTS wav for subtitle {i + 1}: {input_wav}")
 
+            raw_dur = self._get_audio_duration(input_wav)
+            if raw_dur <= 0:
+                raise RuntimeError(f"Invalid audio duration for {input_wav}")
+
             adjusted_wav = os.path.join(segments_dir, f"adjusted_{i + 1}.wav")
-            raw_dur, adj_dur = self._adjust_audio_duration(
-                input_wav,
-                adjusted_wav,
-                target_duration,
-                segments_dir,
-            )
+            video_speed = 1.0
+            adj_dur = slot_duration  # Default: audio matches slot
+
+            # Skip zero/near-zero slot duration segments entirely to avoid timeline drift
+            # These can occur when subtitles have identical start/end times
+            if slot_duration < 1e-3:
+                logger.warning(
+                    "Segment %d has near-zero slot duration (%.6fs), skipping to avoid drift",
+                    i + 1, slot_duration
+                )
+                continue
+
+            silence_gap = slot_duration - raw_dur
+
+            if silence_gap > self.silence_threshold:
+                # Large gap: speed up video instead of padding silence
+                # Quantize speed for optimization (enables merging adjacent same-speed segments)
+                required_speed = slot_duration / raw_dur
+                video_speed = self._quantize_speed(min(required_speed, self.max_speed_factor))
+
+                # Calculate target output duration based on quantized speed
+                # Video output duration = slot_duration / video_speed
+                # Audio output duration must match exactly to maintain A/V sync
+                target_out_dur = slot_duration / video_speed
+
+                if abs(target_out_dur - raw_dur) < 1e-3:
+                    # Quantized speed matches almost exactly, just copy audio
+                    adj_dur = raw_dur
+                    shutil.copy2(input_wav, adjusted_wav)
+                elif target_out_dur < raw_dur:
+                    # Quantized speed is higher than required, need to speed up audio to match
+                    # This happens when quantization rounds UP to a faster bucket
+                    audio_speed = raw_dur / target_out_dur
+                    self._speed_up_audio(input_wav, adjusted_wav, audio_speed, target_out_dur, segments_dir)
+                    adj_dur = self._get_audio_duration(adjusted_wav)
+                else:
+                    # Need to pad audio to match the (longer) quantized video duration
+                    self._pad_audio_to_duration(input_wav, adjusted_wav, target_out_dur, segments_dir)
+                    # Re-read actual duration to avoid ffmpeg rounding drift
+                    adj_dur = self._get_audio_duration(adjusted_wav)
+
+                logger.debug(
+                    "Segment %d: slot=%.2fs, tts=%.2fs, gap=%.2fs > threshold, "
+                    "video_speed=%.2fx (quantized), out_dur=%.2fs",
+                    i + 1, slot_duration, raw_dur, silence_gap, video_speed, adj_dur
+                )
+            elif silence_gap >= -0.01:
+                # Small positive gap OR near-match: always pad to slot duration
+                self._pad_audio_to_duration(input_wav, adjusted_wav, slot_duration, segments_dir)
+                adj_dur = self._get_audio_duration(adjusted_wav)
+            else:
+                # TTS is longer than slot - speed up audio
+                audio_speed = raw_dur / slot_duration
+                self._speed_up_audio(input_wav, adjusted_wav, audio_speed, slot_duration, segments_dir)
+                adj_dur = self._get_audio_duration(adjusted_wav)
+
             audio_files.append(adjusted_wav)
-            seg_track_start = track_time
-            track_time += adj_dur
 
-            debug_rows.append(
-                {
-                    "index": float(i + 1),
-                    "srt_start": segments[i].start,
-                    "srt_end": segments[i].end,
-                    "slot_target": target_duration,
-                    "raw_duration": raw_dur,
-                    "adjusted_duration": adj_dur,
-                    "track_start": seg_track_start,
-                    "track_end": track_time,
-                }
-            )
+            seg_out_start = out_time
+            segment_timings.append(SegmentTiming(
+                src_start=seg.start,
+                src_end=slot_end,
+                out_start=seg_out_start,
+                out_duration=adj_dur,
+                speed=video_speed,
+                is_filler=False,
+            ))
 
-        # Persist a simple timing debug file to help diagnose alignment issues.
+            out_time += adj_dur
+
+            debug_rows.append({
+                "index": float(i + 1),
+                "type": "subtitle",
+                "src_start": seg.start,
+                "src_end": slot_end,
+                "slot_target": slot_duration,
+                "raw_duration": raw_dur,
+                "adjusted_duration": adj_dur,
+                "out_start": seg_out_start,
+                "out_end": out_time,
+                "video_speed": video_speed,
+            })
+
+        # Trailing segment: video from last slot_end to video end
+        if segment_timings:
+            last_src_end = segment_timings[-1].src_end
+            if video_duration is None:
+                # ffprobe failed - warn user that audio may not match video length
+                logger.warning(
+                    "Could not determine video duration (ffprobe failed). "
+                    "Audio track may be shorter than video. Last subtitle ends at %.2fs",
+                    last_src_end
+                )
+            elif video_duration > last_src_end + 0.01:
+                tail_duration = video_duration - last_src_end
+                tail_silence_path = os.path.join(segments_dir, "silence_tail.wav")
+                self._generate_silence_wav(tail_silence_path, tail_duration)
+                audio_files.append(tail_silence_path)
+                tail_audio_dur = self._get_audio_duration(tail_silence_path)
+
+                tail_out_start = out_time
+                segment_timings.append(SegmentTiming(
+                    src_start=last_src_end,
+                    src_end=video_duration,
+                    out_start=tail_out_start,
+                    out_duration=tail_audio_dur,
+                    speed=1.0,
+                    is_filler=False,  # Real video content
+                ))
+
+                out_time += tail_audio_dur
+
+                debug_rows.append({
+                    "index": n + 1,
+                    "type": "trailing",
+                    "src_start": last_src_end,
+                    "src_end": video_duration,
+                    "slot_target": tail_duration,
+                    "raw_duration": tail_duration,
+                    "adjusted_duration": tail_audio_dur,
+                    "out_start": tail_out_start,
+                    "out_end": out_time,
+                    "video_speed": 1.0,
+                })
+
+        # Persist timing debug file
         debug_path = os.path.join(segments_dir, "timing_debug.tsv")
         try:
             with open(debug_path, "w", encoding="utf-8") as f:
                 f.write(
-                    "index\t"
-                    "srt_start\t"
-                    "srt_end\t"
-                    "slot_target\t"
-                    "raw_duration\t"
-                    "adjusted_duration\t"
-                    "track_start\t"
-                    "track_end\n"
+                    "index\ttype\tsrc_start\tsrc_end\tslot_target\t"
+                    "raw_duration\tadjusted_duration\tout_start\tout_end\tvideo_speed\n"
                 )
                 for row in debug_rows:
                     f.write(
-                        f"{row['index']:.1f}\t"
-                        f"{row['srt_start']:.3f}\t"
-                        f"{row['srt_end']:.3f}\t"
-                        f"{row['slot_target']:.3f}\t"
-                        f"{row['raw_duration']:.3f}\t"
-                        f"{row['adjusted_duration']:.3f}\t"
-                        f"{row['track_start']:.3f}\t"
-                        f"{row['track_end']:.3f}\n"
+                        f"{row['index']:.1f}\t{row['type']}\t"
+                        f"{row['src_start']:.3f}\t{row['src_end']:.3f}\t"
+                        f"{row['slot_target']:.3f}\t{row['raw_duration']:.3f}\t"
+                        f"{row['adjusted_duration']:.3f}\t{row['out_start']:.3f}\t"
+                        f"{row['out_end']:.3f}\t{row['video_speed']:.2f}\n"
                     )
-        except Exception as exc:  # pragma: no cover - best-effort debug output
+        except Exception as exc:
             logger.warning("Failed to write timing debug file: %s", exc)
 
-        return audio_files
+        # Log summary and validate
+        speed_segments = [t for t in segment_timings if t.speed > 1.0]
+        if speed_segments:
+            logger.info(
+                "Video speed-up applied to %d/%d segments (threshold=%.1fs)",
+                len(speed_segments), len(segment_timings), self.silence_threshold
+            )
+
+        # Validation: ensure timing consistency
+        # Use stricter threshold (0.02s) to catch accumulated drift early
+        total_out_duration = sum(t.out_duration for t in segment_timings)
+        expected_video_duration = sum(t.src_duration / t.speed for t in segment_timings)
+        timing_diff = abs(total_out_duration - expected_video_duration)
+        if timing_diff > 0.02:
+            logger.warning(
+                "Timing mismatch detected: audio=%.3fs, expected_video=%.3fs (diff=%.3fs). "
+                "This may cause audio-video desync.",
+                total_out_duration, expected_video_duration, timing_diff
+            )
+
+        return audio_files, segment_timings
 
     # ------------------------------------------------------------------ #
-    # Step 3 details: stretch/shrink to target duration
+    # Audio duration adjustment helpers
     # ------------------------------------------------------------------ #
 
-    def _adjust_audio_duration(
+    def _pad_audio_to_duration(
         self,
         input_file: str,
         output_file: str,
         target_duration: float,
         work_dir: str,
-    ) -> Tuple[float, float]:
+    ) -> None:
+        """Pad audio with silence to reach target duration."""
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            input_file,
+            "-af",
+            "apad",
+            "-t",
+            f"{target_duration:.6f}",
+            os.path.abspath(output_file),
+        ]
+        subprocess.run(cmd, cwd=work_dir, capture_output=True, check=True)
+
+    def _speed_up_audio(
+        self,
+        input_file: str,
+        output_file: str,
+        speed: float,
+        target_duration: float,
+        work_dir: str,
+    ) -> None:
+        """Speed up audio using atempo filter.
+
+        FFmpeg's atempo filter only supports range [0.5, 2.0].
+        For speeds outside this range, we chain multiple atempo filters.
+        For example: speed=4.0 → atempo=2.0,atempo=2.0
         """
-        Adjust a single clip to exactly target_duration seconds.
+        # Build atempo filter chain for speeds outside [0.5, 2.0] range
+        atempo_filters = []
+        remaining_speed = speed
 
-        Behavior:
-        - If audio is shorter than target: pad trailing silence;
-        - If audio is longer than target: increase playback speed via atempo;
-        - If durations are effectively equal (within a small epsilon): copy as-is.
-        """
-        target_duration = max(0.0, float(target_duration))
+        # Handle speed > 2.0 by chaining atempo=2.0 filters
+        while remaining_speed > 2.0:
+            atempo_filters.append("atempo=2.0")
+            remaining_speed /= 2.0
 
-        audio_duration_before = self._get_audio_duration(input_file)
-        if audio_duration_before <= 0:
-            raise RuntimeError(f"Invalid audio duration for {input_file}")
+        # Handle speed < 0.5 by chaining atempo=0.5 filters
+        while remaining_speed < 0.5:
+            atempo_filters.append("atempo=0.5")
+            remaining_speed /= 0.5
 
-        # If target is non-positive, or durations already match closely, just copy.
-        if target_duration <= 0 or abs(audio_duration_before - target_duration) < 0.01:
-            if os.path.abspath(input_file) == os.path.abspath(output_file):
-                audio_duration_after = self._get_audio_duration(output_file)
-                return audio_duration_before, audio_duration_after
+        # Add the final atempo for remaining speed adjustment
+        if abs(remaining_speed - 1.0) > 0.001:
+            atempo_filters.append(f"atempo={remaining_speed:.6f}")
+
+        # If no filters needed (speed ≈ 1.0), just copy
+        if not atempo_filters:
             shutil.copy2(input_file, output_file)
-            audio_duration_after = self._get_audio_duration(output_file)
-            return audio_duration_before, audio_duration_after
+            return
 
-        # Shorter than target: pad with silence using apad and trim to target.
-        if audio_duration_before < target_duration:
-            cmd = [
-                "ffmpeg",
-                "-y",
-                "-i",
-                input_file,
-                "-af",
-                "apad",
-                "-t",
-                f"{target_duration:.6f}",
-                os.path.abspath(output_file),
-            ]
-            subprocess.run(
-                cmd,
-                cwd=work_dir,
-                capture_output=True,
-                check=True,
-            )
-        else:
-            # Longer than target: adjust playback rate with atempo and trim.
-            speed = audio_duration_before / target_duration
-            cmd = [
-                "ffmpeg",
-                "-y",
-                "-i",
-                input_file,
-                "-filter:a",
-                f"atempo={speed:.6f}",
-                "-t",
-                f"{target_duration:.6f}",
-                os.path.abspath(output_file),
-            ]
-            subprocess.run(
-                cmd,
-                cwd=work_dir,
-                capture_output=True,
-                check=True,
-            )
+        filter_string = ",".join(atempo_filters)
 
-        audio_duration_after = self._get_audio_duration(output_file)
-        return audio_duration_before, audio_duration_after
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            input_file,
+            "-filter:a",
+            filter_string,
+            "-t",
+            f"{target_duration:.6f}",
+            os.path.abspath(output_file),
+        ]
+        subprocess.run(cmd, cwd=work_dir, capture_output=True, check=True)
 
     # ------------------------------------------------------------------ #
     # Step 5: Concatenate all audio clips
@@ -705,6 +893,29 @@ class SubtitleVoiceoverGenerator:
             logger.error("Failed to get audio duration for %s: %s", audio_path, exc)
             return 0.0
 
+    def _get_video_duration(self, video_path: str) -> Optional[float]:
+        """Get video duration in seconds using ffprobe."""
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    video_path,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return float(result.stdout.strip())
+        except Exception as exc:
+            logger.warning("Failed to get video duration for %s: %s", video_path, exc)
+            return None
+
     def _generate_silence_wav(self, output_file: str, duration: float) -> None:
         """Generate a silence wav file of the given duration (seconds)."""
         duration = max(0.0, float(duration))
@@ -740,25 +951,220 @@ class SubtitleVoiceoverGenerator:
         video_path: str,
         audio_path: str,
         output_video_path: str,
+        segment_timings: Optional[List[SegmentTiming]] = None,
+        work_dir: Optional[str] = None,
     ) -> None:
-        """Replace the video's audio track with the given voiceover track."""
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-i",
-            video_path,
-            "-i",
-            audio_path,
-            "-c:v",
-            "copy",
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a:0",
-            os.path.abspath(output_video_path),
-        ]
-        subprocess.run(
-            cmd,
-            capture_output=True,
-            check=True,
+        """
+        Replace the video's audio track with the given voiceover track.
+
+        If segment_timings contains segments with speed > 1.0, apply segment-based
+        video speed adjustment using FFmpeg complex filter.
+        """
+        # Check if any segments need speed adjustment
+        need_speed_adjustment = (
+            segment_timings
+            and any(t.speed > 1.0 for t in segment_timings)
         )
+
+        if not need_speed_adjustment:
+            # Simple case: just replace audio track (fast, uses copy codec)
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-i",
+                video_path,
+                "-i",
+                audio_path,
+                "-c:v",
+                "copy",
+                "-map",
+                "0:v:0",
+                "-map",
+                "1:a:0",
+                os.path.abspath(output_video_path),
+            ]
+            subprocess.run(cmd, capture_output=True, check=True)
+            return
+
+        # Complex case: need to apply segment-based video speed adjustment
+        # First, merge adjacent segments with same speed to reduce filter complexity
+        merged_timings = self._merge_segment_timings(segment_timings)
+
+        logger.info(
+            "Applying segment-based video speed adjustment (%d segments after merge)",
+            len(merged_timings),
+        )
+
+        # Build FFmpeg complex filter for video speed adjustment
+        filter_complex, concat_inputs = self._build_video_speed_filter(merged_timings)
+
+        # Use work_dir for intermediate files if provided
+        if work_dir:
+            temp_video = os.path.join(work_dir, "speed_adjusted_video.mp4")
+            filter_script_path = os.path.join(work_dir, "filter_complex.txt")
+        else:
+            temp_video = output_video_path + ".temp.mp4"
+            filter_script_path = output_video_path + ".filter.txt"
+
+        try:
+            # Write filter_complex to a script file to avoid command line length limits
+            # This is especially important after merging (still potentially 100+ segments)
+            with open(filter_script_path, "w", encoding="utf-8") as f:
+                f.write(filter_complex)
+
+            # Step 1: Apply video speed adjustment using filter script
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-i",
+                video_path,
+                "-filter_complex_script",
+                filter_script_path,
+                "-map",
+                "[vout]",
+                "-an",  # No audio in intermediate file
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-crf",
+                "18",
+                os.path.abspath(temp_video),
+            ]
+
+            logger.debug("FFmpeg video speed command (using filter script): %s", " ".join(cmd))
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                logger.error("FFmpeg video speed adjustment failed: %s", result.stderr)
+                raise RuntimeError(f"FFmpeg video speed adjustment failed: {result.stderr}")
+
+            # Step 2: Combine speed-adjusted video with voiceover audio
+            # Use -shortest to ensure output matches the shorter of video/audio
+            # This handles any minor timing drift from ffmpeg rounding
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-i",
+                temp_video,
+                "-i",
+                audio_path,
+                "-c:v",
+                "copy",
+                "-map",
+                "0:v:0",
+                "-map",
+                "1:a:0",
+                "-shortest",  # Match output to shorter stream to avoid drift
+                os.path.abspath(output_video_path),
+            ]
+            subprocess.run(cmd, capture_output=True, check=True)
+
+        finally:
+            # Clean up intermediate files
+            for cleanup_path in [temp_video, filter_script_path]:
+                if cleanup_path and cleanup_path != output_video_path and os.path.exists(cleanup_path):
+                    try:
+                        os.remove(cleanup_path)
+                    except OSError:
+                        pass
+
+    def _merge_segment_timings(
+        self,
+        segment_timings: List[SegmentTiming],
+        tolerance: float = 1e-3,
+    ) -> List[SegmentTiming]:
+        """
+        Merge adjacent segments with the same speed to reduce ffmpeg filter complexity.
+
+        This optimization can reduce segment count from ~2000 to ~100-200 for a typical
+        2-hour video, dramatically improving processing time.
+
+        Args:
+            segment_timings: List of SegmentTiming objects
+            tolerance: Time tolerance for considering segments as adjacent (seconds)
+
+        Returns:
+            Merged list of SegmentTiming objects
+        """
+        if not segment_timings:
+            return []
+
+        merged: List[SegmentTiming] = []
+
+        for timing in segment_timings:
+            if merged:
+                last = merged[-1]
+                # Check if segments can be merged:
+                # 1. Same speed (exact match since we quantize)
+                # 2. Contiguous in source timeline (src_end ≈ next src_start)
+                same_speed = abs(timing.speed - last.speed) < tolerance
+                contiguous = abs(timing.src_start - last.src_end) < tolerance
+
+                if same_speed and contiguous:
+                    # Merge: extend last segment
+                    merged[-1] = SegmentTiming(
+                        src_start=last.src_start,
+                        src_end=timing.src_end,
+                        out_start=last.out_start,
+                        out_duration=last.out_duration + timing.out_duration,
+                        speed=last.speed,
+                        is_filler=last.is_filler and timing.is_filler,
+                    )
+                    continue
+
+            merged.append(timing)
+
+        original_count = len(segment_timings)
+        merged_count = len(merged)
+        if original_count > merged_count:
+            logger.info(
+                "Merged %d segments into %d (%.1f%% reduction)",
+                original_count,
+                merged_count,
+                100 * (1 - merged_count / original_count),
+            )
+
+        return merged
+
+    def _build_video_speed_filter(
+        self,
+        segment_timings: List[SegmentTiming],
+    ) -> Tuple[str, int]:
+        """
+        Build FFmpeg complex filter for segment-based video speed adjustment.
+
+        Returns:
+            (filter_complex_string, num_concat_inputs)
+
+        The filter:
+        1. Trims video into segments based on src_start/src_end
+        2. Applies setpts to speed up segments where speed > 1.0
+        3. Concatenates all segments back together
+        """
+        filter_parts = []
+        concat_inputs = []
+
+        for i, timing in enumerate(segment_timings):
+            segment_label = f"seg{i}"
+
+            # Trim the source video segment
+            trim_filter = (
+                f"[0:v]trim=start={timing.src_start:.6f}:end={timing.src_end:.6f},"
+                f"setpts=PTS-STARTPTS"
+            )
+
+            if timing.speed > 1.0:
+                # Apply speed adjustment: setpts=PTS/speed
+                # For speed=2.0, setpts=PTS/2.0 plays at 2x speed
+                trim_filter += f",setpts=PTS/{timing.speed:.6f}"
+
+            trim_filter += f"[{segment_label}]"
+            filter_parts.append(trim_filter)
+            concat_inputs.append(f"[{segment_label}]")
+
+        # Concatenate all segments
+        concat_filter = "".join(concat_inputs) + f"concat=n={len(segment_timings)}:v=1:a=0[vout]"
+        filter_parts.append(concat_filter)
+
+        filter_complex = ";".join(filter_parts)
+        return filter_complex, len(segment_timings)

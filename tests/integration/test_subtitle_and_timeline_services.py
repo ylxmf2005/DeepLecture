@@ -54,9 +54,24 @@ def test_subtitle_service_translation_path_and_exists(tmp_path) -> None:
     content_service.mark_subtitles_generated("video2", original_path)
 
     class _FakeEnhanceTranslator:
-        def process_subtitles(self, content: str, target_language: str = "zh") -> str:
-            assert "src" in content
-            return f"translated-{target_language}"
+        def process_to_entries(self, srt_content: str, target_language: str = "zh"):
+            assert "src" in srt_content
+            return (
+                [{"start": 0.0, "end": 1.0, "text_en": "src", "text_zh": f"translated-{target_language}"}],
+                {"topic": "test", "characters": []},
+            )
+
+        def _reconstruct_srt(self, entries):
+            """Build SRT format from entries."""
+            lines = []
+            for i, e in enumerate(entries, 1):
+                start_ms = int(e["start"] * 1000)
+                end_ms = int(e["end"] * 1000)
+                start_str = f"{start_ms // 3600000:02d}:{(start_ms // 60000) % 60:02d}:{(start_ms // 1000) % 60:02d},{start_ms % 1000:03d}"
+                end_str = f"{end_ms // 3600000:02d}:{(end_ms // 60000) % 60:02d}:{(end_ms // 1000) % 60:02d},{end_ms % 1000:03d}"
+                text = (e.get("text_en") or "").strip()
+                lines.append(f"{i}\n{start_str} --> {end_str}\n{text}\n")
+            return "\n".join(lines)
 
     # Mock LLM factory to avoid AppContext initialization
     class _FakeLLMFactory:
@@ -74,7 +89,9 @@ def test_subtitle_service_translation_path_and_exists(tmp_path) -> None:
 
     translated_path = service.resolve_translation_path("video2", "zh")
     assert Path(translated_path).exists()
-    assert Path(translated_path).read_text(encoding="utf-8") == "translated-zh"
+    # The translated content is in SRT format now with text_zh
+    translated_content = Path(translated_path).read_text(encoding="utf-8")
+    assert "translated-zh" in translated_content
     assert service.translation_exists("video2", "zh") is True
 
     metadata = metadata_storage.get("video2")

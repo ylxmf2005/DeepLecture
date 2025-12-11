@@ -240,24 +240,6 @@ class AppContext:
         return os.path.join(self.db_dir, db_name)
 
     # ------------------------------------------------------------------
-    # Legacy accessors (for backward compatibility during migration)
-    # ------------------------------------------------------------------
-    @property
-    def upload_folder(self) -> str:
-        """Deprecated: use content_dir instead."""
-        return self.content_dir
-
-    @property
-    def output_folder(self) -> str:
-        """Deprecated: use content_dir instead."""
-        return self.content_dir
-
-    @property
-    def log_folder(self) -> str:
-        """Deprecated: use log_dir instead."""
-        return self.log_dir
-
-    # ------------------------------------------------------------------
     # Other accessors
     # ------------------------------------------------------------------
     @property
@@ -340,21 +322,6 @@ def initialize_default_context(*, reload: bool = False) -> AppContext:
     ctx = get_app_context()
     ctx.init_all(reload=reload)
     return ctx
-
-
-def __getattr__(name: str):
-    """Backward compatibility exports."""
-    ctx = get_app_context()
-    if name in {"logger", "llm_factory", "tts_factory", "llm_rate_limiter", "tts_rate_limiter"}:
-        ctx.ensure_initialized()
-        return getattr(ctx, name)
-    if name == "UPLOAD_FOLDER":
-        return ctx.content_dir
-    if name == "OUTPUT_FOLDER":
-        return ctx.content_dir
-    if name == "LOG_FOLDER":
-        return ctx.log_dir
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 __all__ = [

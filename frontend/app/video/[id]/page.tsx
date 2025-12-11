@@ -247,6 +247,8 @@ export default function VideoPage() {
         setRefreshExplanations,
         setVoiceoverProcessing,
         setVoiceovers,
+        selectedVoiceoverId,
+        setSelectedVoiceoverId,
         setTimelineLoading,
         setTimelineEntries,
         setAskContext,
@@ -756,6 +758,7 @@ export default function VideoPage() {
                 setSelectedVoiceoverId={setSelectedVoiceoverId}
                 voiceovers={voiceovers}
                 voiceoversLoading={voiceoversLoading}
+                handleDeleteVoiceover={handlers.handleDeleteVoiceover}
                 timelineLoading={timelineLoading}
                 hasTimeline={timelineEntries.length > 0}
                 handleGenerateTimeline={handlers.handleGenerateTimeline}

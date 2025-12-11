@@ -205,7 +205,7 @@ class Settings(BaseSettings):
         return (init_settings, env_settings)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert settings to dictionary for backward compatibility."""
+        """Convert settings to dictionary."""
         return self.model_dump()
 
 
@@ -216,7 +216,7 @@ def get_settings() -> Settings:
 
 
 def load_config() -> Dict[str, Any]:
-    """Load configuration as dictionary (backward compatibility)."""
+    """Load configuration as dictionary."""
     return get_settings().to_dict()
 
 
