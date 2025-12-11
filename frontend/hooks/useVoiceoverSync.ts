@@ -522,13 +522,22 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
         };
 
         // Mirror native video volume/mute changes to audio
+        // In sync mode: video MUST stay muted, all volume controls affect audio only
         const handleVolumeChange = () => {
             if (!isActiveRef.current) return;
-            // Video is muted in sync mode, but user may change volume via controls
-            // Apply the volume setting to audio (the actual sound source)
+
+            // CRITICAL: Always force video to stay muted in sync mode
+            // User clicking "unmute" on video controls must not unmute the video track
+            if (!video.muted) {
+                video.muted = true;
+            }
+
+            // Apply volume changes to audio (the actual sound source in sync mode)
+            // User's volume slider on video controls affects voiceover audio
             audio.volume = video.volume;
-            // If user clicks mute on the (already muted) video, mute the audio too
-            // We track this via a custom approach: if video.volume becomes 0, mute audio
+
+            // If user sets volume to 0, also mute the audio
+            // This gives user control over voiceover volume via native controls
             audio.muted = video.volume === 0;
         };
 

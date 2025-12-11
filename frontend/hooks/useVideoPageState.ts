@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
     ContentItem,
     getContentMetadata,
@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { useTaskStatus } from "@/hooks/useTaskStatus";
 import { useTaskNotification } from "@/hooks/useTaskNotification";
+import { useVideoStateStore } from "@/stores/useVideoStateStore";
 import type { TabId } from "@/stores/tabLayoutStore";
 import type { AskContextItem } from "@/lib/askTypes";
 
@@ -105,8 +106,17 @@ export function useVideoPageState({
     const [voiceoverName, setVoiceoverName] = useState("");
     const [voiceovers, setVoiceovers] = useState<VoiceoverEntry[]>([]);
     const [voiceoversLoading, setVoiceoversLoading] = useState(false);
-    const [selectedVoiceoverId, setSelectedVoiceoverId] = useState<string | null>(null);
     const [selectedVoiceoverSyncTimeline, setSelectedVoiceoverSyncTimeline] = useState<SyncTimeline | null>(null);
+
+    // Selected voiceover ID - persisted to localStorage via zustand store
+    const selectedVoiceoverId = useVideoStateStore(
+        (state) => state.videos[videoId]?.selectedVoiceoverId ?? null
+    );
+    const setSelectedVoiceoverIdStore = useVideoStateStore((state) => state.setSelectedVoiceoverId);
+    const setSelectedVoiceoverId = useCallback(
+        (id: string | null) => setSelectedVoiceoverIdStore(videoId, id),
+        [videoId, setSelectedVoiceoverIdStore]
+    );
 
     // Timeline state
     const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
@@ -190,9 +200,11 @@ export function useVideoPageState({
                 const data = await listVoiceovers(videoId);
                 setVoiceovers(data.voiceovers);
 
+                // Access store state directly to avoid circular dependency
+                const currentSelectedId = useVideoStateStore.getState().videos[videoId]?.selectedVoiceoverId;
                 if (
-                    selectedVoiceoverId &&
-                    !data.voiceovers.some((v: VoiceoverEntry) => v.id === selectedVoiceoverId)
+                    currentSelectedId &&
+                    !data.voiceovers.some((v: VoiceoverEntry) => v.id === currentSelectedId)
                 ) {
                     setSelectedVoiceoverId(null);
                 }
@@ -206,7 +218,7 @@ export function useVideoPageState({
         if (videoId) {
             fetchVoiceovers();
         }
-    }, [videoId, voiceoverProcessing, selectedVoiceoverId]);
+    }, [videoId, voiceoverProcessing, setSelectedVoiceoverId]);
 
     // Load sync timeline when voiceover is selected
     useEffect(() => {
