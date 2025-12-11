@@ -1,0 +1,82 @@
+name: Perform a code review when a pull request is created or manually triggered.
+on:
+  pull_request:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  codex:
+    runs-on: ubuntu-latest
+    # Only run on PR opened or when comment contains '@codex review'
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@codex review'))
+    permissions:
+      contents: read
+    outputs:
+      final_message: ${{ steps.run_codex.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # For pull_request event: check out the PR's merge commit
+          # For issue_comment event: check out the PR branch
+          ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || format('refs/pull/{0}/merge', github.event.issue.number) }}
+
+      - name: Pre-fetch base and head refs for the PR
+        run: |
+          PR_NUMBER=${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.event.issue.number }}
+          BASE_REF=${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.issue.pull_request.base.ref }}
+          git fetch --no-tags origin \
+            ${BASE_REF} \
+            +refs/pull/${PR_NUMBER}/head
+
+      # If you want Codex to build and run code, install any dependencies that
+      # need to be downloaded before the "Run Codex" step because Codex's
+      # default sandbox disables network access.
+
+      - name: Run Codex
+        id: run_codex
+        uses: openai/codex-action@v1
+        env:
+          OPENAI_API_BASE: https://codex-api.packycode.com/v1
+          OPENAI_API_KEY: ${{ secrets.CODEX_API_KEY }}
+        with:
+          openai-api-key: ${{ secrets.CODEX_API_KEY }}
+          prompt: |
+            This is PR #${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.event.issue.number }} for ${{ github.repository }}.
+
+            Review ONLY the changes introduced by the PR, so consider:
+               git log --oneline ${{ github.event.pull_request.base.sha || github.event.issue.pull_request.base.sha }}...${{ github.event.pull_request.head.sha || github.event.issue.pull_request.head.sha }}
+
+            Suggest any improvements, potential bugs, or issues.
+            Be concise and specific in your feedback.
+
+            Pull request title and body:
+            ----
+            ${{ github.event_name == 'pull_request' && github.event.pull_request.title || github.event.issue.title }}
+            ${{ github.event_name == 'pull_request' && github.event.pull_request.body || github.event.issue.body }}
+
+  post_feedback:
+    runs-on: ubuntu-latest
+    needs: codex
+    if: needs.codex.outputs.final_message != ''
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Report Codex feedback
+        uses: actions/github-script@v7
+        env:
+          CODEX_FINAL_MESSAGE: ${{ needs.codex.outputs.final_message }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: process.env.CODEX_FINAL_MESSAGE,
+            });
