@@ -1,11 +1,12 @@
 import { useRef, useState, forwardRef, useImperativeHandle, useEffect, useMemo, useCallback } from "react";
-import { Camera, Loader2, MessageSquare, FilePlus, Languages, Maximize, Minimize } from "lucide-react";
+import { Camera, Loader2, MessageSquare, FilePlus, Languages } from "lucide-react";
 import { captureSlide, API_BASE_URL, SyncTimeline } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Subtitle } from "@/lib/srt";
 import { getActiveSubtitles } from "@/lib/subtitleSearch";
 import { useGlobalSettingsStore } from "@/stores";
 import { useVoiceoverSync } from "@/hooks/useVoiceoverSync";
+import { VideoControls } from "./VideoControls";
 
 interface VideoPlayerProps {
     videoId: string;
@@ -47,6 +48,8 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
     }, ref) => {
         const [isCapturing, setIsCapturing] = useState(false);
         const [currentTime, setCurrentTime] = useState(0);
+        const [duration, setDuration] = useState(0);
+        const [isPlaying, setIsPlaying] = useState(false);
         const [showLanguageMenu, setShowLanguageMenu] = useState(false);
         const containerRef = useRef<HTMLDivElement>(null);
         const [isFullscreen, setIsFullscreen] = useState(false);
@@ -59,6 +62,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
             startSync,
             stopSync,
             seekToVideoTime,
+            setUserRate,
             play: syncPlay,
             pause: syncPause,
             getCurrentVideoTime,
@@ -139,14 +143,58 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
             onTimeUpdate?.(time);
         }, [onTimeUpdate, videoRef]);
 
-        // Set up time update listeners - always listen to video element
+        // Set up video event listeners
         useEffect(() => {
             const video = videoRef.current;
             if (!video) return;
 
+            const handleDurationChange = () => setDuration(video.duration || 0);
+            const handlePlay = () => setIsPlaying(true);
+            const handlePause = () => setIsPlaying(false);
+            const handleEnded = () => setIsPlaying(false);
+
             video.addEventListener("timeupdate", handleTimeUpdate);
-            return () => video.removeEventListener("timeupdate", handleTimeUpdate);
+            video.addEventListener("durationchange", handleDurationChange);
+            video.addEventListener("loadedmetadata", handleDurationChange);
+            video.addEventListener("play", handlePlay);
+            video.addEventListener("pause", handlePause);
+            video.addEventListener("ended", handleEnded);
+
+            // Initialize duration if already loaded
+            if (video.duration) {
+                setDuration(video.duration);
+            }
+
+            return () => {
+                video.removeEventListener("timeupdate", handleTimeUpdate);
+                video.removeEventListener("durationchange", handleDurationChange);
+                video.removeEventListener("loadedmetadata", handleDurationChange);
+                video.removeEventListener("play", handlePlay);
+                video.removeEventListener("pause", handlePause);
+                video.removeEventListener("ended", handleEnded);
+            };
         }, [handleTimeUpdate, videoRef]);
+
+        // Custom control handlers
+        const handlePlay = useCallback(() => {
+            if (isSyncActive) {
+                syncPlay();
+            } else {
+                videoRef.current?.play();
+            }
+        }, [isSyncActive, syncPlay, videoRef]);
+
+        const handlePause = useCallback(() => {
+            if (isSyncActive) {
+                syncPause();
+            } else {
+                videoRef.current?.pause();
+            }
+        }, [isSyncActive, syncPause, videoRef]);
+
+        const handleSeek = useCallback((time: number) => {
+            seekToVideoTime(time);
+        }, [seekToVideoTime]);
 
         const handleAsk = () => {
             if (!onAskAtTime) return;
@@ -230,16 +278,15 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                 ref={containerRef}
                 className="relative group rounded-xl overflow-hidden bg-black shadow-lg flex items-center justify-center bg-black"
             >
-                {/* Always use original video source */}
+                {/* Video element without native controls */}
                 <video
                     ref={videoRef}
                     className={cn(
                         "w-full",
                         isFullscreen ? "h-full object-contain" : "aspect-video"
                     )}
-                    controls
                     crossOrigin="anonymous"
-                    controlsList="nodownload noremoteplayback"
+                    onClick={isPlaying ? handlePause : handlePlay}
                 >
                     <source
                         src={`${API_BASE_URL}/api/content/${videoId}/video`}
@@ -263,7 +310,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                     <div
                         className="absolute left-0 right-0 flex flex-col items-center justify-end px-8 pointer-events-none z-[1]"
                         style={{
-                            bottom: subtitleDisplay?.bottomOffset ?? 56,
+                            bottom: (subtitleDisplay?.bottomOffset ?? 56) + 48, // Add space for custom controls
                         }}
                     >
                         {activeSubtitles.map((sub, index) => (
@@ -283,6 +330,22 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                         ))}
                     </div>
                 )}
+
+                {/* Custom Video Controls */}
+                <VideoControls
+                    videoRef={videoRef}
+                    audioRef={audioRef}
+                    isSyncActive={isSyncActive}
+                    onSetUserRate={setUserRate}
+                    currentTime={currentTime}
+                    duration={duration}
+                    isPlaying={isPlaying}
+                    onPlay={handlePlay}
+                    onPause={handlePause}
+                    onSeek={handleSeek}
+                    isFullscreen={isFullscreen}
+                    onToggleFullscreen={toggleFullscreen}
+                />
 
                 <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                     {onSubtitleModeChange && (
@@ -379,18 +442,6 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                             <Loader2 className="w-5 h-5 animate-spin" />
                         ) : (
                             <Camera className="w-5 h-5" />
-                        )}
-                    </button>
-
-                    <button
-                        onClick={toggleFullscreen}
-                        className="p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
-                        title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-                    >
-                        {isFullscreen ? (
-                            <Minimize className="w-5 h-5" />
-                        ) : (
-                            <Maximize className="w-5 h-5" />
                         )}
                     </button>
                 </div>

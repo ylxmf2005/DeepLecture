@@ -464,8 +464,8 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
 
     /**
      * Intercept native video controls.
-     * When user interacts with native controls, mirror state to audio.
-     * Re-run when isActive changes to ensure binding after audio element mounts.
+     * When user interacts with native controls (e.g., clicking video to play/pause),
+     * mirror state to audio. Re-run when isActive changes to ensure binding.
      */
     useEffect(() => {
         const video = videoRef.current;
@@ -521,60 +521,14 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
             suppressRateChangeRef.current = false;
         };
 
-        // Mirror native video volume/mute changes to audio
-        // In sync mode: video MUST stay muted, all volume controls affect audio only
-        const handleVolumeChange = () => {
-            if (!isActiveRef.current) return;
-
-            // CRITICAL: Always force video to stay muted in sync mode
-            // User clicking "unmute" on video controls must not unmute the video track
-            if (!video.muted) {
-                video.muted = true;
-            }
-
-            // Apply volume changes to audio (the actual sound source in sync mode)
-            // User's volume slider on video controls affects voiceover audio
-            audio.volume = video.volume;
-
-            // If user sets volume to 0, also mute the audio
-            // This gives user control over voiceover volume via native controls
-            audio.muted = video.volume === 0;
-        };
-
-        // Mirror native video playback rate changes to sync system
-        const handleRateChange = () => {
-            if (!isActiveRef.current) return;
-            // Ignore rate changes triggered by tick (not user-initiated)
-            if (suppressRateChangeRef.current) return;
-            const timeline = timelineRef.current;
-            if (!timeline || !timeline.segments.length) return;
-
-            // User changed playback rate via native controls
-            // We need to extract the user's intended rate from the video's current rate
-            // video.playbackRate = segment.speed * userRate, so userRate = video.playbackRate / segment.speed
-            const seg = timeline.segments[segmentIndexRef.current];
-            const newUserRate = video.playbackRate / seg.speed;
-            const clampedUserRate = clamp(newUserRate, 0.25, 4.0);
-
-            // Only update if significantly different to avoid feedback loops
-            if (Math.abs(clampedUserRate - userRateRef.current) > 0.01) {
-                userRateRef.current = clampedUserRate;
-                audio.playbackRate = clampedUserRate;
-            }
-        };
-
         video.addEventListener("play", handleVideoPlay);
         video.addEventListener("pause", handleVideoPause);
         video.addEventListener("seeked", handleVideoSeeked);
-        video.addEventListener("volumechange", handleVolumeChange);
-        video.addEventListener("ratechange", handleRateChange);
 
         return () => {
             video.removeEventListener("play", handleVideoPlay);
             video.removeEventListener("pause", handleVideoPause);
             video.removeEventListener("seeked", handleVideoSeeked);
-            video.removeEventListener("volumechange", handleVolumeChange);
-            video.removeEventListener("ratechange", handleRateChange);
         };
     }, [startTickLoop, stopTickLoop, isActive]);
 

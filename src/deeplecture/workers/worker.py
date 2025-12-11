@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-import os
 import logging
+import os
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -15,8 +15,8 @@ from deeplecture.services.note_service import NoteService
 from deeplecture.services.slide_lecture_service import SlideLectureService
 from deeplecture.services.subtitle_service import SubtitleService
 from deeplecture.services.timeline_service import TimelineService
-from deeplecture.transcription.voiceover import SubtitleVoiceoverGenerator
 from deeplecture.transcription.interactive import parse_srt_to_segments
+from deeplecture.transcription.voiceover import SubtitleVoiceoverGenerator
 from deeplecture.workers.task_manager import TaskManager
 
 logger = logging.getLogger(__name__)
@@ -366,7 +366,7 @@ def _handle_note_generation(service: NoteService, metadata: Dict[str, Any]) -> s
     learner_profile = metadata.get("learner_profile", "")
     max_parts = metadata.get("max_parts")
 
-    result = service.generate_ai_note(
+    service.generate_ai_note(
         video_id,
         context_mode=context_mode,
         user_instruction=instruction,
