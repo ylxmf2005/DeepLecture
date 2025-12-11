@@ -147,6 +147,18 @@ export const useVideoStateStore = create<VideoStateStore>()(
                     },
                 })),
 
+            setSelectedVoiceoverId: (videoId, voiceoverId) =>
+                set((state) => ({
+                    videos: {
+                        ...state.videos,
+                        [videoId]: {
+                            ...DEFAULT_VIDEO_STATE,
+                            ...state.videos[videoId],
+                            selectedVoiceoverId: voiceoverId,
+                        },
+                    },
+                })),
+
             clearVideoState: (videoId) =>
                 set((state) => {
                     const { [videoId]: _, ...rest } = state.videos;
@@ -205,3 +217,6 @@ export const useVideoNotes = (videoId: string) =>
         // Return a new object each time to prevent mutation of defaults
         return { draft: "", dirty: false, lastSyncedAt: null };
     });
+
+export const useSelectedVoiceoverId = (videoId: string) =>
+    useVideoStateStore((state) => state.videos[videoId]?.selectedVoiceoverId ?? null);

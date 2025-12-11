@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-import os
 import logging
+import os
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -15,8 +15,8 @@ from deeplecture.services.note_service import NoteService
 from deeplecture.services.slide_lecture_service import SlideLectureService
 from deeplecture.services.subtitle_service import SubtitleService
 from deeplecture.services.timeline_service import TimelineService
-from deeplecture.transcription.voiceover import SubtitleVoiceoverGenerator
 from deeplecture.transcription.interactive import parse_srt_to_segments
+from deeplecture.transcription.voiceover import SubtitleVoiceoverGenerator
 from deeplecture.workers.task_manager import TaskManager
 
 logger = logging.getLogger(__name__)
@@ -366,7 +366,7 @@ def _handle_note_generation(service: NoteService, metadata: Dict[str, Any]) -> s
     learner_profile = metadata.get("learner_profile", "")
     max_parts = metadata.get("max_parts")
 
-    result = service.generate_ai_note(
+    service.generate_ai_note(
         video_id,
         context_mode=context_mode,
         user_instruction=instruction,
@@ -377,6 +377,7 @@ def _handle_note_generation(service: NoteService, metadata: Dict[str, Any]) -> s
 
 
 def _handle_voiceover_generation(content_service: ContentService, metadata: Dict[str, Any]) -> str:
+    """Generate voiceover audio and sync timeline (no video processing)."""
     video_id = _require_content_id(metadata)
     video_path = content_service.get_video_path(video_id)
     if not video_path:
@@ -391,19 +392,13 @@ def _handle_voiceover_generation(content_service: ContentService, metadata: Dict
         raise FileNotFoundError(f"Subtitle file not found for voiceover: {subtitle_path}")
 
     language = str(metadata.get("language") or "zh")
-    voiceover_audio_path = metadata.get("voiceover_audio_path")
-    dubbed_video_path = metadata.get("dubbed_video_path")
     meta_path = metadata.get("meta_path")
-    voiceover_dir = os.path.dirname(voiceover_audio_path or dubbed_video_path or meta_path or "") or None
+    voiceover_dir = metadata.get("voiceover_dir")
     if not voiceover_dir:
         voiceover_dir = content_service.ensure_content_dir(video_id, "voiceover")
-        voiceover_audio_path = voiceover_audio_path or os.path.join(voiceover_dir, "voiceover.m4a")
-        dubbed_video_path = dubbed_video_path or os.path.join(voiceover_dir, "voiceover.mp4")
     os.makedirs(voiceover_dir, exist_ok=True)
 
     audio_basename = metadata.get("audio_basename")
-    if not audio_basename and voiceover_audio_path:
-        audio_basename = os.path.splitext(os.path.basename(str(voiceover_audio_path)))[0]
     voiceover_id = str(metadata.get("voiceover_id") or "")
     voiceover_name = metadata.get("voiceover_name") or audio_basename or "voiceover"
 
@@ -411,13 +406,12 @@ def _handle_voiceover_generation(content_service: ContentService, metadata: Dict
     ctx.ensure_initialized()
     generator = SubtitleVoiceoverGenerator(tts_factory=ctx.tts_factory)
     try:
-        audio_path, dubbed_path = generator.generate_voiceover_from_srt(
+        result = generator.generate_voiceover(
             video_path=video_path,
             subtitle_path=str(subtitle_path),
             output_dir=voiceover_dir,
             language=language,
             audio_basename=audio_basename,
-            voiceover_id=voiceover_id,
         )
     except Exception as exc:
         _update_voiceover_manifest(
@@ -428,8 +422,8 @@ def _handle_voiceover_generation(content_service: ContentService, metadata: Dict
             voiceover_name,
             language,
             subtitle_path,
-            voiceover_audio_path,
-            dubbed_video_path,
+            voiceover_audio_path=None,
+            sync_timeline_path=None,
             status="error",
             error=str(exc),
         )
@@ -443,26 +437,27 @@ def _handle_voiceover_generation(content_service: ContentService, metadata: Dict
         voiceover_name,
         language,
         subtitle_path,
-        audio_path,
-        dubbed_path,
+        voiceover_audio_path=result.audio_path,
+        sync_timeline_path=result.timeline_path,
         status="done",
         error=None,
+        duration=result.audio_duration,
     )
 
     content_service.register_artifact(
         video_id,
-        audio_path,
+        result.audio_path,
         kind="voiceover:audio",
         media_type="audio/mp4",
     )
     content_service.register_artifact(
         video_id,
-        dubbed_path,
-        kind="voiceover:dubbed_video",
-        media_type="video/mp4",
+        result.timeline_path,
+        kind="voiceover:sync_timeline",
+        media_type="application/json",
     )
 
-    return dubbed_path
+    return result.timeline_path
 
 
 def _handle_slide_explanation(content_service: ContentService, metadata: Dict[str, Any]) -> str:
@@ -593,11 +588,12 @@ def _update_voiceover_manifest(
     voiceover_name: str,
     language: str,
     subtitle_path: str,
-    audio_path: Optional[str],
-    dubbed_path: Optional[str],
+    voiceover_audio_path: Optional[str],
+    sync_timeline_path: Optional[str],
     *,
     status: str,
     error: Optional[str],
+    duration: Optional[float] = None,
 ) -> None:
     if not meta_path:
         return
@@ -611,28 +607,33 @@ def _update_voiceover_manifest(
     updated = False
     for item in voiceovers:
         if item.get("id") == voiceover_id:
-            item["voiceover_audio_path"] = audio_path
-            item["dubbed_video_path"] = dubbed_path
+            item["voiceover_audio_path"] = voiceover_audio_path
+            item["sync_timeline_path"] = sync_timeline_path
+            # Remove legacy field if present
+            item.pop("dubbed_video_path", None)
             item["status"] = status
             item["error"] = error
             item["updated_at"] = _utc_now_iso()
+            if duration is not None:
+                item["duration"] = duration
             updated = True
             break
 
     if not updated:
-        voiceovers.append(
-            {
-                "id": voiceover_id,
-                "name": voiceover_name,
-                "language": language,
-                "subtitle_path": subtitle_path,
-                "voiceover_audio_path": audio_path,
-                "dubbed_video_path": dubbed_path,
-                "created_at": _utc_now_iso(),
-                "status": status,
-                "error": error,
-            },
-        )
+        entry = {
+            "id": voiceover_id,
+            "name": voiceover_name,
+            "language": language,
+            "subtitle_path": subtitle_path,
+            "voiceover_audio_path": voiceover_audio_path,
+            "sync_timeline_path": sync_timeline_path,
+            "created_at": _utc_now_iso(),
+            "status": status,
+            "error": error,
+        }
+        if duration is not None:
+            entry["duration"] = duration
+        voiceovers.append(entry)
 
     current_meta["video_id"] = video_id
     current_meta["voiceovers"] = voiceovers

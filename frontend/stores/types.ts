@@ -141,6 +141,9 @@ export interface VideoState {
 
     // Notes (local draft with server sync)
     notes: VideoNotes;
+
+    // Selected voiceover track (null = original audio)
+    selectedVoiceoverId: string | null;
 }
 
 export const DEFAULT_VIDEO_STATE: VideoState = {
@@ -154,6 +157,7 @@ export const DEFAULT_VIDEO_STATE: VideoState = {
         dirty: false,
         lastSyncedAt: null,
     },
+    selectedVoiceoverId: null,
 };
 
 // =============================================================================
@@ -222,6 +226,9 @@ export interface VideoStateActions {
     // Notes
     setNotesDraft: (videoId: string, draft: string) => void;
     markNotesSynced: (videoId: string) => void;
+
+    // Voiceover selection
+    setSelectedVoiceoverId: (videoId: string, voiceoverId: string | null) => void;
 
     // Cleanup
     clearVideoState: (videoId: string) => void;

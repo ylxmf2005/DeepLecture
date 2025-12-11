@@ -2,7 +2,7 @@
 
 import { forwardRef, useState, useRef, useEffect } from "react";
 import { VideoPlayer, VideoPlayerRef } from "@/components/VideoPlayer";
-import { ContentItem, API_BASE_URL } from "@/lib/api";
+import { ContentItem, API_BASE_URL, SyncTimeline } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { FileText, BookOpen, Loader2, Maximize, Minimize } from "lucide-react";
 import type { PlayerTrack, SubtitleMode } from "@/hooks/useSubtitleManagement";
@@ -12,6 +12,7 @@ interface VideoPlayerSectionProps {
     content: ContentItem;
     videoId: string;
     selectedVoiceoverId: string | null;
+    selectedVoiceoverSyncTimeline: SyncTimeline | null;
     playerTracks: PlayerTrack[];
     playerSubtitles: Subtitle[];
     playerSubtitleMode: SubtitleMode;
@@ -36,6 +37,7 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
             content,
             videoId,
             selectedVoiceoverId,
+            selectedVoiceoverSyncTimeline,
             playerTracks,
             playerSubtitles,
             playerSubtitleMode,
@@ -219,6 +221,7 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                             ref={ref}
                             videoId={videoId}
                             voiceoverId={selectedVoiceoverId}
+                            syncTimeline={selectedVoiceoverSyncTimeline}
                             subtitles={playerSubtitles}
                             subtitleMode={playerSubtitleMode}
                             onSubtitleModeChange={(mode) => setPlayerSubtitleMode(mode as SubtitleMode)}
