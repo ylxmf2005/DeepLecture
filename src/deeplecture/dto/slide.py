@@ -100,6 +100,39 @@ class TranscriptHistory:
 
         return prev, summaries
 
+    def after_page(self, page: "TranscriptPage") -> "TranscriptHistory":
+        """
+        Create updated history after processing a page.
+
+        Appends the page's transcript to prev_transcript_text and adds
+        the one-sentence summary to summary_lines.
+
+        Args:
+            page: The completed TranscriptPage
+
+        Returns:
+            New TranscriptHistory with updated context
+        """
+        # Build transcript text from page segments
+        page_text = "\n".join(seg.source for seg in page.segments if seg.source)
+
+        # Append to previous transcript
+        new_prev = self.prev_transcript_text
+        if new_prev and page_text:
+            new_prev = new_prev + "\n\n" + page_text
+        elif page_text:
+            new_prev = page_text
+
+        # Add summary if present
+        new_summaries = list(self.summary_lines)
+        if page.one_sentence_summary:
+            new_summaries.append(f"Page {page.page_index}: {page.one_sentence_summary}")
+
+        return TranscriptHistory(
+            prev_transcript_text=new_prev,
+            summary_lines=new_summaries,
+        )
+
 
 @dataclass
 class AudioSegmentInfo:
@@ -111,7 +144,7 @@ class AudioSegmentInfo:
     end: float
     source: str
     target: str
-    audio_path: str
+    audio_path: str = ""
 
 
 @dataclass

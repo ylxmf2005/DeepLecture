@@ -262,13 +262,15 @@ class VideoComposer:
         output_path: str,
     ) -> None:
         """
-        Build a single video segment for one page.
+        Build a single VIDEO-ONLY segment for one page (no audio track).
 
-        Creates a video from a static image with the given duration and muxes
-        it with the audio track.
+        Creates a video from a static image with the given duration.
+        Audio will be muxed separately in the final step to avoid
+        AAC encoder delay accumulation from per-page encoding.
         """
         img_path = _validate_media_path(image_path, ALLOWED_IMAGE_EXT)
-        audio_path = _validate_media_path(audio_path, ALLOWED_AUDIO_EXT)
+        # audio_path is used only to validate existence; actual muxing happens later
+        _validate_media_path(audio_path, ALLOWED_AUDIO_EXT)
         output_resolved = Path(output_path).resolve()
 
         cmd = [
@@ -276,13 +278,11 @@ class VideoComposer:
             "-y",
             "-loop", "1",
             "-i", str(img_path),
-            "-i", str(audio_path),
             "-t", f"{duration:.6f}",
             "-c:v", "libx264",
             "-tune", "stillimage",
             "-pix_fmt", "yuv420p",
-            "-c:a", "aac",
-            "-shortest",
+            "-an",  # No audio - will be muxed separately
             str(output_resolved),
         ]
         try:
@@ -304,12 +304,14 @@ class VideoComposer:
         *,
         segment_paths: List[str],
         output_path: str,
+        lecture_audio_path: Optional[str] = None,
     ) -> None:
         """
         Concatenate multiple video segments into a single video.
 
-        Uses FFmpeg concat filter to combine segments while preserving
-        audio and video streams.
+        Uses FFmpeg concat demuxer to combine video-only segments.
+        If lecture_audio_path is provided, muxes the audio track with
+        a single AAC encoding pass to avoid encoder delay accumulation.
         """
         if not segment_paths:
             raise ValueError("No segments to concatenate")
@@ -319,6 +321,7 @@ class VideoComposer:
         if work_dir:
             os.makedirs(work_dir, exist_ok=True)
         list_file: Optional[str] = None
+        video_only_path: Optional[str] = None
 
         try:
             with tempfile.NamedTemporaryFile(
@@ -332,20 +335,57 @@ class VideoComposer:
                     validated = _validate_media_path(path, ALLOWED_VIDEO_EXT)
                     f.write(f"file '{self._escape(str(validated))}'\n")
 
-            cmd = [
-                "ffmpeg",
-                "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", list_file,
-                "-c", "copy",
-                os.path.abspath(output_path),
-            ]
-            subprocess.run(
-                cmd,
-                capture_output=True,
-                check=True,
-            )
+            if lecture_audio_path:
+                # Two-step: concat video-only, then mux audio with single AAC encode
+                video_only_path = os.path.join(work_dir, "video_only_temp.mp4")
+                cmd_concat = [
+                    "ffmpeg",
+                    "-y",
+                    "-f", "concat",
+                    "-safe", "0",
+                    "-i", list_file,
+                    "-c:v", "copy",
+                    "-an",
+                    video_only_path,
+                ]
+                subprocess.run(
+                    cmd_concat,
+                    capture_output=True,
+                    check=True,
+                )
+
+                # Mux audio with single AAC encoding
+                audio_validated = _validate_media_path(lecture_audio_path, ALLOWED_AUDIO_EXT)
+                cmd_mux = [
+                    "ffmpeg",
+                    "-y",
+                    "-i", video_only_path,
+                    "-i", str(audio_validated),
+                    "-c:v", "copy",
+                    "-c:a", "aac",
+                    os.path.abspath(output_path),
+                ]
+                subprocess.run(
+                    cmd_mux,
+                    capture_output=True,
+                    check=True,
+                )
+            else:
+                # Original behavior: just concat (for video-only or pre-muxed segments)
+                cmd = [
+                    "ffmpeg",
+                    "-y",
+                    "-f", "concat",
+                    "-safe", "0",
+                    "-i", list_file,
+                    "-c", "copy",
+                    os.path.abspath(output_path),
+                ]
+                subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    check=True,
+                )
         except subprocess.CalledProcessError as exc:
             logger.error(
                 "Failed to concatenate segments: %s",
@@ -356,6 +396,11 @@ class VideoComposer:
             if list_file and os.path.exists(list_file):
                 try:
                     os.remove(list_file)
+                except OSError:
+                    pass
+            if video_only_path and os.path.exists(video_only_path):
+                try:
+                    os.remove(video_only_path)
                 except OSError:
                     pass
 

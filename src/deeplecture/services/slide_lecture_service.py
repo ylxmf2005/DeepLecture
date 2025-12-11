@@ -285,6 +285,8 @@ class SlideLectureService:
             tts_max_concurrency = int(cfg.get("tts_max_concurrency", 2))
             video_workers = 1  # Video generation is typically sequential
 
+            page_break_silence = float(cfg.get("page_break_silence_seconds", 0.0) or 0.0)
+
             coordinator = PagePipelineCoordinator(
                 speech_service=self._speech_service,
                 video_composer=self._video_composer,
@@ -292,6 +294,7 @@ class SlideLectureService:
                 audio_dir=audio_dir,
                 video_segments_dir=video_segments_dir,
                 tts_language=str(cfg.get("tts_language", "source")),
+                page_break_silence=page_break_silence,
                 tts_workers=tts_max_concurrency,
                 video_workers=video_workers,
             )
@@ -327,7 +330,7 @@ class SlideLectureService:
             # Convert audio artifacts to the format expected by the timeline builder.
             segments = []
             current_time = 0.0
-            page_break_silence = float(cfg["page_break_silence_seconds"])
+            last_page_index = max(page_image_paths.keys()) if page_image_paths else 0
 
             for audio_artifact in audio_artifacts:
                 page_idx = audio_artifact.page_index
@@ -349,8 +352,10 @@ class SlideLectureService:
                         ))
                         current_time += duration
 
-                # Add page break silence
-                current_time += page_break_silence
+                # Add page break silence to timeline (except last page)
+                # This matches the silence added in PagePipelineCoordinator._render_page_audio
+                if page_break_silence > 0 and page_idx < last_page_index:
+                    current_time += page_break_silence
 
             # 6. Write subtitle files.
             deck_subtitle_path = ctx.subtitle_path
@@ -385,9 +390,24 @@ class SlideLectureService:
             if not valid_segments:
                 raise RuntimeError(f"No video segments generated for deck {deck_id}")
 
+            # Create lecture_audio.wav by concatenating all page audio files
+            # This enables single AAC encoding in the final mux step, avoiding
+            # encoder delay accumulation from per-page AAC encoding.
+            page_audio_files = [
+                audio_artifact.page_audio_path
+                for audio_artifact in audio_artifacts
+                if audio_artifact.page_audio_path and os.path.exists(audio_artifact.page_audio_path)
+            ]
+            lecture_audio_path = os.path.join(audio_dir, "lecture_audio.wav")
+            if page_audio_files:
+                self._speech_service.concat_wav_files(page_audio_files, lecture_audio_path)
+            else:
+                lecture_audio_path = None
+
             self._video_composer.concatenate_segments(
                 segment_paths=valid_segments,
                 output_path=lecture_video_path,
+                lecture_audio_path=lecture_audio_path,
             )
 
             # 8. Update unified content metadata and artifact registry.
@@ -444,22 +464,24 @@ class SlideLectureService:
                 self._cleanup_temp_files(ctx)
 
     def resolve_subtitle_path(self, deck_id: str) -> str:
-        """Resolve subtitle path from unified metadata."""
+        """Resolve subtitle path from unified metadata or compute default."""
         metadata = self._get_deck_metadata(deck_id)
         if not metadata or metadata.type != "slide":
             raise FileNotFoundError(f"Slide deck not found: {deck_id}")
-        if not metadata.subtitle_path:
-            raise FileNotFoundError(f"Subtitle path missing for deck {deck_id}")
-        return str(metadata.subtitle_path)
+        if metadata.subtitle_path:
+            return str(metadata.subtitle_path)
+        # Compute default path for new decks that haven't generated subtitles yet
+        return self._subtitle_storage.build_original_path(deck_id)
 
     def resolve_lecture_video_path(self, deck_id: str) -> str:
-        """Resolve lecture video path from unified metadata."""
+        """Resolve lecture video path from unified metadata or compute default."""
         metadata = self._get_deck_metadata(deck_id)
         if not metadata or metadata.type != "slide":
             raise FileNotFoundError(f"Slide deck not found: {deck_id}")
-        if not metadata.video_file:
-            raise FileNotFoundError(f"Lecture video path missing for deck {deck_id}")
-        return str(metadata.video_file)
+        if metadata.video_file:
+            return str(metadata.video_file)
+        # Compute default path for new decks that haven't generated video yet
+        return os.path.join(self._video_output_dir, f"{deck_id}.mp4")
 
     def get_page_image_path(self, deck_id: str, page_index: int) -> str:
         """Resolve page image path with unified metadata awareness."""

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Dict, List, Tuple, TYPE_CHECKING
 
@@ -40,6 +42,7 @@ class PagePipelineCoordinator:
         audio_dir: str,
         video_segments_dir: str,
         tts_language: str = "source",
+        page_break_silence: float = 0.0,
         tts_workers: int = 2,
         video_workers: int = 1,
     ):
@@ -49,6 +52,8 @@ class PagePipelineCoordinator:
         self._audio_dir = audio_dir
         self._video_segments_dir = video_segments_dir
         self._tts_language = tts_language
+        self._page_break_silence = page_break_silence
+        self._total_pages = len(page_images)
 
         # Thread pools for parallel TTS/video work
         self._tts_pool = ThreadPoolExecutor(
@@ -60,7 +65,8 @@ class PagePipelineCoordinator:
             thread_name_prefix="video_pipeline"
         )
 
-        # Track futures for each page
+        # Track futures for each page (protected by lock for thread safety)
+        self._lock = threading.Lock()
         self._audio_futures: Dict[int, Future[PageAudioArtifacts]] = {}
         self._video_futures: Dict[int, Future[PageVideoArtifacts]] = {}
 
@@ -93,7 +99,8 @@ class PagePipelineCoordinator:
             self._render_page_audio,
             page=page,
         )
-        self._audio_futures[page_index] = audio_future
+        with self._lock:
+            self._audio_futures[page_index] = audio_future
 
         # Chain video task to run after TTS completes
         def on_audio_complete(fut: Future[PageAudioArtifacts]) -> None:
@@ -112,14 +119,16 @@ class PagePipelineCoordinator:
                     audio_path=audio_artifacts.page_audio_path,
                     duration=audio_artifacts.page_duration,
                 )
-                self._video_futures[page_index] = video_future
+                with self._lock:
+                    self._video_futures[page_index] = video_future
 
             except Exception as e:
                 logger.error(
                     "TTS failed for page %d: %s",
                     page_index, e
                 )
-                self._errors[page_index] = e
+                with self._lock:
+                    self._errors[page_index] = e
 
         audio_future.add_done_callback(on_audio_complete)
 
@@ -135,25 +144,48 @@ class PagePipelineCoordinator:
             - segment_paths: List of video segment file paths in page order
             - errors: Dict of page_index -> Exception for any failures
         """
-        # Wait for all audio tasks
+        # Phase 1: Wait for all audio tasks to complete.
+        # This also triggers all video task submissions via on_audio_complete callbacks.
         audio_artifacts: Dict[int, PageAudioArtifacts] = {}
-        for page_index, future in self._audio_futures.items():
+        with self._lock:
+            audio_futures_snapshot = dict(self._audio_futures)
+
+        for page_index, future in audio_futures_snapshot.items():
             try:
                 artifacts = future.result()
                 audio_artifacts[page_index] = artifacts
             except Exception as e:
                 logger.error("Audio failed for page %d: %s", page_index, e)
-                self._errors[page_index] = e
+                with self._lock:
+                    self._errors[page_index] = e
 
-        # Wait for all video tasks
+        # Phase 2: Wait for all video futures to be registered.
+        # Future.result() only guarantees task completion, not callback completion.
+        # We must wait until all callbacks have registered their video futures.
+        expected_video_count = len(audio_futures_snapshot) - len(self._errors)
+        while True:
+            with self._lock:
+                current_video_count = len(self._video_futures)
+                current_error_count = len(self._errors)
+            # Video futures + errors from callbacks should equal audio count
+            if current_video_count + current_error_count >= len(audio_futures_snapshot):
+                break
+            # Brief sleep to avoid busy-waiting
+            time.sleep(0.01)
+
+        # Phase 3: Now all video futures have been submitted.
+        # Safe to take snapshot and wait for video tasks.
         segment_paths: Dict[int, str] = {}
-        for page_index, future in self._video_futures.items():
+        with self._lock:
+            video_futures_snapshot = dict(self._video_futures)
+        for page_index, future in video_futures_snapshot.items():
             try:
                 video_artifacts = future.result()
                 segment_paths[page_index] = video_artifacts.segment_path
             except Exception as e:
                 logger.error("Video failed for page %d: %s", page_index, e)
-                self._errors[page_index] = e
+                with self._lock:
+                    self._errors[page_index] = e
 
         # Sort by page index
         sorted_audio = [
@@ -165,7 +197,11 @@ class PagePipelineCoordinator:
             for idx in sorted(segment_paths.keys())
         ]
 
-        return sorted_audio, sorted_segments, self._errors
+        # Return a copy of errors to prevent external mutation
+        with self._lock:
+            errors_copy = dict(self._errors)
+
+        return sorted_audio, sorted_segments, errors_copy
 
     def shutdown(self) -> None:
         """Shutdown thread pools."""
@@ -237,6 +273,30 @@ class PagePipelineCoordinator:
             segment_durations = [1.0]
 
         total_duration = sum(segment_durations)
+
+        # Add page break silence (except last page)
+        last_page_index = max(self._page_images.keys()) if self._page_images else 0
+        if self._page_break_silence > 0 and page_index < last_page_index:
+            silence_wav = os.path.join(
+                self._audio_dir,
+                f"silence_after_p{page_index:03d}.wav"
+            )
+            self._speech_service.generate_silence_wav(silence_wav, self._page_break_silence)
+
+            # Re-concatenate page audio with silence appended
+            page_audio_with_silence = os.path.join(
+                self._audio_dir,
+                f"page_{page_index:03d}_with_silence.wav"
+            )
+            self._speech_service.concat_wav_files(
+                [page_audio_path, silence_wav],
+                page_audio_with_silence,
+            )
+
+            # Replace page audio with the one including silence
+            os.replace(page_audio_with_silence, page_audio_path)
+
+            total_duration += self._page_break_silence
 
         return PageAudioArtifacts(
             page_index=page_index,
