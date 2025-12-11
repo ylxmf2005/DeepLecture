@@ -8,6 +8,8 @@ import {
     generateTimeline,
     TimelineEntry,
     VoiceoverEntry,
+    SyncTimeline,
+    API_BASE_URL,
 } from "@/lib/api";
 import { useTaskStatus } from "@/hooks/useTaskStatus";
 import { useTaskNotification } from "@/hooks/useTaskNotification";
@@ -45,6 +47,7 @@ export interface UseVideoPageStateReturn {
     voiceoversLoading: boolean;
     selectedVoiceoverId: string | null;
     setSelectedVoiceoverId: (id: string | null) => void;
+    selectedVoiceoverSyncTimeline: SyncTimeline | null;
 
     // Timeline state
     timelineEntries: TimelineEntry[];
@@ -103,6 +106,7 @@ export function useVideoPageState({
     const [voiceovers, setVoiceovers] = useState<VoiceoverEntry[]>([]);
     const [voiceoversLoading, setVoiceoversLoading] = useState(false);
     const [selectedVoiceoverId, setSelectedVoiceoverId] = useState<string | null>(null);
+    const [selectedVoiceoverSyncTimeline, setSelectedVoiceoverSyncTimeline] = useState<SyncTimeline | null>(null);
 
     // Timeline state
     const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
@@ -203,6 +207,41 @@ export function useVideoPageState({
             fetchVoiceovers();
         }
     }, [videoId, voiceoverProcessing, selectedVoiceoverId]);
+
+    // Load sync timeline when voiceover is selected
+    useEffect(() => {
+        if (!selectedVoiceoverId || !videoId) {
+            setSelectedVoiceoverSyncTimeline(null);
+            return;
+        }
+
+        let cancelled = false;
+
+        const fetchSyncTimeline = async () => {
+            try {
+                const url = `${API_BASE_URL}/api/content/${videoId}/voiceovers/${encodeURIComponent(selectedVoiceoverId)}/timeline`;
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch sync timeline: ${response.status}`);
+                }
+                const timeline: SyncTimeline = await response.json();
+                if (!cancelled) {
+                    setSelectedVoiceoverSyncTimeline(timeline);
+                }
+            } catch (error) {
+                console.error("Failed to load voiceover sync timeline:", error);
+                if (!cancelled) {
+                    setSelectedVoiceoverSyncTimeline(null);
+                }
+            }
+        };
+
+        fetchSyncTimeline();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [videoId, selectedVoiceoverId]);
 
     // Handle SSE task updates
     useEffect(() => {
@@ -394,6 +433,7 @@ export function useVideoPageState({
         voiceoversLoading,
         selectedVoiceoverId,
         setSelectedVoiceoverId,
+        selectedVoiceoverSyncTimeline,
         timelineEntries,
         setTimelineEntries,
         timelineLoading,

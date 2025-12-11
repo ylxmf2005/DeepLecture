@@ -4,6 +4,17 @@ import { ContentItem, SubtitleSource, VoiceoverEntry } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { ProcessingAction } from "@/hooks/useVideoPageState";
 
+/** Format duration in seconds to mm:ss or hh:mm:ss */
+function formatDuration(seconds: number): string {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) {
+        return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+    }
+    return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 export interface ActionsDialogProps {
     isOpen: boolean;
     onClose: () => void;
@@ -313,6 +324,9 @@ export function ActionsDialog({
                                                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{vo.name}</span>
                                                     <span className="text-[10px] text-gray-400 flex items-center gap-2">
                                                         {vo.language} · {vo.subtitle_source} · {new Date(vo.created_at).toLocaleDateString()}
+                                                        {vo.duration != null && vo.status === "done" && (
+                                                            <span>· {formatDuration(vo.duration)}</span>
+                                                        )}
                                                         {vo.status === "processing" && (
                                                             <span className="inline-flex items-center gap-1 text-amber-500">
                                                                 <Loader2 className="w-3 h-3 animate-spin" /> processing

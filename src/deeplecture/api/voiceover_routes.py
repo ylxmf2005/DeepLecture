@@ -186,7 +186,7 @@ def register_voiceover_routes(
             voiceover_id = str(uuid.uuid4())
 
             voiceover_audio_path = os.path.join(voiceover_dir, f"{base_filename}.m4a")
-            dubbed_video_path = os.path.join(voiceover_dir, f"{base_filename}.mp4")
+            sync_timeline_path = os.path.join(voiceover_dir, f"{base_filename}_sync_timeline.json")
 
             content_service.register_artifact(
                 video_id,
@@ -196,9 +196,9 @@ def register_voiceover_routes(
             )
             content_service.register_artifact(
                 video_id,
-                dubbed_video_path,
-                kind="voiceover:dubbed_video",
-                media_type="video/mp4",
+                sync_timeline_path,
+                kind="voiceover:sync_timeline",
+                media_type="application/json",
             )
 
             entry: Dict[str, Any] = {
@@ -208,7 +208,7 @@ def register_voiceover_routes(
                 "subtitle_source": subtitle_source or "path",
                 "subtitle_path": subtitle_path,
                 "voiceover_audio_path": voiceover_audio_path,
-                "dubbed_video_path": dubbed_video_path,
+                "sync_timeline_path": sync_timeline_path,
                 "created_at": datetime.now().isoformat(),
                 "status": "processing",
                 "error": None,
@@ -242,8 +242,7 @@ def register_voiceover_routes(
                     "voiceover_id": voiceover_id,
                     "subtitle_path": subtitle_path,
                     "language": language,
-                    "voiceover_audio_path": voiceover_audio_path,
-                    "dubbed_video_path": dubbed_video_path,
+                    "voiceover_dir": voiceover_dir,
                     "meta_path": meta_path,
                     "voiceover_name": name_str,
                     "audio_basename": base_filename,
@@ -264,10 +263,10 @@ def register_voiceover_routes(
         except Exception as e:
             return api_error(500, "Voiceover generation failed", logger=logger, exc=e)
 
-    @app.route("/api/content/<content_id>/voiceovers/<voiceover_id>/video", methods=["GET"])
-    def voiceover_video_resource(content_id: str, voiceover_id: str):
+    @app.route("/api/content/<content_id>/voiceovers/<voiceover_id>/audio", methods=["GET"])
+    def voiceover_audio_resource(content_id: str, voiceover_id: str):
         """
-        Stream a generated voiceover (dubbed) video file for a specific voiceover ID.
+        Stream the voiceover audio file (m4a) for a specific voiceover ID.
         """
         try:
             voiceover_dir = content_service.build_content_path(content_id, "voiceover")
@@ -289,33 +288,63 @@ def register_voiceover_routes(
                     {"error": f"Voiceover ID {voiceover_id} not found for this video"},
                 ), 404
 
-            video_path = entry.get("dubbed_video_path")
-            if not video_path or not os.path.exists(video_path):
-                return jsonify({"error": "Dubbed video file not found"}), 404
+            audio_path = entry.get("voiceover_audio_path")
+            if not audio_path or not os.path.exists(audio_path):
+                return jsonify({"error": "Voiceover audio file not found"}), 404
 
-            mime_type, _ = mimetypes.guess_type(video_path)
+            mime_type, _ = mimetypes.guess_type(audio_path)
             if not mime_type:
-                mime_type = "video/mp4"
-
-            range_header = request.headers.get("Range")
-            if range_header:
-                logger.info(
-                    "Voiceover video range request: content_id=%s voiceover_id=%s range=%s",
-                    content_id,
-                    voiceover_id,
-                    range_header,
-                )
+                mime_type = "audio/mp4"
 
             return send_file(
-                video_path,
+                audio_path,
                 mimetype=mime_type,
                 as_attachment=False,
-                download_name=os.path.basename(video_path),
+                download_name=os.path.basename(audio_path),
                 conditional=True,
             )
 
         except Exception as e:
-            return api_error(500, "Failed to retrieve voiceover video", logger=logger, exc=e)
+            return api_error(500, "Failed to retrieve voiceover audio", logger=logger, exc=e)
+
+    @app.route("/api/content/<content_id>/voiceovers/<voiceover_id>/timeline", methods=["GET"])
+    def voiceover_timeline_resource(content_id: str, voiceover_id: str):
+        """
+        Retrieve the sync timeline JSON for playback-side A/V synchronization.
+        """
+        try:
+            voiceover_dir = content_service.build_content_path(content_id, "voiceover")
+            meta_path = os.path.join(voiceover_dir, "voiceovers.json")
+            if not os.path.exists(meta_path):
+                return jsonify({"error": "No voiceovers found for this video"}), 404
+
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json_repair.load(f)
+
+            entry = None
+            for item in meta.get("voiceovers") or []:
+                if item.get("id") == voiceover_id:
+                    entry = item
+                    break
+
+            if not entry:
+                return jsonify(
+                    {"error": f"Voiceover ID {voiceover_id} not found for this video"},
+                ), 404
+
+            timeline_path = entry.get("sync_timeline_path")
+            if not timeline_path or not os.path.exists(timeline_path):
+                return jsonify({"error": "Sync timeline file not found"}), 404
+
+            return send_file(
+                timeline_path,
+                mimetype="application/json",
+                as_attachment=False,
+                download_name=os.path.basename(timeline_path),
+            )
+
+        except Exception as e:
+            return api_error(500, "Failed to retrieve sync timeline", logger=logger, exc=e)
 
     @app.route("/api/content/<content_id>/voiceovers/<voiceover_id>", methods=["DELETE"])
     def delete_voiceover(content_id: str, voiceover_id: str):
@@ -349,9 +378,9 @@ def register_voiceover_routes(
 
             # Delete associated files
             audio_path = entry_to_delete.get("voiceover_audio_path")
-            video_path = entry_to_delete.get("dubbed_video_path")
+            timeline_path = entry_to_delete.get("sync_timeline_path")
 
-            for file_path in [audio_path, video_path]:
+            for file_path in [audio_path, timeline_path]:
                 if file_path and os.path.exists(file_path):
                     try:
                         os.remove(file_path)

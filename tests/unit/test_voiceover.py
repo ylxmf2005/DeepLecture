@@ -8,7 +8,7 @@ from unittest import mock
 import pytest
 
 from deeplecture.transcription.voiceover import (
-    SegmentTiming,
+    SyncSegment,
     SubtitleSegment,
     SubtitleVoiceoverGenerator,
 )
@@ -76,12 +76,12 @@ def _install_audio_stubs(
 
 
 # ---------------------------------------------------------------------------
-# _build_aligned_segment_files
+# _build_aligned_segments
 # ---------------------------------------------------------------------------
 
 
-def test_build_aligned_segment_files_large_gap_speed_capped(monkeypatch, tmp_path):
-    """大 gap 触发视频变速，speed 被 max_speed_factor 封顶并补足目标时长。"""
+def test_build_aligned_segments_large_gap_speed_calculated(monkeypatch, tmp_path):
+    """Large gap triggers video speed-up; speed is calculated from actual durations."""
     gen = _make_generator(silence_threshold=1.0, max_speed=2.5)
     segments = [
         SubtitleSegment(0, 0.0, 1.0, "a"),
@@ -98,23 +98,25 @@ def test_build_aligned_segment_files_large_gap_speed_capped(monkeypatch, tmp_pat
 
     pad_calls, speed_calls, _ = _install_audio_stubs(gen, monkeypatch, durations)
 
-    audio_files, timings = gen._build_aligned_segment_files(
+    audio_files, timings = gen._build_aligned_segments(
         segments, str(seg_dir), video_duration=6.0
     )
 
     assert len(audio_files) == 2
     assert len(timings) == 2
-    # First segment hits max_speed_factor=2.5, target duration = 5/2.5 = 2.0
+    # First segment: slot = 5s (0->5), TTS = 1s
+    # Gap = 4s > threshold 1s, video speeds up
+    # Required speed = 5/1 = 5.0, capped to 2.5
+    # Target duration = 5/2.5 = 2.0s
     assert pad_calls[0][2] == pytest.approx(2.0)
+    # Speed = src_delta / dst_delta = 5.0 / 2.0 = 2.5
     assert timings[0].speed == pytest.approx(2.5)
-    assert timings[0].out_duration == pytest.approx(2.0)
     # Second stays at 1x
-    assert speed_calls == []
     assert timings[1].speed == 1.0
 
 
-def test_build_aligned_segment_files_gap_equals_threshold_pad(monkeypatch, tmp_path):
-    """gap 恰等于阈值时走补 pad 分支，不触发变速。"""
+def test_build_aligned_segments_gap_equals_threshold_pad(monkeypatch, tmp_path):
+    """When gap equals threshold, pad without triggering speed-up."""
     gen = _make_generator(silence_threshold=1.0, max_speed=3.0)
     segments = [
         SubtitleSegment(0, 0.0, 1.0, "a"),
@@ -131,19 +133,21 @@ def test_build_aligned_segment_files_gap_equals_threshold_pad(monkeypatch, tmp_p
 
     pad_calls, speed_calls, _ = _install_audio_stubs(gen, monkeypatch, durations)
 
-    audio_files, timings = gen._build_aligned_segment_files(
+    audio_files, timings = gen._build_aligned_segments(
         segments, str(seg_dir), video_duration=3.0
     )
 
     assert len(audio_files) == 2
     assert len(timings) == 2
+    # First slot = 2s (0->2), TTS = 1s, gap = 1s = threshold
+    # Should pad, not speed up
     assert pad_calls[0][2] == pytest.approx(2.0)  # slot_duration 2s
     assert speed_calls == []
     assert timings[0].speed == 1.0
 
 
-def test_build_aligned_segment_files_tts_too_long_speeds_audio(monkeypatch, tmp_path):
-    """TTS 长于槽位时触发音频加速并匹配槽位时长。"""
+def test_build_aligned_segments_tts_too_long_speeds_audio(monkeypatch, tmp_path):
+    """When TTS is longer than slot, speed up audio to fit."""
     gen = _make_generator(silence_threshold=1.0)
     segments = [SubtitleSegment(0, 0.0, 1.0, "long")]
     seg_dir = tmp_path / "segments"
@@ -156,20 +160,22 @@ def test_build_aligned_segment_files_tts_too_long_speeds_audio(monkeypatch, tmp_
 
     _, speed_calls, _ = _install_audio_stubs(gen, monkeypatch, durations)
 
-    audio_files, timings = gen._build_aligned_segment_files(
+    audio_files, timings = gen._build_aligned_segments(
         segments, str(seg_dir), video_duration=1.0
     )
 
     assert len(audio_files) == 1
     assert len(speed_calls) == 1
-    # speed = raw_dur / slot_duration
+    # speed = raw_dur / slot_duration = 1.6 / 1.0
     assert speed_calls[0][2] == pytest.approx(1.6)
-    assert timings[0].out_duration == pytest.approx(1.0)
+    # dst_end - dst_start should be ~1.0
+    dst_dur = timings[0].dst_end - timings[0].dst_start
+    assert dst_dur == pytest.approx(1.0)
     assert timings[0].speed == 1.0
 
 
-def test_build_aligned_segment_files_skip_tiny_slot(monkeypatch, tmp_path):
-    """slot_duration<1e-3 的字幕被跳过且不会污染输出时间线。"""
+def test_build_aligned_segments_skip_tiny_slot(monkeypatch, tmp_path):
+    """Tiny slot (<1e-3s) is skipped without polluting output."""
     gen = _make_generator()
     segments = [SubtitleSegment(0, 0.0, 0.0005, "tiny")]
     seg_dir = tmp_path / "segments"
@@ -182,7 +188,7 @@ def test_build_aligned_segment_files_skip_tiny_slot(monkeypatch, tmp_path):
 
     pad_calls, speed_calls, silence_calls = _install_audio_stubs(gen, monkeypatch, durations)
 
-    audio_files, timings = gen._build_aligned_segment_files(
+    audio_files, timings = gen._build_aligned_segments(
         segments, str(seg_dir), video_duration=0.0005
     )
 
@@ -193,55 +199,9 @@ def test_build_aligned_segment_files_skip_tiny_slot(monkeypatch, tmp_path):
     assert silence_calls == []
 
 
-def test_build_aligned_segment_files_no_trailing_when_video_unknown(monkeypatch, tmp_path, caplog):
-    """video_duration=None 时不补尾静音并记录警告。"""
-    gen = _make_generator()
-    segments = [SubtitleSegment(0, 0.0, 1.0, "a")]
-    seg_dir = tmp_path / "segments"
-    seg_dir.mkdir()
-
-    durations: Dict[str, float] = {}
-    input_wav = seg_dir / "subtitle_1.wav"
-    input_wav.touch()
-    durations[str(input_wav)] = 1.0
-
-    _install_audio_stubs(gen, monkeypatch, durations)
-
-    caplog.set_level(logging.WARNING)
-    audio_files, timings = gen._build_aligned_segment_files(
-        segments, str(seg_dir), video_duration=None
-    )
-
-    assert len(audio_files) == 1
-    assert len(timings) == 1
-    assert "Could not determine video duration" in caplog.text
-
-
-def test_build_aligned_segment_files_video_shorter_than_subtitles(monkeypatch, tmp_path):
-    """视频总长短于最后字幕时不追加尾静音。"""
-    gen = _make_generator()
-    segments = [SubtitleSegment(0, 0.0, 3.5, "a")]
-    seg_dir = tmp_path / "segments"
-    seg_dir.mkdir()
-
-    durations: Dict[str, float] = {}
-    input_wav = seg_dir / "subtitle_1.wav"
-    input_wav.touch()
-    durations[str(input_wav)] = 3.5
-
-    _install_audio_stubs(gen, monkeypatch, durations)
-
-    audio_files, timings = gen._build_aligned_segment_files(
-        segments, str(seg_dir), video_duration=3.0
-    )
-
-    assert len(audio_files) == 1  # 没有 silence_tail
-    assert timings[-1].src_end == pytest.approx(3.5)
-
-
-def test_build_aligned_segment_files_leading_and_trailing_silence(monkeypatch, tmp_path):
-    """首尾静音都会生成，各自保持 1x 速度。"""
-    gen = _make_generator(silence_threshold=2.0)  # 避免中间被判定为大 gap
+def test_build_aligned_segments_leading_and_trailing_silence(monkeypatch, tmp_path):
+    """Leading and trailing silence are generated with speed=1.0."""
+    gen = _make_generator(silence_threshold=2.0)  # High threshold to avoid speed-up
     segments = [
         SubtitleSegment(0, 0.75, 1.75, "first"),
         SubtitleSegment(1, 3.0, 4.0, "second"),
@@ -257,7 +217,7 @@ def test_build_aligned_segment_files_leading_and_trailing_silence(monkeypatch, t
 
     pad_calls, speed_calls, silence_calls = _install_audio_stubs(gen, monkeypatch, durations)
 
-    audio_files, timings = gen._build_aligned_segment_files(
+    audio_files, timings = gen._build_aligned_segments(
         segments, str(seg_dir), video_duration=5.0
     )
 
@@ -267,27 +227,7 @@ def test_build_aligned_segment_files_leading_and_trailing_silence(monkeypatch, t
     assert silence_calls[-1][1] == pytest.approx(1.0)  # trailing
     assert all(t.speed == 1.0 for t in (timings[0], timings[-1]))
     assert speed_calls == []
-    assert pad_calls  # 调整了正文
-
-
-def test_build_aligned_segment_files_timing_diff_warning(monkeypatch, tmp_path, caplog):
-    """音频总长与预期视频时长差值>0.02 时抛出警告。"""
-    gen = _make_generator()
-    segments = [SubtitleSegment(0, 0.0, 2.0, "drift")]
-    seg_dir = tmp_path / "segments"
-    seg_dir.mkdir()
-
-    durations: Dict[str, float] = {}
-    input_wav = seg_dir / "subtitle_1.wav"
-    input_wav.touch()
-    durations[str(input_wav)] = 2.0
-
-    _install_audio_stubs(gen, monkeypatch, durations, pad_delta=0.2)  # 制造 0.2s 漂移
-
-    caplog.set_level(logging.WARNING)
-    gen._build_aligned_segment_files(segments, str(seg_dir), video_duration=2.0)
-
-    assert "Timing mismatch detected" in caplog.text
+    assert pad_calls  # padded content segments
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +236,7 @@ def test_build_aligned_segment_files_timing_diff_warning(monkeypatch, tmp_path, 
 
 
 def test_speed_up_audio_speed_one_copies_without_ffmpeg(monkeypatch, tmp_path):
-    """speed≈1 直接 copy，不调用 ffmpeg。"""
+    """Speed ≈ 1 copies directly without calling ffmpeg."""
     gen = _make_generator()
     run_calls = []
     copy_calls = []
@@ -328,7 +268,7 @@ def test_speed_up_audio_speed_one_copies_without_ffmpeg(monkeypatch, tmp_path):
     ],
 )
 def test_speed_up_audio_builds_correct_atempo_chain(monkeypatch, tmp_path, speed, expected_filter):
-    """极值与边界 speed 生成正确的 atempo 链并带上目标时长。"""
+    """Extreme and boundary speeds generate correct atempo chains with target duration."""
     gen = _make_generator()
     run_args = []
 
@@ -360,7 +300,7 @@ def test_speed_up_audio_builds_correct_atempo_chain(monkeypatch, tmp_path, speed
 
 
 def test_parse_srt_orders_out_of_sequence_and_handles_bom(tmp_path):
-    """乱序字幕（含 BOM、Windows 换行）被正确解析，start/index 可供后续排序。"""
+    """Out-of-order subtitles with BOM and Windows line endings are parsed correctly."""
     gen = _make_generator()
     srt_path = tmp_path / "sample.srt"
     content = "\ufeff3\r\n00:00:02,000 --> 00:00:03,000\r\nThird\r\n\r\n" \
@@ -378,7 +318,7 @@ def test_parse_srt_orders_out_of_sequence_and_handles_bom(tmp_path):
 
 
 def test_parse_srt_skips_invalid_timestamp_and_empty_text(tmp_path, caplog):
-    """无效时间戳或空文本的块会被跳过，不影响后续解析。"""
+    """Blocks with invalid timestamps or empty text are skipped."""
     gen = _make_generator()
     srt_path = tmp_path / "invalid.srt"
     content = (
@@ -393,45 +333,7 @@ def test_parse_srt_skips_invalid_timestamp_and_empty_text(tmp_path, caplog):
 
     assert len(segments) == 1
     assert segments[0].index == 3
-    assert "Skipping subtitle block with invalid timestamp" in caplog.text
-
-
-# ---------------------------------------------------------------------------
-# _build_video_speed_filter
-# ---------------------------------------------------------------------------
-
-
-def test_build_video_speed_filter_mixed_speeds():
-    """混合 speed>1 与 1.0 生成正确的 setpts 与 concat 数量。"""
-    gen = _make_generator()
-    timings = [
-        SegmentTiming(0.0, 1.0, 0.0, 1.0, speed=1.0),
-        SegmentTiming(1.0, 3.0, 1.0, 2.0, speed=2.0),
-        SegmentTiming(3.0, 5.0, 3.0, 1.666, speed=1.2),
-    ]
-
-    filter_complex, n = gen._build_video_speed_filter(timings)
-
-    assert n == 3
-    assert "trim=start=0.000000:end=1.000000,setpts=PTS-STARTPTS[seg0]" in filter_complex
-    assert "trim=start=1.000000:end=3.000000,setpts=PTS-STARTPTS,setpts=PTS/2.000000[seg1]" in filter_complex
-    assert "trim=start=3.000000:end=5.000000,setpts=PTS-STARTPTS,setpts=PTS/1.200000[seg2]" in filter_complex
-    assert "concat=n=3:v=1:a=0[vout]" in filter_complex
-
-
-def test_build_video_speed_filter_all_unity_speed():
-    """全部 speed=1.0 时不添加额外 setpts 分量。"""
-    gen = _make_generator()
-    timings = [
-        SegmentTiming(0.0, 1.0, 0.0, 1.0, speed=1.0),
-        SegmentTiming(1.0, 2.0, 1.0, 1.0, speed=1.0),
-    ]
-
-    filter_complex, n = gen._build_video_speed_filter(timings)
-
-    assert n == 2
-    assert "/1.000000" not in filter_complex
-    assert "concat=n=2:v=1:a=0[vout]" in filter_complex
+    assert "Skipping block with invalid timestamp" in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -440,7 +342,7 @@ def test_build_video_speed_filter_all_unity_speed():
 
 
 def test_quantize_speed_below_one_returns_one():
-    """speed<=1.0 直接返回 1.0，不触发量化。"""
+    """Speed <= 1.0 returns 1.0 without quantization."""
     gen = _make_generator(max_speed=2.5)
     assert gen._quantize_speed(0.5) == 1.0
     assert gen._quantize_speed(1.0) == 1.0
@@ -448,11 +350,10 @@ def test_quantize_speed_below_one_returns_one():
 
 
 def test_quantize_speed_rounds_to_ceil_bucket():
-    """speed>1 时量化到最小的 >= speed 的 bucket (ceil 策略)。"""
+    """Speed > 1 is quantized to smallest bucket >= speed (ceil strategy)."""
     gen = _make_generator(max_speed=2.5)
     # Buckets: [1.0, 1.25, 1.5, 1.75, 2.0, 2.5]
-    # Ceil strategy: find smallest bucket >= speed
-    assert gen._quantize_speed(1.1) == 1.25  # 1.1 -> smallest bucket >= 1.1 is 1.25
+    assert gen._quantize_speed(1.1) == 1.25  # 1.1 -> 1.25
     assert gen._quantize_speed(1.2) == 1.25  # 1.2 -> 1.25
     assert gen._quantize_speed(1.25) == 1.25  # exact match
     assert gen._quantize_speed(1.26) == 1.5  # 1.26 -> 1.5
@@ -463,71 +364,70 @@ def test_quantize_speed_rounds_to_ceil_bucket():
 
 
 def test_quantize_speed_respects_max_speed_factor():
-    """量化结果不超过 max_speed_factor，超出时使用最大有效桶。"""
+    """Quantization does not exceed max_speed_factor."""
     gen = _make_generator(max_speed=1.5)
-    # With max_speed=1.5, valid buckets are [1.0, 1.25, 1.5]
-    # For speeds > max, we use the largest valid bucket (1.5)
+    # Valid buckets: [1.0, 1.25, 1.5]
     assert gen._quantize_speed(2.0) == 1.5  # capped at max
     assert gen._quantize_speed(1.8) == 1.5  # capped at max
-    assert gen._quantize_speed(1.6) == 1.5  # capped at max (no bucket >= 1.6 within limit)
+    assert gen._quantize_speed(1.6) == 1.5  # capped at max
     assert gen._quantize_speed(1.4) == 1.5  # ceil to 1.5
     assert gen._quantize_speed(1.26) == 1.5  # ceil to 1.5
 
 
 def test_quantize_speed_exact_bucket_values():
-    """精确的 bucket 值直接返回。"""
+    """Exact bucket values are returned directly."""
     gen = _make_generator(max_speed=2.5)
     for bucket in [1.0, 1.25, 1.5, 1.75, 2.0, 2.5]:
         assert gen._quantize_speed(bucket) == bucket
 
 
 # ---------------------------------------------------------------------------
-# _merge_segment_timings
+# _merge_sync_segments
 # ---------------------------------------------------------------------------
 
 
-def test_merge_segment_timings_empty_list():
-    """空列表返回空列表。"""
+def test_merge_sync_segments_empty_list():
+    """Empty list returns empty list."""
     gen = _make_generator()
-    assert gen._merge_segment_timings([]) == []
+    assert gen._merge_sync_segments([]) == []
 
 
-def test_merge_segment_timings_single_segment():
-    """单个 segment 原样返回。"""
+def test_merge_sync_segments_single_segment():
+    """Single segment is returned as-is."""
     gen = _make_generator()
-    timings = [SegmentTiming(0.0, 1.0, 0.0, 1.0, speed=1.0)]
-    result = gen._merge_segment_timings(timings)
+    segments = [SyncSegment(dst_start=0.0, dst_end=1.0, src_start=0.0, src_end=1.0, speed=1.0)]
+    result = gen._merge_sync_segments(segments)
     assert len(result) == 1
-    assert result[0] == timings[0]
+    assert result[0] == segments[0]
 
 
-def test_merge_segment_timings_adjacent_same_speed():
-    """相邻同速 segment 被合并。"""
+def test_merge_sync_segments_adjacent_same_speed():
+    """Adjacent segments with same speed are merged."""
     gen = _make_generator()
-    timings = [
-        SegmentTiming(0.0, 1.0, 0.0, 1.0, speed=1.5),
-        SegmentTiming(1.0, 2.0, 1.0, 1.0, speed=1.5),
-        SegmentTiming(2.0, 3.0, 2.0, 1.0, speed=1.5),
+    segments = [
+        SyncSegment(dst_start=0.0, dst_end=1.0, src_start=0.0, src_end=1.5, speed=1.5),
+        SyncSegment(dst_start=1.0, dst_end=2.0, src_start=1.5, src_end=3.0, speed=1.5),
+        SyncSegment(dst_start=2.0, dst_end=3.0, src_start=3.0, src_end=4.5, speed=1.5),
     ]
-    result = gen._merge_segment_timings(timings)
+    result = gen._merge_sync_segments(segments)
 
     assert len(result) == 1
     assert result[0].src_start == 0.0
-    assert result[0].src_end == 3.0
-    assert result[0].out_start == 0.0
-    assert result[0].out_duration == pytest.approx(3.0)
+    assert result[0].src_end == 4.5
+    assert result[0].dst_start == 0.0
+    assert result[0].dst_end == 3.0
     assert result[0].speed == 1.5
 
 
-def test_merge_segment_timings_different_speeds_not_merged():
-    """不同速度的 segment 不会被合并。"""
+def test_merge_sync_segments_different_speeds_not_merged():
+    """Segments with different speeds are not merged."""
     gen = _make_generator()
-    timings = [
-        SegmentTiming(0.0, 1.0, 0.0, 1.0, speed=1.0),
-        SegmentTiming(1.0, 2.0, 1.0, 0.5, speed=2.0),
-        SegmentTiming(2.0, 3.0, 1.5, 1.0, speed=1.0),
+    segments = [
+        SyncSegment(dst_start=0.0, dst_end=1.0, src_start=0.0, src_end=1.0, speed=1.0),
+        SyncSegment(dst_start=1.0, dst_end=1.5, src_start=1.0, src_end=2.0, speed=2.0),
+        SyncSegment(dst_start=1.5, dst_end=2.5, src_start=2.0, src_end=3.0, speed=1.0),
     ]
-    result = gen._merge_segment_timings(timings)
+    result = gen._merge_sync_segments(segments)
 
     assert len(result) == 3
     assert result[0].speed == 1.0
@@ -535,81 +435,60 @@ def test_merge_segment_timings_different_speeds_not_merged():
     assert result[2].speed == 1.0
 
 
-def test_merge_segment_timings_non_contiguous_not_merged():
-    """非连续的 segment（即使速度相同）不会被合并。"""
+def test_merge_sync_segments_non_contiguous_not_merged():
+    """Non-contiguous segments (even with same speed) are not merged."""
     gen = _make_generator()
-    timings = [
-        SegmentTiming(0.0, 1.0, 0.0, 1.0, speed=1.5),
-        SegmentTiming(1.5, 2.5, 1.0, 1.0, speed=1.5),  # gap of 0.5s
+    segments = [
+        SyncSegment(dst_start=0.0, dst_end=1.0, src_start=0.0, src_end=1.5, speed=1.5),
+        SyncSegment(dst_start=1.5, dst_end=2.5, src_start=2.0, src_end=3.5, speed=1.5),  # gap
     ]
-    result = gen._merge_segment_timings(timings)
+    result = gen._merge_sync_segments(segments)
 
     assert len(result) == 2
 
 
-def test_merge_segment_timings_mixed_scenario():
-    """混合场景：部分合并，部分保留。"""
+def test_merge_sync_segments_mixed_scenario():
+    """Mixed scenario: some merged, some kept."""
     gen = _make_generator()
-    timings = [
-        SegmentTiming(0.0, 1.0, 0.0, 1.0, speed=1.0),     # keep
-        SegmentTiming(1.0, 2.0, 1.0, 1.0, speed=1.0),     # merge with prev
-        SegmentTiming(2.0, 3.0, 2.0, 0.5, speed=2.0),     # new (diff speed)
-        SegmentTiming(3.0, 4.0, 2.5, 0.5, speed=2.0),     # merge with prev
-        SegmentTiming(4.0, 5.0, 3.0, 1.0, speed=1.0),     # new (diff speed)
+    segments = [
+        SyncSegment(dst_start=0.0, dst_end=1.0, src_start=0.0, src_end=1.0, speed=1.0),  # keep
+        SyncSegment(dst_start=1.0, dst_end=2.0, src_start=1.0, src_end=2.0, speed=1.0),  # merge
+        SyncSegment(dst_start=2.0, dst_end=2.5, src_start=2.0, src_end=3.0, speed=2.0),  # new
+        SyncSegment(dst_start=2.5, dst_end=3.0, src_start=3.0, src_end=4.0, speed=2.0),  # merge
+        SyncSegment(dst_start=3.0, dst_end=4.0, src_start=4.0, src_end=5.0, speed=1.0),  # new
     ]
-    result = gen._merge_segment_timings(timings)
+    result = gen._merge_sync_segments(segments)
 
     assert len(result) == 3
-    # First merged: 0-2s at 1.0x
+    # First merged: 0-2s src at 1.0x
     assert result[0].src_start == 0.0
     assert result[0].src_end == 2.0
-    assert result[0].out_duration == pytest.approx(2.0)
+    assert result[0].dst_end == 2.0
     assert result[0].speed == 1.0
-    # Second merged: 2-4s at 2.0x
+    # Second merged: 2-4s src at 2.0x
     assert result[1].src_start == 2.0
     assert result[1].src_end == 4.0
-    assert result[1].out_duration == pytest.approx(1.0)
     assert result[1].speed == 2.0
-    # Third: 4-5s at 1.0x
+    # Third: 4-5s src at 1.0x
     assert result[2].src_start == 4.0
     assert result[2].src_end == 5.0
     assert result[2].speed == 1.0
 
 
-def test_merge_segment_timings_preserves_is_filler():
-    """合并时 is_filler 只有在两段都为 filler 时才为 True。"""
-    gen = _make_generator()
-    # Both filler
-    timings1 = [
-        SegmentTiming(0.0, 1.0, 0.0, 1.0, speed=1.0, is_filler=True),
-        SegmentTiming(1.0, 2.0, 1.0, 1.0, speed=1.0, is_filler=True),
-    ]
-    result1 = gen._merge_segment_timings(timings1)
-    assert result1[0].is_filler is True
-
-    # Mixed filler
-    timings2 = [
-        SegmentTiming(0.0, 1.0, 0.0, 1.0, speed=1.0, is_filler=True),
-        SegmentTiming(1.0, 2.0, 1.0, 1.0, speed=1.0, is_filler=False),
-    ]
-    result2 = gen._merge_segment_timings(timings2)
-    assert result2[0].is_filler is False
-
-
-def test_merge_segment_timings_large_reduction(caplog):
-    """大量同速 segment 合并时记录日志。"""
+def test_merge_sync_segments_large_reduction(caplog):
+    """Large merge produces info log."""
     gen = _make_generator()
     caplog.set_level(logging.INFO)
     # Simulate 100 consecutive 1x speed segments
-    timings = [
-        SegmentTiming(i * 1.0, (i + 1) * 1.0, i * 1.0, 1.0, speed=1.0)
+    segments = [
+        SyncSegment(dst_start=i * 1.0, dst_end=(i + 1) * 1.0,
+                    src_start=i * 1.0, src_end=(i + 1) * 1.0, speed=1.0)
         for i in range(100)
     ]
-    result = gen._merge_segment_timings(timings)
+    result = gen._merge_sync_segments(segments)
 
     assert len(result) == 1
     assert result[0].src_start == 0.0
     assert result[0].src_end == 100.0
-    assert result[0].out_duration == pytest.approx(100.0)
-    assert "Merged 100 segments into 1" in caplog.text
+    assert "Merged 100 sync segments into 1" in caplog.text
     assert "99.0% reduction" in caplog.text

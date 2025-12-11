@@ -94,15 +94,33 @@ export interface VoiceoverEntry {
     subtitle_source: SubtitleSource | "path";
     subtitle_path: string;
     voiceover_audio_path: string;
-    dubbed_video_path: string;
+    sync_timeline_path: string;
     created_at: string;
     status?: "processing" | "done" | "error";
     error?: string | null;
     updated_at?: string;
+    /** Voiceover audio duration in seconds (available when status is "done") */
+    duration?: number;
 }
 
 export interface ListVoiceoversResponse {
     voiceovers: VoiceoverEntry[];
+}
+
+// Sync timeline for playback-side A/V synchronization
+export interface SyncTimelineSegment {
+    dst_start: number;    // Audio timeline start (seconds)
+    dst_end: number;      // Audio timeline end (seconds)
+    src_start: number;    // Video timeline start (seconds)
+    src_end: number;      // Video timeline end (seconds)
+    speed: number;        // Video playback rate = (src_end - src_start) / (dst_end - dst_start)
+}
+
+export interface SyncTimeline {
+    version: number;
+    source_video_duration: number;
+    voiceover_audio_duration: number;
+    segments: SyncTimelineSegment[];
 }
 
 export interface TimelineEntry {

@@ -1,14 +1,17 @@
-import { useRef, useState, forwardRef, useImperativeHandle, useEffect, useMemo } from "react";
+import { useRef, useState, forwardRef, useImperativeHandle, useEffect, useMemo, useCallback } from "react";
 import { Camera, Loader2, MessageSquare, FilePlus, Languages, Maximize, Minimize } from "lucide-react";
-import { captureSlide, API_BASE_URL } from "@/lib/api";
+import { captureSlide, API_BASE_URL, SyncTimeline } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Subtitle } from "@/lib/srt";
 import { getActiveSubtitles } from "@/lib/subtitleSearch";
 import { useGlobalSettingsStore } from "@/stores";
+import { useVoiceoverSync } from "@/hooks/useVoiceoverSync";
 
 interface VideoPlayerProps {
     videoId: string;
     voiceoverId?: string | null;
+    /** Sync timeline for playback-side A/V sync (when voiceoverId is set) */
+    syncTimeline?: SyncTimeline | null;
     subtitles?: Subtitle[];
     subtitleMode?: string;
     onSubtitleModeChange?: (mode: string) => void;
@@ -32,6 +35,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
     ({
         videoId,
         voiceoverId,
+        syncTimeline,
         subtitles,
         subtitleMode,
         onSubtitleModeChange,
@@ -41,24 +45,66 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
         onAddNoteAtTime,
         onPlayerReady,
     }, ref) => {
-        const videoRef = useRef<HTMLVideoElement>(null);
         const [isCapturing, setIsCapturing] = useState(false);
         const [currentTime, setCurrentTime] = useState(0);
         const [showLanguageMenu, setShowLanguageMenu] = useState(false);
+        const containerRef = useRef<HTMLDivElement>(null);
+        const [isFullscreen, setIsFullscreen] = useState(false);
 
+        // Voiceover sync hook
+        const {
+            videoRef,
+            audioRef,
+            isActive: isSyncActive,
+            startSync,
+            stopSync,
+            seekToVideoTime,
+            play: syncPlay,
+            pause: syncPause,
+            getCurrentVideoTime,
+        } = useVoiceoverSync();
+
+        // Expose ref methods
         useImperativeHandle(ref, () => ({
-            getCurrentTime: () => videoRef.current?.currentTime || 0,
+            getCurrentTime: () => {
+                // Always return video time for external consumers
+                return getCurrentVideoTime();
+            },
             seekTo: (time: number) => {
-                if (videoRef.current) {
-                    videoRef.current.currentTime = time;
+                // External callers always pass video time
+                // seekToVideoTime handles conversion to audio time internally when in sync mode
+                seekToVideoTime(time);
+            },
+            play: () => {
+                if (isSyncActive) {
+                    syncPlay();
+                } else {
+                    videoRef.current?.play();
                 }
             },
-            play: () => videoRef.current?.play(),
-            pause: () => videoRef.current?.pause(),
+            pause: () => {
+                if (isSyncActive) {
+                    syncPause();
+                } else {
+                    videoRef.current?.pause();
+                }
+            },
             isPlaying: () => !!(videoRef.current && !videoRef.current.paused && !videoRef.current.ended),
             getVideoElement: () => videoRef.current,
         }));
 
+        // Handle voiceover mode changes
+        useEffect(() => {
+            if (voiceoverId && syncTimeline) {
+                // Start sync mode
+                startSync(syncTimeline);
+            } else {
+                // Stop sync mode (if was active)
+                stopSync();
+            }
+        }, [voiceoverId, syncTimeline, startSync, stopSync]);
+
+        // Notify parent when player is ready
         useEffect(() => {
             if (!onPlayerReady) return;
             const videoElement = videoRef.current;
@@ -81,27 +127,35 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                 cancelled = true;
                 videoElement.removeEventListener("loadedmetadata", handleReady);
             };
-        }, [onPlayerReady, voiceoverId]);
+        }, [onPlayerReady, videoId]);
 
+        const handleTimeUpdate = useCallback(() => {
+            // CRITICAL: Always output VIDEO time to external consumers
+            // Subtitles, timeline markers, progress persistence all use video time
+            // The sync hook handles audio/video coordination internally
+            const time = videoRef.current?.currentTime ?? 0;
 
-        const handleTimeUpdate = () => {
-            if (videoRef.current) {
-                const time = videoRef.current.currentTime;
-                setCurrentTime(time);
-                if (onTimeUpdate) {
-                    onTimeUpdate(time);
-                }
-            }
-        };
+            setCurrentTime(time);
+            onTimeUpdate?.(time);
+        }, [onTimeUpdate, videoRef]);
+
+        // Set up time update listeners - always listen to video element
+        useEffect(() => {
+            const video = videoRef.current;
+            if (!video) return;
+
+            video.addEventListener("timeupdate", handleTimeUpdate);
+            return () => video.removeEventListener("timeupdate", handleTimeUpdate);
+        }, [handleTimeUpdate, videoRef]);
 
         const handleAsk = () => {
-            if (!videoRef.current || !onAskAtTime) return;
-            onAskAtTime(videoRef.current.currentTime);
+            if (!onAskAtTime) return;
+            onAskAtTime(currentTime);
         };
 
         const handleAddNote = () => {
-            if (!videoRef.current || !onAddNoteAtTime) return;
-            onAddNoteAtTime(videoRef.current.currentTime);
+            if (!onAddNoteAtTime) return;
+            onAddNoteAtTime(currentTime);
         };
 
         const handleCapture = async () => {
@@ -134,15 +188,11 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
         };
 
         // Filter active subtitles for the overlay using binary search
-        // O(log n) instead of O(n) - 100x faster for 1000 subtitles
         const activeSubtitles = useMemo(() => {
             return getActiveSubtitles(subtitles || [], currentTime);
         }, [subtitles, currentTime]);
 
-        const containerRef = useRef<HTMLDivElement>(null);
-        const [isFullscreen, setIsFullscreen] = useState(false);
-
-        // Global subtitle display preferences (per-user)
+        // Global subtitle display preferences
         const subtitleDisplay = useGlobalSettingsStore((s) => s.subtitleDisplay);
 
         useEffect(() => {
@@ -170,15 +220,18 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
             }
         };
 
-        // ... existing useEffects ...
+        // Build audio URL for voiceover
+        const voiceoverAudioUrl = voiceoverId
+            ? `${API_BASE_URL}/api/content/${videoId}/voiceovers/${encodeURIComponent(voiceoverId)}/audio`
+            : null;
 
         return (
             <div
                 ref={containerRef}
                 className="relative group rounded-xl overflow-hidden bg-black shadow-lg flex items-center justify-center bg-black"
             >
+                {/* Always use original video source */}
                 <video
-                    key={voiceoverId ?? "original"}
                     ref={videoRef}
                     className={cn(
                         "w-full",
@@ -186,24 +239,26 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                     )}
                     controls
                     crossOrigin="anonymous"
-                    onTimeUpdate={handleTimeUpdate}
                     controlsList="nodownload noremoteplayback"
                 >
                     <source
-                        src={
-                            voiceoverId
-                                ? `${API_BASE_URL}/api/content/${videoId}/voiceovers/${encodeURIComponent(
-                                      voiceoverId
-                                  )}/video`
-                                : `${API_BASE_URL}/api/content/${videoId}/video`
-                        }
+                        src={`${API_BASE_URL}/api/content/${videoId}/video`}
                         type="video/mp4"
                     />
-                    {/* Intentionally NOT rendering <track> elements to avoid native subtitles */}
                     Your browser does not support the video tag.
                 </video>
 
-                {/* Custom Subtitle Overlay - positioned above progress bar with lower z-index */}
+                {/* Hidden audio element for voiceover sync */}
+                {voiceoverAudioUrl && (
+                    <audio
+                        ref={audioRef}
+                        src={voiceoverAudioUrl}
+                        preload="auto"
+                        style={{ display: "none" }}
+                    />
+                )}
+
+                {/* Custom Subtitle Overlay */}
                 {subtitleMode !== "off" && subtitles && subtitles.length > 0 && activeSubtitles.length > 0 && (
                     <div
                         className="absolute left-0 right-0 flex flex-col items-center justify-end px-8 pointer-events-none z-[1]"

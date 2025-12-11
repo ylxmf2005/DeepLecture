@@ -111,6 +111,7 @@ export default function VideoPage() {
         voiceoversLoading,
         selectedVoiceoverId,
         setSelectedVoiceoverId,
+        selectedVoiceoverSyncTimeline,
         timelineEntries,
         setTimelineEntries,
         timelineLoading,
@@ -619,6 +620,7 @@ export default function VideoPage() {
                         content={content}
                         videoId={videoId}
                         selectedVoiceoverId={selectedVoiceoverId}
+                        selectedVoiceoverSyncTimeline={selectedVoiceoverSyncTimeline}
                         playerTracks={playerTracks}
                         playerSubtitles={playerSubtitles}
                         playerSubtitleMode={playerSubtitleMode}

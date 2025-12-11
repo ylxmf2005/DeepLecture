@@ -64,7 +64,7 @@ class TestVoiceoverSync(unittest.TestCase):
                 f.write(b"audio")
             generator.durations[path] = 0.8  # TTS produces 0.8s audio for 1s slot
 
-        audio_files, segment_timings = generator._build_aligned_segment_files(
+        audio_files, segment_timings = generator._build_aligned_segments(
             segments, segments_dir, video_duration=2.0
         )
 
@@ -125,7 +125,7 @@ class TestVoiceoverSync(unittest.TestCase):
             f.write(b"audio")
         generator.durations[path] = 1.0  # TTS produces 1s for 2s slot
 
-        audio_files, segment_timings = generator._build_aligned_segment_files(
+        audio_files, segment_timings = generator._build_aligned_segments(
             segments, segments_dir, video_duration=2.0
         )
 
@@ -178,7 +178,7 @@ class TestVoiceoverSync(unittest.TestCase):
             f.write(b"audio")
         generator.durations[path] = 1.0
 
-        audio_files, segment_timings = generator._build_aligned_segment_files(
+        audio_files, segment_timings = generator._build_aligned_segments(
             segments, segments_dir, video_duration=2.0
         )
 
