@@ -3,17 +3,26 @@ name: Claude PR Review
 on:
   pull_request_target:
     types: [opened, ready_for_review]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: number
 
 jobs:
   pr-review:
-    # Skip draft PRs and bot actors
+    # Skip draft PRs and bot actors, or triggered by /review command
     if: |
-      github.event.pull_request.draft == false &&
-      !endsWith(github.actor, '[bot]')
+      (github.event_name == 'pull_request_target' && github.event.pull_request.draft == false && !endsWith(github.actor, '[bot]')) ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request && contains(github.event.comment.body, '/review')) ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:
-      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
       cancel-in-progress: false
     permissions:
       contents: read
