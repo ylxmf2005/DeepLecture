@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import type { VideoPlayerRef } from "@/components/VideoPlayer";
+import type { VideoPlayerRef } from "@/components/video/VideoPlayer";
 import type { TimelineEntry } from "@/lib/api";
 
 /**

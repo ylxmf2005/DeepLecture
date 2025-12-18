@@ -36,4 +36,3 @@ export interface AskMessage {
     role: "user" | "assistant";
     content: string;
 }
-

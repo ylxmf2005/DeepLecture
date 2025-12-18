@@ -27,16 +27,13 @@ export function binarySearchSubtitle(
     const mid = Math.floor((left + right) / 2);
     const sub = subtitles[mid];
 
-    // Check whether the time falls within this subtitle
     if (currentTime >= sub.startTime && currentTime < sub.endTime) {
       return mid;
     }
 
-    // If current time is before the subtitle start, search left half
     if (currentTime < sub.startTime) {
       right = mid - 1;
     } else {
-      // Otherwise search right half
       left = mid + 1;
     }
   }
@@ -62,10 +59,7 @@ export function getActiveSubtitles(
 
   const idx = binarySearchSubtitle(subtitles, currentTime);
 
-  // No direct match found
   if (idx === -1) {
-    // Extra check: binary search may land in a gap while overlaps exist
-    // Scan the last few possible matches linearly
     const result: Subtitle[] = [];
     for (let i = Math.max(0, subtitles.length - 5); i < subtitles.length; i++) {
       if (
@@ -80,7 +74,6 @@ export function getActiveSubtitles(
 
   const result: Subtitle[] = [subtitles[idx]];
 
-  // Scan backward to include overlapping neighbors
   for (let i = idx - 1; i >= 0 && i >= idx - 3; i--) {
     if (
       currentTime >= subtitles[i].startTime &&
@@ -88,12 +81,10 @@ export function getActiveSubtitles(
     ) {
       result.unshift(subtitles[i]);
     } else if (subtitles[i].endTime <= subtitles[idx].startTime) {
-      // Already fully before the active cue; stop scanning backward
       break;
     }
   }
 
-  // Scan forward to include overlapping neighbors
   for (let i = idx + 1; i < subtitles.length && i <= idx + 3; i++) {
     if (
       currentTime >= subtitles[i].startTime &&
@@ -101,7 +92,6 @@ export function getActiveSubtitles(
     ) {
       result.push(subtitles[i]);
     } else if (subtitles[i].startTime >= currentTime) {
-      // Later subtitles haven't started; stop scanning forward
       break;
     }
   }
@@ -127,11 +117,9 @@ export function findNearestSubtitle(
   let left = 0;
   let right = subtitles.length - 1;
 
-  // Boundary cases
   if (targetTime <= subtitles[0].startTime) return 0;
   if (targetTime >= subtitles[right].startTime) return right;
 
-  // Binary search for the nearest side
   while (left < right - 1) {
     const mid = Math.floor((left + right) / 2);
     if (subtitles[mid].startTime <= targetTime) {
@@ -141,7 +129,6 @@ export function findNearestSubtitle(
     }
   }
 
-  // Compare which side is closer
   const leftDist = Math.abs(subtitles[left].startTime - targetTime);
   const rightDist = Math.abs(subtitles[right].startTime - targetTime);
 
@@ -167,14 +154,24 @@ export function findSubtitleAtTime(
     return null;
   }
 
-  for (let i = 0; i < subtitles.length; i++) {
-    const sub = subtitles[i];
-    const nextStart =
-      i + 1 < subtitles.length ? subtitles[i + 1].startTime : Number.POSITIVE_INFINITY;
-    if (time >= sub.startTime && time < nextStart) {
-      return sub;
+  // Binary search for the last subtitle whose startTime <= time
+  let left = 0;
+  let right = subtitles.length - 1;
+
+  if (time < subtitles[0].startTime) return null;
+
+  while (left < right) {
+    const mid = Math.floor((left + right + 1) / 2);
+    if (subtitles[mid].startTime <= time) {
+      left = mid;
+    } else {
+      right = mid - 1;
     }
   }
 
-  return null;
+  const sub = subtitles[left];
+  const nextStart =
+    left + 1 < subtitles.length ? subtitles[left + 1].startTime : Number.POSITIVE_INFINITY;
+
+  return time >= sub.startTime && time < nextStart ? sub : null;
 }

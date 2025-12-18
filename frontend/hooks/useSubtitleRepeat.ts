@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import type { VideoPlayerRef } from "@/components/VideoPlayer";
+import type { VideoPlayerRef } from "@/components/video/VideoPlayer";
 import type { Subtitle } from "@/lib/srt";
-import { findSubtitleAtTime } from "@/lib/subtitleSearch";
+import { findSubtitleAtTime, binarySearchSubtitle } from "@/lib/subtitleSearch";
 
 export interface UseSubtitleRepeatOptions {
     playerRef: React.RefObject<VideoPlayerRef | null>;
@@ -37,6 +37,7 @@ export function useSubtitleRepeat({
         key: null,
         count: 0,
     });
+    const lastSubtitleIndexRef = useRef<number>(-1);
     const lastTimeRef = useRef(0);
     const lastSubtitleRef = useRef<Subtitle | null>(null);
     const repeatSeekTargetRef = useRef<number | null>(null);
@@ -44,6 +45,7 @@ export function useSubtitleRepeat({
     const resetRepeatState = useCallback(() => {
         subtitleRepeatStateRef.current = { key: null, count: 0 };
         lastSubtitleRef.current = null;
+        lastSubtitleIndexRef.current = -1;
         repeatSeekTargetRef.current = null;
         lastTimeRef.current = 0;
     }, []);
@@ -95,6 +97,7 @@ export function useSubtitleRepeat({
                 repeatSeekTargetRef.current = null;
             }
 
+            // Gap-fill semantics for repeat: keep the last cue active until the next cue starts.
             const curSub = hasSubs ? findSubtitleAtTime(time, subtitles) : null;
             const prevSub = lastSubtitleRef.current;
 
@@ -117,14 +120,21 @@ export function useSubtitleRepeat({
                 return;
             }
 
-            const idx = subtitles.indexOf(activeSub);
-            if (idx < 0) {
-                subtitleRepeatStateRef.current = { key: null, count: 0 };
-                lastTimeRef.current = time;
-                lastSubtitleRef.current = curSub;
-                onBaseTimeUpdate(time);
-                return;
+            // Avoid O(n) indexOf on each timeupdate.
+            // Prefer cached index; fall back to binary search by time.
+            let idx = lastSubtitleIndexRef.current;
+            if (idx < 0 || subtitles[idx] !== activeSub) {
+                idx = binarySearchSubtitle(subtitles, activeSub.startTime + 1e-6);
+                if (idx < 0) {
+                    subtitleRepeatStateRef.current = { key: null, count: 0 };
+                    lastTimeRef.current = time;
+                    lastSubtitleRef.current = curSub;
+                    lastSubtitleIndexRef.current = -1;
+                    onBaseTimeUpdate(time);
+                    return;
+                }
             }
+            lastSubtitleIndexRef.current = idx;
 
             const key = `${idx}-${activeSub.startTime}-${activeSub.endTime}`;
             const state = subtitleRepeatStateRef.current;

@@ -22,6 +22,7 @@ dependencies = [
     "pillow>=10.0.0",
     "sqlalchemy>=2.0.44",
     "tomli>=2.0.0;python_version<'3.11'",
+    "rq>=2.6.1",
 ]
 
 [project.optional-dependencies]
@@ -41,7 +42,9 @@ gpu = [
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.5.0",
     "ruff>=0.8.0",
+    "pre-commit>=3.5.0",
 ]
 
 [project.scripts]
@@ -57,13 +60,63 @@ packages = ["src/deeplecture", "scripts"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-v"
+addopts = "-v --strict-markers"
+markers = [
+    "unit: Unit tests - no I/O, no network, deterministic",
+    "integration: Integration tests - local I/O with tmp, external services mocked",
+    "e2e: End-to-end tests - real services, real binaries (skipped by default)",
+    "contract: Contract tests for port implementations",
+    "slow: Long-running tests",
+    "serial: Tests that cannot run in parallel",
+    "requires_network: Tests requiring external network",
+    "requires_gpu: Tests requiring GPU",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
 
 [tool.ruff]
 src = ["src", "tests"]
+target-version = "py310"
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W"]
-ignore = ["E501"]
+select = [
+    # === Ruff official recommended core rules ===
+    "E",      # pycodestyle errors
+    "F",      # Pyflakes
+    "UP",     # pyupgrade - automatically upgrade old syntax
+    "B",      # flake8-bugbear - common bug detection
+    "SIM",    # flake8-simplify - code simplification
+    "I",      # isort - import sorting
+    # === Type annotation related ===
+    "TCH",    # flake8-type-checking - TYPE_CHECKING optimization
+    "FA",     # flake8-future-annotations
+    # === Optional but recommended ===
+    "W",      # pycodestyle warnings
+    "C4",     # flake8-comprehensions - comprehension optimization
+    "PIE",    # flake8-pie - miscellaneous optimization
+    "RUF",    # Ruff-specific rules
+]
 
+ignore = [
+    "E501",   # Line length (handled by formatter)
+    "RUF001", # Unicode characters in strings (required for multi-language support)
+    "RUF002", # Unicode characters in docstrings
+    "RUF003", # Unicode characters in comments
+]
+
+# Auto-fix all fixable rules
+fixable = ["ALL"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["deeplecture"]
+
+[tool.ruff.lint.flake8-type-checking]
+strict = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"

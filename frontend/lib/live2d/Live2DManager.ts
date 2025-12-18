@@ -1,14 +1,14 @@
 // @ts-nocheck
 /**
- * Live2D Manager - 管理 Live2D 模型的加载、渲染和交互
- * 适配 Next.js + React 环境
+ * Live2D Manager - Manages Live2D model loading, rendering and interaction
+ * Adapted for Next.js + React environment
  */
 
 import { CubismFramework, Option, LogLevel } from './live2dcubismframework';
 import { CubismMatrix44 } from './math/cubismmatrix44';
 import { CubismViewMatrix } from './math/cubismviewmatrix';
 
-// 全局配置
+// Global configuration
 export interface Live2DConfig {
   resourcesPath: string;
   modelName: string;
@@ -19,7 +19,7 @@ export interface Live2DConfig {
   debug?: boolean;
 }
 
-// 默认配置
+// Default configuration
 const defaultConfig: Partial<Live2DConfig> = {
   resourcesPath: '/live2d/models/',
   width: 800,
@@ -29,7 +29,7 @@ const defaultConfig: Partial<Live2DConfig> = {
 };
 
 /**
- * Live2D 管理器单例类
+ * Live2D Manager Singleton Class
  */
 export class Live2DManager {
   private static _instance: Live2DManager | null = null;
@@ -41,7 +41,7 @@ export class Live2DManager {
   private _viewMatrix: CubismViewMatrix | null = null;
   private _projectionMatrix: CubismMatrix44 | null = null;
 
-  // 模型位置和缩放
+  // Model position and scale
   private _modelX: number = 0;
   private _modelY: number = 0;
   private _modelScale: number = 1.0;
@@ -63,7 +63,7 @@ export class Live2DManager {
   }
 
   /**
-   * 初始化 Live2D 框架
+   * Initialize Live2D Framework
    */
   public async initialize(config: Live2DConfig): Promise<boolean> {
     if (this._initialized) {
@@ -73,25 +73,25 @@ export class Live2DManager {
 
     this._config = { ...defaultConfig, ...config };
 
-    // 获取 canvas
+    // Get canvas
     this._canvas = document.getElementById(config.canvasId) as HTMLCanvasElement;
     if (!this._canvas) {
       console.error(`Canvas with id "${config.canvasId}" not found`);
       return false;
     }
 
-    // 设置 canvas 尺寸
+    // Set canvas dimensions
     this._canvas.width = this._config.width!;
     this._canvas.height = this._config.height!;
 
-    // 初始化 WebGL
+    // Initialize WebGL
     this._gl = this._canvas.getContext('webgl') || this._canvas.getContext('experimental-webgl') as WebGLRenderingContext;
     if (!this._gl) {
       console.error('WebGL not supported');
       return false;
     }
 
-    // 初始化 Cubism Framework
+    // Initialize Cubism Framework
     const cubismOption = new Option();
     cubismOption.logFunction = (message: string) => {
       if (this._config?.debug) {
@@ -107,7 +107,7 @@ export class Live2DManager {
 
     CubismFramework.initialize();
 
-    // 初始化视图矩阵
+    // Initialize view matrix
     this._viewMatrix = new CubismViewMatrix();
     this._projectionMatrix = new CubismMatrix44();
 
@@ -118,7 +118,7 @@ export class Live2DManager {
   }
 
   /**
-   * 释放资源
+   * Release resources
    */
   public release(): void {
     if (this._animationFrameId !== null) {
@@ -139,7 +139,7 @@ export class Live2DManager {
   }
 
   /**
-   * 设置模型位置
+   * Set model position
    */
   public setModelPosition(x: number, y: number): void {
     this._modelX = x;
@@ -147,35 +147,35 @@ export class Live2DManager {
   }
 
   /**
-   * 设置模型缩放
+   * Set model scale
    */
   public setModelScale(scale: number): void {
     this._modelScale = Math.max(0.1, Math.min(5.0, scale));
   }
 
   /**
-   * 获取当前配置
+   * Get current configuration
    */
   public getConfig(): Live2DConfig | null {
     return this._config;
   }
 
   /**
-   * 检查是否已初始化
+   * Check if initialized
    */
   public isInitialized(): boolean {
     return this._initialized;
   }
 
   /**
-   * 获取 WebGL 上下文
+   * Get WebGL context
    */
   public getGL(): WebGLRenderingContext | null {
     return this._gl;
   }
 
   /**
-   * 获取 Canvas
+   * Get Canvas
    */
   public getCanvas(): HTMLCanvasElement | null {
     return this._canvas;

@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { logger } from "@/shared/infrastructure";
+import { toError, getErrorMessage } from "@/lib/utils/errorUtils";
+
+const log = logger.scope("ErrorHandler");
+
+/** Auto-dismiss timeout for non-error notifications */
+const AUTO_DISMISS_MS = 5000;
 
 export interface AppError {
     id: string;
@@ -24,6 +31,17 @@ interface UseErrorHandlerReturn {
  */
 export function useErrorHandler(): UseErrorHandlerReturn {
     const [errors, setErrors] = useState<AppError[]>([]);
+    // Track timeout IDs for cleanup on unmount or manual dismiss
+    const timeoutMapRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+    // Cleanup all pending timeouts on unmount
+    useEffect(() => {
+        const timeoutMap = timeoutMapRef.current;
+        return () => {
+            timeoutMap.forEach(clearTimeout);
+            timeoutMap.clear();
+        };
+    }, []);
 
     const addError = useCallback(
         (message: string, type: AppError["type"] = "error", details?: string) => {
@@ -37,43 +55,42 @@ export function useErrorHandler(): UseErrorHandlerReturn {
 
             setErrors((prev) => [...prev, newError]);
 
-            // Auto-remove after 5 seconds for non-errors
+            // Auto-remove after timeout for non-errors, with proper cleanup tracking
             if (type !== "error") {
-                setTimeout(() => {
+                const timeoutId = setTimeout(() => {
+                    timeoutMapRef.current.delete(newError.id);
                     setErrors((prev) => prev.filter((e) => e.id !== newError.id));
-                }, 5000);
+                }, AUTO_DISMISS_MS);
+                timeoutMapRef.current.set(newError.id, timeoutId);
             }
         },
         []
     );
 
     const removeError = useCallback((id: string) => {
+        // Clear any pending auto-dismiss timeout for this error
+        const timeoutId = timeoutMapRef.current.get(id);
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutMapRef.current.delete(id);
+        }
         setErrors((prev) => prev.filter((e) => e.id !== id));
     }, []);
 
     const clearErrors = useCallback(() => {
+        // Clear all pending timeouts
+        timeoutMapRef.current.forEach(clearTimeout);
+        timeoutMapRef.current.clear();
         setErrors([]);
     }, []);
 
     const handleApiError = useCallback(
         (error: unknown, fallbackMessage = "An unexpected error occurred") => {
-            let message = fallbackMessage;
-            let details: string | undefined;
+            const errorObj = toError(error);
+            const message = getErrorMessage(error, fallbackMessage);
+            const details = errorObj.stack;
 
-            if (error instanceof Error) {
-                message = error.message || fallbackMessage;
-                details = error.stack;
-            } else if (typeof error === "object" && error !== null) {
-                const errorObj = error as Record<string, unknown>;
-                if (typeof errorObj.message === "string") {
-                    message = errorObj.message;
-                }
-                if (typeof errorObj.detail === "string") {
-                    message = errorObj.detail;
-                }
-            }
-
-            console.error("API Error:", error);
+            log.error("API Error", errorObj, { fallbackMessage, details });
             addError(message, "error", details);
         },
         [addError]

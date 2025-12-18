@@ -5,12 +5,18 @@ This is a one-time migration that reads all existing metadata.json files
 and imports them into the new SQLite database. After this migration,
 the JSON files are no longer the source of truth.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+    from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +30,9 @@ class Migration:
         """Import all JSON metadata into SQLite."""
         from contextlib import contextmanager
         from pathlib import Path
-        from typing import Generator
 
         from sqlalchemy import create_engine
-        from sqlalchemy.orm import Session, sessionmaker
+        from sqlalchemy.orm import sessionmaker
 
         from deeplecture.storage.models import Base, ContentMetadataModel
 
@@ -99,7 +104,13 @@ def _migrate_legacy_format(data: dict[str, Any]) -> dict[str, Any]:
     """Migrate legacy metadata format inline during import."""
     # Skip if already migrated
     if "video_status" in data:
-        for legacy_field in ["status", "processing_job_id", "has_subtitles", "has_translation", "has_enhanced_subtitles"]:
+        for legacy_field in [
+            "status",
+            "processing_job_id",
+            "has_subtitles",
+            "has_translation",
+            "has_enhanced_subtitles",
+        ]:
             data.pop(legacy_field, None)
         return data
 

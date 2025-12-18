@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { Header } from "@/components/Header";
-import { LearnerProfileProvider } from "@/components/LearnerProfileProvider";
+import { Header } from "@/components/layout/Header";
+import { LearnerProfileProvider } from "@/components/providers/LearnerProfileProvider";
 import { ConfirmDialogProvider } from "@/contexts/ConfirmDialogContext";
-import { ThemeProvider } from "@/components/ThemeProvider";
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { AppInitializer } from "@/components/providers/AppInitializer";
+import { RootErrorBoundary } from "@/components/providers/RootErrorBoundary";
 import { Toaster } from "sonner";
 import "./globals.css";
 import { cn } from "@/lib/utils";
@@ -29,14 +31,18 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <ConfirmDialogProvider>
-            <LearnerProfileProvider>
-              <Header />
-              <main className="container mx-auto py-8 px-4">
-                {children}
-              </main>
-            </LearnerProfileProvider>
-          </ConfirmDialogProvider>
+          <RootErrorBoundary>
+            <AppInitializer>
+              <ConfirmDialogProvider>
+                <LearnerProfileProvider>
+                  <Header />
+                  <main className="container mx-auto py-8 px-4">
+                    {children}
+                  </main>
+                </LearnerProfileProvider>
+              </ConfirmDialogProvider>
+            </AppInitializer>
+          </RootErrorBoundary>
           <Toaster richColors position="bottom-right" />
         </ThemeProvider>
       </body>

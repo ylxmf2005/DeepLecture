@@ -25,6 +25,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import json
 import logging
@@ -132,9 +133,7 @@ def _save_migration_state(state: dict[str, Any]) -> None:
 
     try:
         # Write to temp file first, then atomic rename
-        fd, temp_path = tempfile.mkstemp(
-            dir=MIGRATION_STATE_FILE.parent, prefix=".migration_state_", suffix=".tmp"
-        )
+        fd, temp_path = tempfile.mkstemp(dir=MIGRATION_STATE_FILE.parent, prefix=".migration_state_", suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(state, f, indent=2)
@@ -142,10 +141,8 @@ def _save_migration_state(state: dict[str, Any]) -> None:
                 os.fsync(f.fileno())
             shutil.move(temp_path, MIGRATION_STATE_FILE)
         except Exception:
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(temp_path)
-            except OSError:
-                pass
             raise
     except Exception as e:
         logger.error("Failed to save migration state: %s", e)

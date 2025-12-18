@@ -344,8 +344,6 @@ export class LAppSubdelegate {
     return this._view.getScale();
   }
 
-  // ========== Expression & Motion API ==========
-
   /**
    * 指定した表情をセットする
    * @param expressionId 表情ID
@@ -404,8 +402,6 @@ export class LAppSubdelegate {
     };
   }
 
-  // ========== Lip Sync API ==========
-
   /**
    * Play audio from URL with lip sync
    * @param url Audio file URL
@@ -417,12 +413,12 @@ export class LAppSubdelegate {
   }
 
   /**
-   * Connect an audio element for lip sync
-   * @param audioElement HTMLAudioElement to connect
+   * Connect a media element (audio or video) for lip sync
+   * @param mediaElement HTMLMediaElement to connect
    */
-  public async connectAudioForLipSync(audioElement: HTMLAudioElement): Promise<void> {
+  public async connectAudioForLipSync(mediaElement: HTMLMediaElement): Promise<void> {
     this._live2dManager.enableExternalLipSync();
-    return this._lipSyncManager.connectAudioElement(audioElement);
+    return this._lipSyncManager.connectAudioElement(mediaElement);
   }
 
   /**

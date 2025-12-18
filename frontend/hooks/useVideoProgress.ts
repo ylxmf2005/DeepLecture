@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useCallback, useEffect } from "react";
-import type { VideoPlayerRef } from "@/components/VideoPlayer";
+import type { VideoPlayerRef } from "@/components/video/VideoPlayer";
 import { useVideoStateStore, useVideoProgress as useStoredProgress } from "@/stores";
 
 const PROGRESS_SAVE_THRESHOLD_SECONDS = 5;

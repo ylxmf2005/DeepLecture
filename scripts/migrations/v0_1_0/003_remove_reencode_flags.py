@@ -4,6 +4,7 @@ Migration: Drop requires_reencode / reencode_reason columns from content_metadat
 Why: these fields are deprecated and should not exist in the schema.
 This migration rebuilds the table without those columns in an idempotent way.
 """
+
 from __future__ import annotations
 
 import logging

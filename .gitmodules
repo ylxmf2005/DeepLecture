@@ -1,0 +1,4 @@
+[submodule "standard-tts"]
+	path = standard-tts
+	url = https://github.com/ylxmf2005/standard-tts.git
+	ignore = dirty

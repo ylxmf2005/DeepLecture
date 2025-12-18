@@ -98,11 +98,6 @@ export function useTaskNotification(): UseTaskNotificationReturn {
         return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
     }, []);
 
-    // Keep local permission state in sync so consumers re-render immediately after user decision
-    useEffect(() => {
-        setBrowserPermissionStatus(readNotificationPermission());
-    }, []);
-
     const requestNotificationPermission = useCallback(async (): Promise<boolean> => {
         if (!("Notification" in window)) {
             setBrowserPermissionStatus("unsupported");

@@ -2,6 +2,9 @@
 
 import { useRef, useCallback, useEffect, useState } from "react";
 import type { SyncTimeline, SyncTimelineSegment } from "@/lib/api";
+import { logger } from "@/shared/infrastructure";
+
+const log = logger.scope("VoiceoverSync");
 
 /**
  * Playback-side A/V sync hook.
@@ -58,7 +61,7 @@ function findSegmentByAudioTime(segments: SyncTimelineSegment[], audioTime: numb
 
     while (lo <= hi) {
         const mid = Math.floor((lo + hi) / 2);
-        if (segments[mid].dst_start <= audioTime) {
+        if (segments[mid].dstStart <= audioTime) {
             result = mid;
             lo = mid + 1;
         } else {
@@ -79,7 +82,7 @@ function findSegmentByVideoTime(segments: SyncTimelineSegment[], videoTime: numb
 
     while (lo <= hi) {
         const mid = Math.floor((lo + hi) / 2);
-        if (segments[mid].src_start <= videoTime) {
+        if (segments[mid].srcStart <= videoTime) {
             result = mid;
             lo = mid + 1;
         } else {
@@ -101,9 +104,9 @@ function mapAudioToVideo(
     segmentIndex: number
 ): { videoTime: number; speed: number } {
     const seg = segments[Math.max(0, Math.min(segmentIndex, segments.length - 1))];
-    const rawVideoTime = seg.src_start + (audioTime - seg.dst_start) * seg.speed;
+    const rawVideoTime = seg.srcStart + (audioTime - seg.dstStart) * seg.speed;
     // Clamp to segment boundaries to prevent overshoot
-    const videoTime = clamp(rawVideoTime, seg.src_start, seg.src_end);
+    const videoTime = clamp(rawVideoTime, seg.srcStart, seg.srcEnd);
     return { videoTime, speed: seg.speed };
 }
 
@@ -118,9 +121,13 @@ function mapVideoToAudio(
     segmentIndex: number
 ): number {
     const seg = segments[Math.max(0, Math.min(segmentIndex, segments.length - 1))];
-    const rawAudioTime = seg.dst_start + (videoTime - seg.src_start) / seg.speed;
+    // Guard against invalid speed (division by zero)
+    if (!Number.isFinite(seg.speed) || seg.speed <= 1e-6) {
+        return seg.dstStart;
+    }
+    const rawAudioTime = seg.dstStart + (videoTime - seg.srcStart) / seg.speed;
     // Clamp to segment boundaries to prevent overshoot
-    return clamp(rawAudioTime, seg.dst_start, seg.dst_end);
+    return clamp(rawAudioTime, seg.dstStart, seg.dstEnd);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -145,8 +152,7 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
     const userRateRef = useRef<number>(initialUserRate);
     const isActiveRef = useRef<boolean>(false);
     const tickIdRef = useRef<number | null>(null);
-    // Flag to suppress ratechange handler when tick adjusts video.playbackRate
-    const suppressRateChangeRef = useRef<boolean>(false);
+    const pendingStartSyncCleanupRef = useRef<(() => void) | null>(null);
     // Store pre-sync video state to restore when exiting voiceover mode
     const preSyncVideoStateRef = useRef<{ muted: boolean; volume: number } | null>(null);
 
@@ -184,20 +190,22 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
         // Target video rate = segment speed * user rate (audio playback rate already reflects user rate)
         const targetRate = speed * userRateRef.current;
 
-        if (Math.abs(drift) > driftTolerance) {
+        if (targetRate > 4.0) {
+            // Extreme speed needed (TTS too short): skip directly to target time
+            video.currentTime = videoTime;
+            video.playbackRate = 4.0;
+        } else if (targetRate < 0.25) {
+            // Extreme slow needed (TTS too long): hold at target time with min rate
+            video.currentTime = videoTime;
+            video.playbackRate = 0.25;
+        } else if (Math.abs(drift) > driftTolerance) {
             // Large drift: seek directly
             video.currentTime = videoTime;
-            // Suppress ratechange handler to prevent feedback loop
-            suppressRateChangeRef.current = true;
             video.playbackRate = clamp(targetRate, 0.25, 4.0);
-            suppressRateChangeRef.current = false;
         } else {
             // Small drift: smooth rate adjustment
             const smoothedRate = lerp(video.playbackRate, targetRate, 0.6);
-            // Suppress ratechange handler to prevent feedback loop
-            suppressRateChangeRef.current = true;
             video.playbackRate = clamp(smoothedRate, 0.25, 4.0);
-            suppressRateChangeRef.current = false;
         }
     }, [driftTolerance]);
 
@@ -235,21 +243,36 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
         const audio = audioRef.current;
 
         if (!video || !audio) {
-            console.warn("useVoiceoverSync: video or audio ref not attached");
+            log.warn("Video or audio ref not attached");
             return;
         }
+
+        // Cancel any previous "wait for metadata" setup to avoid stacking listeners/timeouts
+        pendingStartSyncCleanupRef.current?.();
+        pendingStartSyncCleanupRef.current = null;
+
+        // Switching timelines/audio: stop the current tick loop first.
+        // (We intentionally do NOT restore video state here; switching voiceovers should stay in sync mode.)
+        stopTickLoop();
+
+        // Ensure we don't keep old audio playing while reconfiguring.
+        audio.pause();
 
         timelineRef.current = timeline;
         isActiveRef.current = true;
         setIsActive(true);
 
-        // Save pre-sync video state before modifying
-        preSyncVideoStateRef.current = {
-            muted: video.muted,
-            volume: video.volume,
-        };
+        // Save pre-sync video state only when ENTERING sync mode.
+        // If we overwrite this on voiceover switches, stopSync() will restore to "already muted",
+        // effectively breaking exit from voiceover mode.
+        if (!preSyncVideoStateRef.current) {
+            preSyncVideoStateRef.current = {
+                muted: video.muted,
+                volume: video.volume,
+            };
+        }
 
-        // Mute video, audio will play the voiceover
+        // Always keep video muted in sync mode; audio will play the voiceover
         video.muted = true;
 
         // Apply user playback rate to audio immediately
@@ -272,9 +295,7 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
 
                 // Set initial video playback rate based on segment speed
                 const seg = timeline.segments[idx];
-                suppressRateChangeRef.current = true;
                 video.playbackRate = clamp(seg.speed * userRateRef.current, 0.25, 4.0);
-                suppressRateChangeRef.current = false;
             } else {
                 segmentIndexRef.current = 0;
                 setCurrentSegmentIndex(0);
@@ -283,7 +304,21 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
             // If video was playing, start audio too
             if (!video.paused) {
                 audio.play().catch(() => {
-                    console.warn("useVoiceoverSync: audio.play() blocked on startSync");
+                    // Autoplay blocked: rollback to prevent "silent video" state
+                    log.warn("Audio play blocked on startSync - rolling back");
+                    stopTickLoop();
+                    isActiveRef.current = false;
+                    timelineRef.current = null;
+                    setIsActive(false);
+                    // Restore video state
+                    const preSyncState = preSyncVideoStateRef.current;
+                    if (preSyncState) {
+                        video.muted = preSyncState.muted;
+                        video.volume = preSyncState.volume;
+                        preSyncVideoStateRef.current = null;
+                    }
+                    video.playbackRate = userRateRef.current;
+                    video.pause();
                 });
             }
 
@@ -295,17 +330,68 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
             // Metadata already loaded
             setupSync();
         } else {
+            let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+            const cleanup = () => {
+                audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+                audio.removeEventListener("error", handleAudioError);
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
+                if (pendingStartSyncCleanupRef.current === cleanup) {
+                    pendingStartSyncCleanupRef.current = null;
+                }
+            };
+
             // Wait for metadata
             const handleLoadedMetadata = () => {
-                audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+                cleanup();
                 // Check if sync is still active - user may have toggled off while waiting
                 if (isActiveRef.current) {
                     setupSync();
                 }
             };
+
+            // Handle audio load failure - rollback video muted state
+            const handleAudioError = () => {
+                cleanup();
+                log.error("Audio failed to load - rolling back sync mode");
+                rollbackSync();
+            };
+
+            // Rollback helper
+            const rollbackSync = () => {
+                stopTickLoop();
+                isActiveRef.current = false;
+                timelineRef.current = null;
+                setIsActive(false);
+
+                const preSyncState = preSyncVideoStateRef.current;
+                if (preSyncState) {
+                    video.muted = preSyncState.muted;
+                    video.volume = preSyncState.volume;
+                    preSyncVideoStateRef.current = null;
+                } else {
+                    video.muted = false;
+                }
+                video.playbackRate = userRateRef.current;
+            };
+
             audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+            audio.addEventListener("error", handleAudioError);
+            pendingStartSyncCleanupRef.current = cleanup;
+
+            // Timeout fallback - if audio doesn't load within 5 seconds, rollback
+            timeoutId = setTimeout(() => {
+                if (audio.readyState < 1 && isActiveRef.current) {
+                    cleanup();
+                    log.warn("Audio metadata timeout - rolling back sync mode");
+                    rollbackSync();
+                }
+            }, 5000);
         }
-    }, [startTickLoop]);
+    }, [startTickLoop, stopTickLoop]);
 
     /**
      * Stop voiceover sync mode (restore original video)
@@ -313,6 +399,9 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
     const stopSync = useCallback(() => {
         const video = videoRef.current;
         const audio = audioRef.current;
+
+        pendingStartSyncCleanupRef.current?.();
+        pendingStartSyncCleanupRef.current = null;
 
         stopTickLoop();
         isActiveRef.current = false;
@@ -376,7 +465,9 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
      * In sync mode, applies to BOTH audio and video to maintain synchronization
      */
     const setUserRate = useCallback((rate: number) => {
-        userRateRef.current = rate;
+        // Store clamped rate to ensure targetRate calculations match actual audio playback
+        const clampedRate = clamp(rate, 0.25, 4.0);
+        userRateRef.current = clampedRate;
         const video = videoRef.current;
         const audio = audioRef.current;
         const timeline = timelineRef.current;
@@ -384,19 +475,15 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
         if (isActiveRef.current && timeline && timeline.segments.length > 0) {
             // In sync mode: set audio rate to user rate, video rate = segment.speed * user rate
             if (audio) {
-                audio.playbackRate = clamp(rate, 0.25, 4.0);
+                audio.playbackRate = clampedRate;
             }
             if (video) {
                 const seg = timeline.segments[segmentIndexRef.current];
-                suppressRateChangeRef.current = true;
-                video.playbackRate = clamp(seg.speed * rate, 0.25, 4.0);
-                suppressRateChangeRef.current = false;
+                video.playbackRate = clamp(seg.speed * clampedRate, 0.25, 4.0);
             }
         } else if (video) {
             // Not in sync mode: just set video rate
-            suppressRateChangeRef.current = true;
-            video.playbackRate = clamp(rate, 0.25, 4.0);
-            suppressRateChangeRef.current = false;
+            video.playbackRate = clampedRate;
         }
     }, []);
 
@@ -425,7 +512,7 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
                 startTickLoop();
             } catch (error) {
                 // Handle autoplay blocked by browser
-                console.warn("useVoiceoverSync: play() blocked by browser", error);
+                log.warn("Play blocked by browser", { error: error instanceof Error ? error.message : String(error) });
                 // Rollback: pause audio if video play failed to keep them in sync
                 if (audio && !audio.paused) {
                     audio.pause();
@@ -462,6 +549,8 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
     // Cleanup on unmount
     useEffect(() => {
         return () => {
+            pendingStartSyncCleanupRef.current?.();
+            pendingStartSyncCleanupRef.current = null;
             stopTickLoop();
         };
     }, [stopTickLoop]);
@@ -480,7 +569,7 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
                 // Seek video to end before stopping sync
                 if (video && timeline && timeline.segments.length > 0) {
                     const lastSeg = timeline.segments[timeline.segments.length - 1];
-                    video.currentTime = lastSeg.src_end;
+                    video.currentTime = lastSeg.srcEnd;
                 }
 
                 stopSync();
@@ -501,25 +590,24 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
         const audio = audioRef.current;
         if (!video || !audio) return;
 
-        // Mirror native video play to audio
         const handleVideoPlay = () => {
             if (isActiveRef.current && audio.paused) {
                 audio.play().then(() => {
-                    // Restart tick loop after successful audio play
                     startTickLoop();
                 }).catch(() => {
-                    // Autoplay blocked - user needs to interact first
-                    console.warn("useVoiceoverSync: audio.play() blocked, pausing video");
                     video.pause();
                 });
             } else if (isActiveRef.current && !audio.paused) {
-                // Audio already playing, just restart tick loop
                 startTickLoop();
             }
         };
 
-        // Mirror native video pause to audio
         const handleVideoPause = () => {
+            // Ignore pause events triggered by browser background tab optimization
+            // Chrome auto-pauses muted videos when tab is hidden
+            if (document.hidden) {
+                return;
+            }
             if (isActiveRef.current && !audio.paused) {
                 audio.pause();
                 stopTickLoop();
@@ -545,19 +633,35 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
 
             // Update video playback rate immediately based on new segment
             const seg = timeline.segments[idx];
-            suppressRateChangeRef.current = true;
             video.playbackRate = clamp(seg.speed * userRateRef.current, 0.25, 4.0);
-            suppressRateChangeRef.current = false;
         };
 
         video.addEventListener("play", handleVideoPlay);
         video.addEventListener("pause", handleVideoPause);
         video.addEventListener("seeked", handleVideoSeeked);
 
+        // Handle visibility change - restore playback when tab becomes visible
+        // Chrome auto-pauses muted videos when tab is hidden, we need to resume
+        const handleVisibilityChange = () => {
+            if (!document.hidden && isActiveRef.current) {
+                // Tab became visible, check if we need to restore playback
+                // Audio continues playing in background, but video was paused by browser
+                if (!audio.paused && video.paused) {
+                    video.play().catch(() => {
+                        // If video play fails, pause audio to keep sync
+                        audio.pause();
+                    });
+                }
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
         return () => {
             video.removeEventListener("play", handleVideoPlay);
             video.removeEventListener("pause", handleVideoPause);
             video.removeEventListener("seeked", handleVideoSeeked);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
         };
     }, [startTickLoop, stopTickLoop, isActive]);
 

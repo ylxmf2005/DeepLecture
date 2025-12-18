@@ -9,7 +9,11 @@ import {
     STORAGE_KEYS,
     STORAGE_VERSIONS,
 } from "./types";
-import { getLanguageSettings } from "@/lib/api";
+import { getLanguageSettings, getNoteDefaults, getAppConfig } from "@/lib/api";
+import { logger } from "@/shared/infrastructure";
+import { toError } from "@/lib/utils/errorUtils";
+
+const log = logger.scope("GlobalSettingsStore");
 
 interface GlobalSettingsState extends GlobalSettings {
     _hydrated: boolean;
@@ -20,7 +24,7 @@ type GlobalSettingsStore = GlobalSettingsState & GlobalSettingsActions;
 
 export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
     persist(
-        (set, get) => ({
+        (set) => ({
             ...DEFAULT_GLOBAL_SETTINGS,
             _hydrated: false,
             _languageLoading: false,
@@ -73,11 +77,6 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
                     language: { ...state.language, original: lang },
                 })),
 
-            setAiLanguage: (lang) =>
-                set((state) => ({
-                    language: { ...state.language, ai: lang },
-                })),
-
             setTranslatedLanguage: (lang) =>
                 set((state) => ({
                     language: { ...state.language, translated: lang },
@@ -89,13 +88,12 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
                     const data = await getLanguageSettings();
                     set((state) => ({
                         language: {
-                            original: data.original_language ?? state.language.original,
-                            ai: data.ai_language ?? state.language.ai,
-                            translated: data.translated_language ?? state.language.translated,
+                            original: data.originalLanguage ?? state.language.original,
+                            translated: data.translatedLanguage ?? state.language.translated,
                         },
                     }));
                 } catch (e) {
-                    console.error("Failed to load language from server:", e);
+                    log.error("Failed to load language from server", toError(e));
                 } finally {
                     set({ _languageLoading: false });
                 }
@@ -146,6 +144,59 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
 
             setLearnerProfile: (profile) => set({ learnerProfile: profile }),
 
+            setNoteContextMode: (mode) =>
+                set((state) => ({
+                    note: { ...state.note, contextMode: mode },
+                })),
+
+            loadNoteDefaultsFromServer: async () => {
+                try {
+                    const data = await getNoteDefaults();
+                    set((state) => ({
+                        note: {
+                            ...state.note,
+                            contextMode: data.defaultContextMode ?? state.note.contextMode,
+                        },
+                    }));
+                } catch (e) {
+                    log.error("Failed to load note defaults from server", toError(e));
+                }
+            },
+
+            setAILlmModel: (model) =>
+                set((state) => ({
+                    ai: { ...state.ai, llmModel: model },
+                })),
+
+            setAITtsModel: (model) =>
+                set((state) => ({
+                    ai: { ...state.ai, ttsModel: model },
+                })),
+
+            setAIPrompt: (funcId, implId) =>
+                set((state) => ({
+                    ai: {
+                        ...state.ai,
+                        prompts: { ...state.ai.prompts, [funcId]: implId },
+                    },
+                })),
+
+            resetAIPrompt: (funcId) =>
+                set((state) => {
+                    const { [funcId]: _, ...rest } = state.ai.prompts;
+                    return { ai: { ...state.ai, prompts: rest } };
+                }),
+
+            loadAIConfigFromServer: async () => {
+                try {
+                    await getAppConfig();
+                    // Config loaded - defaults are managed by backend
+                    // User preferences in store override backend defaults
+                } catch (e) {
+                    log.error("Failed to load AI config from server", toError(e));
+                }
+            },
+
             resetToDefaults: () =>
                 set({
                     ...DEFAULT_GLOBAL_SETTINGS,
@@ -165,13 +216,15 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
                 hideSidebars: state.hideSidebars,
                 live2d: state.live2d,
                 learnerProfile: state.learnerProfile,
+                note: state.note,
+                ai: state.ai,
             }),
 
             onRehydrateStorage: () => () => {
                 useGlobalSettingsStore.setState({ _hydrated: true });
             },
 
-            migrate: (persistedState) => {
+            migrate: (persistedState, version) => {
                 // Merge persisted state with defaults so newly added settings
                 // (like subtitleDisplay) always have sane values.
                 if (!persistedState) {
@@ -184,6 +237,24 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
 
                 const state = persistedState as GlobalSettingsState;
 
+                // v1 → v2: Remove language.ai, use it as translated if present
+                // (language.ai was the AI output language, now consolidated into translated)
+                let migratedLanguage = {
+                    ...DEFAULT_GLOBAL_SETTINGS.language,
+                    ...(state.language ?? DEFAULT_GLOBAL_SETTINGS.language),
+                };
+
+                if (version < 2 && state.language) {
+                    const legacyLang = state.language as { original?: string; ai?: string; translated?: string };
+                    // If user had ai language set, use it as translated (AI outputs should use this)
+                    if (legacyLang.ai) {
+                        migratedLanguage = {
+                            original: legacyLang.original ?? DEFAULT_GLOBAL_SETTINGS.language.original,
+                            translated: legacyLang.ai, // Use ai as target language
+                        };
+                    }
+                }
+
                 return {
                     ...DEFAULT_GLOBAL_SETTINGS,
                     ...state,
@@ -191,10 +262,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
                         ...DEFAULT_GLOBAL_SETTINGS.playback,
                         ...(state.playback ?? DEFAULT_GLOBAL_SETTINGS.playback),
                     },
-                    language: {
-                        ...DEFAULT_GLOBAL_SETTINGS.language,
-                        ...(state.language ?? DEFAULT_GLOBAL_SETTINGS.language),
-                    },
+                    language: migratedLanguage,
                     live2d: {
                         ...DEFAULT_GLOBAL_SETTINGS.live2d,
                         ...(state.live2d ?? DEFAULT_GLOBAL_SETTINGS.live2d),
@@ -206,6 +274,14 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
                     notifications: {
                         ...DEFAULT_GLOBAL_SETTINGS.notifications,
                         ...((state as GlobalSettingsState & { notifications?: typeof DEFAULT_GLOBAL_SETTINGS.notifications }).notifications ?? DEFAULT_GLOBAL_SETTINGS.notifications),
+                    },
+                    note: {
+                        ...DEFAULT_GLOBAL_SETTINGS.note,
+                        ...(state.note ?? DEFAULT_GLOBAL_SETTINGS.note),
+                    },
+                    ai: {
+                        ...DEFAULT_GLOBAL_SETTINGS.ai,
+                        ...(state.ai ?? DEFAULT_GLOBAL_SETTINGS.ai),
                     },
                 } as GlobalSettingsState;
             },
@@ -228,5 +304,11 @@ export const useNotificationSettings = () =>
 export const useLearnerProfile = () =>
     useGlobalSettingsStore((state) => state.learnerProfile);
 
+export const useNoteSettings = () =>
+    useGlobalSettingsStore((state) => state.note);
+
 export const useIsHydrated = () =>
     useGlobalSettingsStore((state) => state._hydrated);
+
+export const useAISettings = () =>
+    useGlobalSettingsStore((state) => state.ai);

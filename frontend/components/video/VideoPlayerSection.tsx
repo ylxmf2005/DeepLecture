@@ -1,22 +1,24 @@
 "use client";
 
 import { forwardRef, useState, useRef, useEffect } from "react";
-import { VideoPlayer, VideoPlayerRef } from "@/components/VideoPlayer";
+import { VideoPlayer, VideoPlayerRef } from "@/components/video/VideoPlayer";
 import { ContentItem, API_BASE_URL, SyncTimeline } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { FileText, BookOpen, Loader2, Maximize, Minimize } from "lucide-react";
-import type { PlayerTrack, SubtitleMode } from "@/hooks/useSubtitleManagement";
+import type { SubtitleDisplayMode } from "@/stores/types";
 import { Subtitle } from "@/lib/srt";
+import { logger } from "@/shared/infrastructure";
+
+const log = logger.scope("VideoPlayerSection");
 
 interface VideoPlayerSectionProps {
     content: ContentItem;
     videoId: string;
     selectedVoiceoverId: string | null;
     selectedVoiceoverSyncTimeline: SyncTimeline | null;
-    playerTracks: PlayerTrack[];
     playerSubtitles: Subtitle[];
-    playerSubtitleMode: SubtitleMode;
-    setPlayerSubtitleMode: (mode: SubtitleMode) => void;
+    playerSubtitleMode: SubtitleDisplayMode;
+    setPlayerSubtitleMode: (mode: SubtitleDisplayMode) => void;
     generatingVideo: boolean;
     onTimeUpdate: (time: number) => void;
     onCapture: (timestamp: number, imagePath: string) => void;
@@ -38,7 +40,6 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
             videoId,
             selectedVoiceoverId,
             selectedVoiceoverSyncTimeline,
-            playerTracks,
             playerSubtitles,
             playerSubtitleMode,
             setPlayerSubtitleMode,
@@ -93,7 +94,7 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                     await document.exitFullscreen();
                 }
             } catch (err) {
-                console.error("Error toggling slide fullscreen:", err);
+                log.error("Failed to toggle slide fullscreen", err instanceof Error ? err : new Error(String(err)));
             }
         };
 
@@ -220,11 +221,17 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                         <VideoPlayer
                             ref={ref}
                             videoId={videoId}
+                            title={content.filename}
                             voiceoverId={selectedVoiceoverId}
                             syncTimeline={selectedVoiceoverSyncTimeline}
                             subtitles={playerSubtitles}
                             subtitleMode={playerSubtitleMode}
-                            onSubtitleModeChange={(mode) => setPlayerSubtitleMode(mode as SubtitleMode)}
+                            onSubtitleModeChange={(mode) => {
+                                // "off" is ephemeral UI state, don't persist it to store
+                                if (mode !== "off") {
+                                    setPlayerSubtitleMode(mode);
+                                }
+                            }}
                             onTimeUpdate={onTimeUpdate}
                             onCapture={onCapture}
                             onAskAtTime={onAskAtTime}

@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL } from '@/lib/api';
+import { logger } from '@/shared/infrastructure';
+import { toError } from '@/lib/utils/errorUtils';
+
+const log = logger.scope('TaskStatus');
 
 export interface TaskStatus {
     id?: string;
@@ -23,10 +27,19 @@ export function useTaskStatus(contentId: string | null): UseTaskStatusReturn {
     const retryCountRef = useRef(0);
     const maxRetries = 3;
 
+    // Reset state when contentId becomes null (prop-driven state reset)
+    useEffect(() => {
+        if (contentId) return;
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- Prop-driven reset to avoid stale tasks when contentId clears
+        setTasks({});
+        if (isConnected) {
+
+            setIsConnected(false);
+        }
+    }, [contentId, isConnected]);
+
     useEffect(() => {
         if (!contentId) {
-            setIsConnected(false);
-            setTasks({});
             return;
         }
 
@@ -39,11 +52,11 @@ export function useTaskStatus(contentId: string | null): UseTaskStatusReturn {
             }
 
             // Direct connection to Flask backend, bypassing Next.js proxy
-            const url = `${API_BASE_URL}/api/events/${contentId}`;
+            const url = `${API_BASE_URL}/api/task/stream/${contentId}`;
             eventSource = new EventSource(url);
 
             eventSource.onopen = () => {
-                console.log(`SSE connected directly to ${url}`);
+                log.debug('SSE connected', { url });
                 setIsConnected(true);
                 retryCountRef.current = 0;
             };
@@ -53,7 +66,7 @@ export function useTaskStatus(contentId: string | null): UseTaskStatusReturn {
                     const data = JSON.parse(event.data);
                     const { event: eventType, task } = data;
 
-                    console.log(`[SSE] Received event: ${eventType}, task type: ${task?.type}, status: ${task?.status}`);
+                    log.debug('SSE event received', { eventType, taskType: task?.type, status: task?.status });
 
                     if (task) {
                         const id = task.task_id || task.id;
@@ -65,12 +78,12 @@ export function useTaskStatus(contentId: string | null): UseTaskStatusReturn {
                         }
                     }
                 } catch (err) {
-                    console.error('Failed to parse SSE message:', err);
+                    log.error('Failed to parse SSE message', toError(err));
                 }
             };
 
-            eventSource.onerror = (err) => {
-                console.error('SSE error:', err);
+            eventSource.onerror = () => {
+                log.warn('SSE connection error', { contentId });
                 setIsConnected(false);
                 if (eventSource) {
                     eventSource.close();
@@ -79,11 +92,11 @@ export function useTaskStatus(contentId: string | null): UseTaskStatusReturn {
 
                 if (retryCountRef.current < maxRetries) {
                     const delay = 1000 * Math.pow(2, retryCountRef.current);
-                    console.log(`Retrying SSE connection in ${delay}ms... (Attempt ${retryCountRef.current + 1}/${maxRetries})`);
+                    log.info('Retrying SSE connection', { delay, attempt: retryCountRef.current + 1, maxRetries });
                     retryCountRef.current += 1;
                     retryTimeout = setTimeout(connect, delay);
                 } else {
-                    console.error('Max SSE retries reached. Connection failed.');
+                    log.error('Max SSE retries reached, connection failed', new Error('SSE connection failed'), { contentId, maxRetries });
                 }
             };
         };

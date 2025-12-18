@@ -124,3 +124,93 @@ video::cue {
 video::-webkit-media-controls-fullscreen-button {
   display: none !important;
 }
+
+/* React Video Seek Slider Customization */
+.video-progress-bar-wrapper {
+  padding-top: 40px;
+  margin-top: -40px;
+}
+
+.video-progress-bar-wrapper .ui-video-seek-slider {
+  padding: 0;
+  height: 4px;
+  transition: height 0.1s ease-in-out;
+  overflow: visible !important;
+}
+
+.video-progress-bar-wrapper:hover .ui-video-seek-slider {
+    height: 6px; /* Expand on hover */
+}
+
+.video-progress-bar-wrapper .ui-video-seek-slider .track {
+  background-color: rgba(255, 255, 255, 0.3) !important; /* Track background */
+  border-radius: 9999px;
+  height: 100%;
+  padding: 0 !important;
+  border: none !important;
+}
+
+.video-progress-bar-wrapper .ui-video-seek-slider .track .main {
+    background: transparent !important;
+    height: 100% !important;
+    top: 0 !important;
+}
+
+/* Hide the ghost elements inside .main */
+.video-progress-bar-wrapper .ui-video-seek-slider .track .main .inner-seek-block {
+    top: 0 !important;
+    bottom: 0 !important;
+    height: 100% !important;
+}
+
+.video-progress-bar-wrapper .ui-video-seek-slider .track .main .inner-seek-block.buffered {
+    background: transparent !important;
+}
+
+/* Progress fill */
+.video-progress-bar-wrapper .ui-video-seek-slider .track .connect {
+  background-color: #ffffff !important;
+  border-radius: 9999px;
+}
+
+/* Thumb/Handle */
+.video-progress-bar-wrapper .ui-video-seek-slider .thumb {
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 12px !important;
+  height: 12px !important;
+  margin-left: -6px; /* Center horizontally */
+  opacity: 0; /* Hidden by default */
+  transition: opacity 0.2s;
+  pointer-events: none; /* Let clicks pass through if not dragging */
+  z-index: 20;
+}
+
+.video-progress-bar-wrapper .ui-video-seek-slider .thumb .handler {
+    background-color: #ffffff !important;
+    border-radius: 50%;
+    width: 100% !important;
+    height: 100% !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    border: none !important;
+}
+
+/* Show thumb on hover or active */
+.video-progress-bar-wrapper:hover .ui-video-seek-slider .thumb,
+.video-progress-bar-wrapper .ui-video-seek-slider:active .thumb,
+.video-progress-bar-wrapper .ui-video-seek-slider.active .thumb {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Time Tooltip */
+.video-progress-bar-wrapper .ui-video-seek-slider .hover-time {
+    background-color: rgba(0, 0, 0, 0.9) !important;
+    color: white !important;
+    font-size: 12px !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+    top: -35px !important;
+    font-family: var(--font-mono), monospace;
+    z-index: 50 !important;
+}

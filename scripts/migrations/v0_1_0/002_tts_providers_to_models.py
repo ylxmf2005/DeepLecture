@@ -3,6 +3,7 @@ Migration: Rename tts.providers to tts.models in config file.
 
 Unifies naming convention with llm.models for consistency.
 """
+
 from __future__ import annotations
 
 import logging

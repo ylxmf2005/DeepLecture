@@ -224,8 +224,6 @@ export class LAppLive2DManager {
   _models: csmVector<LAppModel>; // モデルインスタンスのコンテナ
   private _sceneIndex: number; // 表示するシーンのインデックス値
 
-  // ========== API Methods ==========
-
   /**
    * 指定した表情をセットする
    * @param expressionId 表情ID
@@ -294,8 +292,6 @@ export class LAppLive2DManager {
     return [];
   }
 
-  // ========== Callbacks ==========
-
   // モーション再生開始のコールバック関数
   beganMotion = (self: ACubismMotion): void => {
     LAppPal.printMessage('Motion Began:');
@@ -306,8 +302,6 @@ export class LAppLive2DManager {
     LAppPal.printMessage('Motion Finished:');
     console.log(self);
   };
-
-  // ========== Lip Sync API ==========
 
   /**
    * Set lip sync value directly (for external audio analysis)

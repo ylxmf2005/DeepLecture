@@ -17,6 +17,7 @@ import {
     FileBarChart,
     ScrollText,
     Mic,
+    ShieldCheck,
 } from "lucide-react";
 import type { TabId, PanelId } from "@/stores/tabLayoutStore";
 
@@ -26,6 +27,7 @@ export const TAB_CONFIG: Record<TabId, { label: string; icon: React.ReactNode }>
     explanations: { label: "Explain", icon: <BookOpen className="w-4 h-4" /> },
     timeline: { label: "Timeline", icon: <LayoutList className="w-4 h-4" /> },
     ask: { label: "Ask", icon: <MessageSquare className="w-4 h-4" /> },
+    verify: { label: "Verify", icon: <ShieldCheck className="w-4 h-4" /> },
     notes: { label: "Notes", icon: <StickyNote className="w-4 h-4" /> },
     flashcard: { label: "Flashcard", icon: <CreditCard className="w-4 h-4" /> },
     test: { label: "Test", icon: <CheckSquare className="w-4 h-4" /> },

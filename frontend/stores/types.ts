@@ -1,6 +1,7 @@
 "use client";
 
-import { API_BASE_URL } from "@/lib/api";
+// Direct env access to avoid circular dependency with @/lib/api
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:11393";
 
 /**
  * Zustand Store Type Definitions
@@ -9,10 +10,6 @@ import { API_BASE_URL } from "@/lib/api";
  * 1. GlobalSettingsStore - user-level preferences (persisted globally)
  * 2. VideoStateStore - per-video state (persisted per videoId)
  */
-
-// =============================================================================
-// Global Settings (user-level, single localStorage key)
-// =============================================================================
 
 export interface Live2DSettings {
     enabled: boolean;
@@ -23,9 +20,10 @@ export interface Live2DSettings {
 }
 
 export interface LanguageSettings {
-    original: string;      // e.g., "en"
-    ai: string;            // e.g., "zh"
-    translated: string;    // e.g., "zh"
+    /** Source language (video audio language for Whisper transcription) */
+    original: string;
+    /** Target language (used for translations, AI explanations, timelines, notes) */
+    translated: string;
 }
 
 export interface PlaybackSettings {
@@ -37,42 +35,38 @@ export interface PlaybackSettings {
 }
 
 export interface SubtitleDisplaySettings {
-    // Base font size in pixels for subtitles in normal (non-fullscreen) mode
     fontSize: number;
-    // Vertical offset from the bottom of the video in pixels
     bottomOffset: number;
 }
 
 export interface NotificationSettings {
-    // Enable browser notifications (requires permission)
     browserNotificationsEnabled: boolean;
-    // Enable toast notifications in-app
     toastNotificationsEnabled: boolean;
-    // Enable title flash when tab is in background
     titleFlashEnabled: boolean;
 }
 
+export type NoteContextMode = "subtitle" | "slide" | "both";
+
+export interface NoteSettings {
+    contextMode: NoteContextMode;
+}
+
+export interface AISettings {
+    llmModel: string | null;
+    ttsModel: string | null;
+    prompts: Record<string, string>;
+}
+
 export interface GlobalSettings {
-    // Playback behavior
     playback: PlaybackSettings;
-
-    // Language preferences (also synced to server)
     language: LanguageSettings;
-
-    // UI preferences
     hideSidebars: boolean;
-
-    // Subtitle display preferences (applies to all videos)
     subtitleDisplay: SubtitleDisplaySettings;
-
-    // Notification preferences
     notifications: NotificationSettings;
-
-    // Live2D avatar settings
     live2d: Live2DSettings;
-
-    // AI context / learner profile
     learnerProfile: string;
+    note: NoteSettings;
+    ai: AISettings;
 }
 
 export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
@@ -85,7 +79,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     },
     subtitleDisplay: {
         fontSize: 16,
-        bottomOffset: 56, // roughly Tailwind bottom-14 (3.5rem)
+        bottomOffset: 56,
     },
     notifications: {
         browserNotificationsEnabled: false,
@@ -94,7 +88,6 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     },
     language: {
         original: "en",
-        ai: "zh",
         translated: "zh",
     },
     hideSidebars: false,
@@ -106,13 +99,24 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
         syncWithVideoAudio: true,
     },
     learnerProfile: "",
+    note: {
+        contextMode: "both",
+    },
+    ai: {
+        llmModel: null,
+        ttsModel: null,
+        prompts: {},
+    },
 };
 
-// =============================================================================
-// Per-Video State (keyed by videoId)
-// =============================================================================
-
-export type SubtitleMode = "en" | "zh" | "en_zh" | "zh_en";
+/**
+ * Semantic subtitle display mode (language-agnostic).
+ * - source: Show only source language subtitles
+ * - target: Show only target language subtitles
+ * - dual: Show source on top, target below
+ * - dual_reversed: Show target on top, source below
+ */
+export type SubtitleDisplayMode = "source" | "target" | "dual" | "dual_reversed";
 
 export interface VideoNotes {
     draft: string;
@@ -126,118 +130,77 @@ export interface VideoDeck {
 }
 
 export interface VideoState {
-    // Subtitle display preferences
-    subtitleModePlayer: SubtitleMode;
-    subtitleModeSidebar: SubtitleMode;
-
-    // Smart Skip toggle (per-video because it depends on timeline)
+    subtitleModePlayer: SubtitleDisplayMode;
+    subtitleModeSidebar: SubtitleDisplayMode;
     smartSkipEnabled: boolean;
-
-    // Playback progress (seconds)
     progressSeconds: number | null;
-
-    // Attached slide deck
     deck: VideoDeck | null;
-
-    // Notes (local draft with server sync)
     notes: VideoNotes;
-
-    // Selected voiceover track (null = original audio)
     selectedVoiceoverId: string | null;
 }
 
+export const EMPTY_VIDEO_NOTES: VideoNotes = Object.freeze({
+    draft: "",
+    dirty: false,
+    lastSyncedAt: null,
+});
+
 export const DEFAULT_VIDEO_STATE: VideoState = {
-    subtitleModePlayer: "en",
-    subtitleModeSidebar: "en",
+    subtitleModePlayer: "source",
+    subtitleModeSidebar: "source",
     smartSkipEnabled: false,
     progressSeconds: null,
     deck: null,
-    notes: {
-        draft: "",
-        dirty: false,
-        lastSyncedAt: null,
-    },
+    notes: EMPTY_VIDEO_NOTES,
     selectedVoiceoverId: null,
 };
 
-// =============================================================================
-// Store Actions
-// =============================================================================
-
 export interface GlobalSettingsActions {
-    // Playback
     setAutoPauseOnLeave: (value: boolean) => void;
     setAutoResumeOnReturn: (value: boolean) => void;
     setSummaryThresholdSeconds: (seconds: number) => void;
     setSubtitleContextWindowSeconds: (seconds: number) => void;
     setSubtitleRepeatCount: (count: number) => void;
-
-    // Subtitle display
     setSubtitleFontSize: (size: number) => void;
     setSubtitleBottomOffset: (offset: number) => void;
-
-    // Language (local state, loaded from server on init)
     setOriginalLanguage: (lang: string) => void;
-    setAiLanguage: (lang: string) => void;
     setTranslatedLanguage: (lang: string) => void;
     loadLanguageFromServer: () => Promise<void>;
-
-    // UI
     toggleHideSidebars: () => void;
-
-    // Notifications
     setBrowserNotificationsEnabled: (value: boolean) => void;
     setToastNotificationsEnabled: (value: boolean) => void;
     setTitleFlashEnabled: (value: boolean) => void;
-
-    // Live2D
     toggleLive2d: () => void;
     setLive2dModelPath: (path: string) => void;
     setLive2dModelPosition: (position: { x: number; y: number }) => void;
     setLive2dModelScale: (scale: number) => void;
     toggleLive2dSyncWithVideo: () => void;
-
-    // Learner profile
     setLearnerProfile: (profile: string) => void;
-
-    // Reset
+    setNoteContextMode: (mode: NoteContextMode) => void;
+    loadNoteDefaultsFromServer: () => Promise<void>;
+    setAILlmModel: (model: string | null) => void;
+    setAITtsModel: (model: string | null) => void;
+    setAIPrompt: (funcId: string, implId: string) => void;
+    resetAIPrompt: (funcId: string) => void;
+    loadAIConfigFromServer: () => Promise<void>;
     resetToDefaults: () => void;
 }
 
 export interface VideoStateActions {
-    // Get or initialize state for a video
     getVideoState: (videoId: string) => VideoState;
-
-    // Subtitle mode
-    setSubtitleModePlayer: (videoId: string, mode: SubtitleMode) => void;
-    setSubtitleModeSidebar: (videoId: string, mode: SubtitleMode) => void;
-
-    // Smart Skip
+    setSubtitleModePlayer: (videoId: string, mode: SubtitleDisplayMode) => void;
+    setSubtitleModeSidebar: (videoId: string, mode: SubtitleDisplayMode) => void;
     setSmartSkipEnabled: (videoId: string, enabled: boolean) => void;
     toggleSmartSkip: (videoId: string) => void;
-
-    // Progress
     setProgress: (videoId: string, seconds: number) => void;
     clearProgress: (videoId: string) => void;
-
-    // Deck
     setDeck: (videoId: string, deck: VideoDeck | null) => void;
-
-    // Notes
     setNotesDraft: (videoId: string, draft: string) => void;
     markNotesSynced: (videoId: string) => void;
-
-    // Voiceover selection
     setSelectedVoiceoverId: (videoId: string, voiceoverId: string | null) => void;
-
-    // Cleanup
     clearVideoState: (videoId: string) => void;
     clearAllVideoStates: () => void;
 }
-
-// =============================================================================
-// Storage Keys & Versioning
-// =============================================================================
 
 export const STORAGE_KEYS = {
     GLOBAL_SETTINGS: "courseSubtitle:global-settings",
@@ -245,6 +208,19 @@ export const STORAGE_KEYS = {
 } as const;
 
 export const STORAGE_VERSIONS = {
-    GLOBAL_SETTINGS: 1,
-    VIDEO_STATE: 1,
+    GLOBAL_SETTINGS: 3, // Bumped: added ai settings (llmModel, ttsModel, prompts)
+    VIDEO_STATE: 2, // Bumped for semantic subtitle mode migration (en/zh → source/target/dual/dual_reversed)
 } as const;
+
+/** Maps legacy subtitle mode values to semantic equivalents */
+export const LEGACY_SUBTITLE_MODE_MAP: Record<string, SubtitleDisplayMode> = {
+    en: "source",
+    zh: "target",
+    en_zh: "dual",
+    zh_en: "dual_reversed",
+    // Also accept new values for forward compat
+    source: "source",
+    target: "target",
+    dual: "dual",
+    dual_reversed: "dual_reversed",
+};

@@ -46,9 +46,6 @@ export function parseSRT(content: string): Subtitle[] {
 }
 
 function cleanSubtitleText(text: string): string {
-    // Remove HTML tags (e.g. <font>, <b>, <i>) to ensure clean text display
-    // and prevent VTT errors or raw tags showing up in the UI.
-    // We also remove curly brace tags like {\an8} often found in SRTs.
     return text
         .replace(/<[^>]+>/g, "")
         .replace(/\{.*?\}/g, "")
@@ -70,12 +67,10 @@ export function stringifyVTT(subtitles: Subtitle[]): string {
         .map((sub, index) => {
             const startTime = formatVttTimestamp(sub.startTime);
             const endTime = formatVttTimestamp(sub.endTime);
-            // Add line:85% to force subtitles to stay at the bottom and prevent jumping
             return `${index + 1}\n${startTime} --> ${endTime} line:85%\n${sub.text}\n`;
         })
         .join("\n");
 
-    // WEBVTT header is required for browsers to recognise the track
     return `WEBVTT\n\n${cues}`.trimEnd() + "\n";
 }
 
@@ -104,17 +99,9 @@ export function mergeSubtitles(
     secondary: Subtitle[],
     primaryIsTop: boolean = true
 ): Subtitle[] {
-    // We assume both subtitle files are synchronized and have the same number of lines
-    // because the backend translator preserves structure.
-    // However, to be safe, we'll try to match by index, but fallback or handle mismatches gracefully?
-    // Given the strict backend logic, index matching is the most reliable assumption for this project.
-
     return primary.map((sub, index) => {
         const secondarySub = secondary[index];
         const secondaryText = secondarySub ? secondarySub.text : "";
-
-        // Simple stacking: Top line \n Bottom line
-        // We can optionally add some formatting if VTT/SRT supports it (SRT supports basic tags)
 
         let text = "";
         if (primaryIsTop) {

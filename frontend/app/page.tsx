@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { VideoUpload } from "@/components/VideoUpload";
-import { VideoList } from "@/components/VideoList";
+import { VideoUpload } from "@/components/video/VideoUpload";
+import { VideoList } from "@/components/video/VideoList";
 
 export default function Home() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);

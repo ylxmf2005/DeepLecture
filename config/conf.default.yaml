@@ -16,6 +16,26 @@ rate_limits:
 app:
   debug: false
   data_dir: data
+  logging:
+    # Global log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+    # Can be overridden with DEEPLECTURE_LOG_LEVEL environment variable
+    level: INFO
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    # Specific logger levels (override global level)
+    # Claude Code trace logs are available under: deeplecture.claude_code.trace
+    # Enable with: DEEPLECTURE_CLAUDE_TRACE=true or set level below to DEBUG
+    loggers: {}
+    # Example to enable Claude Code trace logs:
+    # loggers:
+    #   deeplecture.claude_code.trace: DEBUG
+
+ask:
+  default_context_window_seconds: 30.0
+  max_history_messages: 8
+
+note:
+  max_concurrency: 16
+  # NOTE: default_language removed - must be passed from frontend request
 
 llm:
   max_rpm: 10000
@@ -29,14 +49,6 @@ llm:
       api_key: ""
       base_url: https://api.openai.com/v1
       temperature: 0.7
-  task_models:
-    ask_video: default
-    default: default
-    note_generation: default
-    slide_lecture: default
-    subtitle_enhancement: default
-    subtitle_timeline: default
-    subtitle_translation: default
 
 slides:
   lecture:
@@ -46,12 +58,15 @@ slides:
     summary_lookback_pages: -1
     transcript_lookback_pages: 3
     tts_language: source
+    tts_max_workers: 2
+    video_workers: 1
+    sample_rate: 44100
   explanation:
     subtitle_context_window_seconds: 30.0
 
 subtitle:
   engine: whisper_cpp
-  source_language: en
+  # NOTE: source_language removed - must be passed from frontend request
   use_mock: false
   whisper_cpp:
     # Model selection: tiny, base, small, medium, large-v2, large-v3, large-v3-turbo
@@ -76,16 +91,27 @@ subtitle:
     download_root: ""
   translation:
     batch_size: 10
-    target_language: zh
+    # NOTE: target_language removed - must be passed from frontend request
   enhancement:
     merge_window: 3
     overlap: 1
     max_output_chars: 160
     background_max_chars: 8000
     temperature: 0.2
+    batch_size: 50
+    max_concurrency: 4
   timeline:
-    output_language: zh
+    # NOTE: output_language removed - must be passed from frontend request
     temperature: 0.3
+    max_workers: 16
+
+voiceover:
+  sample_rate: 44100
+  failure_threshold_ratio: 0.5
+  silence_fallback_duration: 0.5
+  max_retries: 3
+  retry_min_wait: 1.0
+  retry_max_wait: 60.0
 
 tts:
   max_rpm: 10000
@@ -109,10 +135,14 @@ tts:
       provider: edge_tts
       edge_tts:
         voice: zh-CN-XiaoxiaoNeural
-  task_models:
-    default: fishaudio-default
-    slide_lecture: fishaudio-default
-    voiceover: fishaudio-default
 
 tasks:
-  timeout_seconds: null
+  enabled: true
+  workers: 4
+  queue_max_size: 1000
+  default_timeout_seconds: 3600  # 1 hour
+  completed_task_ttl_seconds: 3600  # 1 hour
+  cleanup_interval_seconds: 300  # 5 minutes
+  sse_subscriber_queue_size: 100
+  parallelism:
+    default: 8

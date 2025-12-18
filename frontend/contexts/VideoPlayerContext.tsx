@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useRef, useState, useCallback, useMemo } from "react";
-import type { VideoPlayerRef } from "@/components/VideoPlayer";
+import type { VideoPlayerRef } from "@/components/video/VideoPlayer";
 
 interface VideoPlayerContextValue {
     playerRef: React.RefObject<VideoPlayerRef | null>;

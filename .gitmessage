@@ -1,0 +1,35 @@
+# Commit Message Template for Backend Refactor
+
+# Format:
+# <type>(<scope>): <subject>
+#
+# <body>
+#
+# <footer>
+
+# Type: feat, fix, refactor, test, docs, perf, chore
+# Scope: phase0, week1, week2, etc.
+# Subject: Imperative mood, lowercase, no period, <50 chars
+
+# Body: Explain WHAT and WHY, not HOW
+# - What changed
+# - Why this approach
+# - What problem it solves
+
+# Footer:
+# - References to issues/PRs
+# - Breaking changes
+# - Reviewed-by: Codex
+
+# Example:
+# refactor(week1): add DTO view classes for logical decoupling
+#
+# - Created SubtitleView, TimelineView, VideoView, NotesView
+# - Added view methods to ContentService
+# - Extracted pure functions for SRT formatting and status validation
+#
+# This implements ISP compliance by allowing services to depend only
+# on relevant fields without requiring full ContentMetadata.
+#
+# Reviewed-by: Codex
+# Co-authored-by: Claude Code (PM Agent)

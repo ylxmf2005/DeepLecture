@@ -6,8 +6,11 @@ import {
     VideoState,
     VideoStateActions,
     DEFAULT_VIDEO_STATE,
+    EMPTY_VIDEO_NOTES,
     STORAGE_KEYS,
     STORAGE_VERSIONS,
+    LEGACY_SUBTITLE_MODE_MAP,
+    SubtitleDisplayMode,
 } from "./types";
 
 interface VideoStateStoreState {
@@ -161,7 +164,8 @@ export const useVideoStateStore = create<VideoStateStore>()(
 
             clearVideoState: (videoId) =>
                 set((state) => {
-                    const { [videoId]: _, ...rest } = state.videos;
+                    const { [videoId]: _removed, ...rest } = state.videos;
+                    void _removed;
                     return { videos: rest };
                 }),
 
@@ -180,14 +184,35 @@ export const useVideoStateStore = create<VideoStateStore>()(
                 useVideoStateStore.setState({ _hydrated: true });
             },
 
-            migrate: (persistedState) => {
+            migrate: (persistedState, version) => {
                 if (!persistedState) {
                     return {
                         videos: {},
                         _hydrated: false,
                     };
                 }
-                return persistedState as VideoStateStoreState;
+
+                const state = persistedState as VideoStateStoreState;
+
+                // Migration from v1 to v2: convert legacy subtitle modes to semantic values
+                if (version < 2) {
+                    const migratedVideos: Record<string, VideoState> = {};
+                    for (const [videoId, videoState] of Object.entries(state.videos)) {
+                        const playerMode = LEGACY_SUBTITLE_MODE_MAP[videoState.subtitleModePlayer as string]
+                            ?? DEFAULT_VIDEO_STATE.subtitleModePlayer;
+                        const sidebarMode = LEGACY_SUBTITLE_MODE_MAP[videoState.subtitleModeSidebar as string]
+                            ?? DEFAULT_VIDEO_STATE.subtitleModeSidebar;
+
+                        migratedVideos[videoId] = {
+                            ...videoState,
+                            subtitleModePlayer: playerMode as SubtitleDisplayMode,
+                            subtitleModeSidebar: sidebarMode as SubtitleDisplayMode,
+                        };
+                    }
+                    return { ...state, videos: migratedVideos };
+                }
+
+                return state;
             },
         }
     )
@@ -209,14 +234,11 @@ export const useSmartSkipEnabled = (videoId: string) =>
 export const useVideoDeck = (videoId: string) =>
     useVideoStateStore((state) => state.videos[videoId]?.deck ?? null);
 
-// Return a new object to avoid mutation of shared constant
+// Stable selector: returns frozen EMPTY_VIDEO_NOTES when no notes exist
 export const useVideoNotes = (videoId: string) =>
-    useVideoStateStore((state) => {
-        const notes = state.videos[videoId]?.notes;
-        if (notes) return notes;
-        // Return a new object each time to prevent mutation of defaults
-        return { draft: "", dirty: false, lastSyncedAt: null };
-    });
+    useVideoStateStore(
+        (state) => state.videos[videoId]?.notes ?? EMPTY_VIDEO_NOTES
+    );
 
 export const useSelectedVoiceoverId = (videoId: string) =>
     useVideoStateStore((state) => state.videos[videoId]?.selectedVoiceoverId ?? null);
