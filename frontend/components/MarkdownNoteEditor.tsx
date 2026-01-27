@@ -5,10 +5,30 @@ import { useTheme } from "next-themes";
 import { Crepe } from "@milkdown/crepe";
 import { replaceAll } from "@milkdown/kit/utils";
 import { getVideoNote, saveVideoNote, uploadNoteImage } from "@/lib/api";
+import { logger } from "@/shared/infrastructure";
+import { toError } from "@/lib/utils/errorUtils";
 
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/frame.css";
 import "katex/dist/katex.min.css";
+
+const log = logger.scope("MarkdownNoteEditor");
+
+/**
+ * Normalize LLM-generated Markdown for proper rendering.
+ * - Replaces Unicode whitespace (NBSP, em-space, etc.) with ASCII space
+ * - Fixes nested heading syntax (e.g., "#### ### Title" -> "### Title")
+ */
+function normalizeMarkdownWhitespace(text: string): string {
+    // Fix Unicode whitespace
+    let result = text.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ");
+    // Fix nested headings: "#### ### Title" -> "### Title"
+    result = result.replace(/^(#{1,6})\s+(#{1,6})\s+/gm, "$2 ");
+    // Fix escaped bold/italic: \*\*text\*\* -> **text**, \*text\* -> *text*
+    result = result.replace(/\\\*\\\*(.+?)\\\*\\\*/g, "**$1**");
+    result = result.replace(/\\\*(.+?)\\\*/g, "*$1*");
+    return result;
+}
 
 // Extended Crepe type with setMarkdown helper
 export interface CrepeEditor extends Crepe {
@@ -39,7 +59,7 @@ export function MarkdownNoteEditor({ videoId, initialContent = "", onEditorReady
         }
         saveTimeoutRef.current = window.setTimeout(() => {
             saveVideoNote(videoId, markdown).catch((error) => {
-                console.error("Failed to save note to server:", error);
+                log.error("Failed to save note to server", toError(error), { videoId });
             });
             saveTimeoutRef.current = null;
         }, 1000);
@@ -50,7 +70,7 @@ export function MarkdownNoteEditor({ videoId, initialContent = "", onEditorReady
             const response = await uploadNoteImage(videoId, file);
             return `../notes_assets/${videoId}/${response.filename}`;
         } catch (error) {
-            console.error("Failed to upload image:", error);
+            log.error("Failed to upload image", toError(error), { videoId });
             throw error;
         }
     }, [videoId]);
@@ -85,10 +105,10 @@ export function MarkdownNoteEditor({ videoId, initialContent = "", onEditorReady
         });
 
         crepe.create().then(() => {
-            // Add setMarkdown helper method
+            // Add setMarkdown helper method with whitespace normalization
             const crepeWithHelper = crepe as CrepeEditor;
             crepeWithHelper.setMarkdown = (markdown: string) => {
-                crepe.editor.action(replaceAll(markdown));
+                crepe.editor.action(replaceAll(normalizeMarkdownWhitespace(markdown)));
             };
 
             editorRef.current = crepeWithHelper;
@@ -134,13 +154,20 @@ export function MarkdownNoteEditor({ videoId, initialContent = "", onEditorReady
                 if (cancelled) return;
 
                 const content = response.content ?? "";
-                localStorage.setItem(`note-${videoId}`, content);
+                // Do not clobber local draft if user has already edited locally.
+                // If there's no local content yet, treat server as initial source of truth.
+                const storageKey = `note-${videoId}`;
+                const localDraft = localStorage.getItem(storageKey);
+                const hasLocal = typeof localDraft === "string" && localDraft.trim().length > 0;
+                if (!hasUserEditedRef.current && !hasLocal) {
+                    localStorage.setItem(storageKey, content);
+                }
 
                 if (content && editorRef.current && !hasUserEditedRef.current) {
                     editorRef.current.setMarkdown(content);
                 }
             } catch (error) {
-                console.error("Failed to load server note:", error);
+                log.error("Failed to load server note", toError(error), { videoId });
             }
         })();
 

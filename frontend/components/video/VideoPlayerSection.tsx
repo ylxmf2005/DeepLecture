@@ -24,6 +24,10 @@ interface VideoPlayerSectionProps {
     onAddNoteAtTime: (time: number) => void;
     onPlayerReady: (videoElement: HTMLVideoElement) => void;
     onGenerateSlideLecture: () => void;
+    isTheaterMode: boolean;
+    onToggleTheaterMode: () => void;
+    isWebFullscreen: boolean;
+    onToggleWebFullscreen: () => void;
     slideDeck?: {
         id: string;
         name: string;
@@ -49,6 +53,10 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
             onAddNoteAtTime,
             onPlayerReady,
             onGenerateSlideLecture,
+            isTheaterMode,
+            onToggleTheaterMode,
+            isWebFullscreen,
+            onToggleWebFullscreen,
             slideDeck,
             onUploadSlide,
         },
@@ -230,6 +238,10 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                             onAskAtTime={onAskAtTime}
                             onAddNoteAtTime={onAddNoteAtTime}
                             onPlayerReady={onPlayerReady}
+                            isTheaterMode={isTheaterMode}
+                            onToggleTheaterMode={onToggleTheaterMode}
+                            isWebFullscreen={isWebFullscreen}
+                            onToggleWebFullscreen={onToggleWebFullscreen}
                         />
                     )}
                 </div>

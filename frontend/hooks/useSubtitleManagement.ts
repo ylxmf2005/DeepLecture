@@ -1,31 +1,28 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
-import { getContentSubtitles, ContentItem, API_BASE_URL } from "@/lib/api";
-import { Subtitle, parseSRT, mergeSubtitles, stringifyVTT } from "@/lib/srt";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { toast } from "sonner";
+import { getSubtitles, ContentItem, isAPIError } from "@/lib/api";
+import { Subtitle, mergeSubtitles } from "@/lib/srt";
 import { useVideoStateStore, usePlayerSubtitleMode } from "@/stores";
+import { SubtitleDisplayMode } from "@/stores/types";
+import { logger } from "@/shared/infrastructure";
+import { toError } from "@/lib/utils/errorUtils";
 
-export type SubtitleMode = "en" | "zh" | "en_zh" | "zh_en";
-
-export interface PlayerTrack {
-    src: string;
-    label: string;
-    language: string;
-}
+const log = logger.scope("SubtitleManagement");
 
 export interface SubtitleState {
-    subtitlesEn: Subtitle[];
-    subtitlesZh: Subtitle[];
-    subtitlesEnZh: Subtitle[];
-    subtitlesZhEn: Subtitle[];
+    subtitlesSource: Subtitle[];
+    subtitlesTarget: Subtitle[];
+    subtitlesDual: Subtitle[];
+    subtitlesDualReversed: Subtitle[];
     subtitlesLoading: boolean;
-    playerTracks: PlayerTrack[];
-    subtitleMode: SubtitleMode;
+    subtitleMode: SubtitleDisplayMode;
     currentSubtitles: Subtitle[];
 }
 
 export interface SubtitleActions {
-    setSubtitleMode: (mode: SubtitleMode) => void;
+    setSubtitleMode: (mode: SubtitleDisplayMode) => void;
 }
 
 export interface UseSubtitleManagementReturn extends SubtitleState, SubtitleActions {}
@@ -33,20 +30,28 @@ export interface UseSubtitleManagementReturn extends SubtitleState, SubtitleActi
 interface UseSubtitleManagementParams {
     videoId: string;
     content: ContentItem | null;
+    originalLanguage: string;
+    /** Target language for all AI outputs (translations, explanations, timelines, notes) */
+    targetLanguage: string;
+    /** Cache invalidation token: bump to force subtitle reload even when status stays `ready` */
+    subtitleRefreshVersion?: number;
 }
 
 export function useSubtitleManagement({
     videoId,
     content,
+    originalLanguage,
+    targetLanguage,
+    subtitleRefreshVersion = 0,
 }: UseSubtitleManagementParams): UseSubtitleManagementReturn {
-    const [subtitlesEn, setSubtitlesEn] = useState<Subtitle[]>([]);
-    const [subtitlesZh, setSubtitlesZh] = useState<Subtitle[]>([]);
-    const [subtitlesEnZh, setSubtitlesEnZh] = useState<Subtitle[]>([]);
-    const [subtitlesZhEn, setSubtitlesZhEn] = useState<Subtitle[]>([]);
+    const [subtitlesSource, setSubtitlesSource] = useState<Subtitle[]>([]);
+    const [subtitlesTarget, setSubtitlesTarget] = useState<Subtitle[]>([]);
+    const [subtitlesDual, setSubtitlesDual] = useState<Subtitle[]>([]);
+    const [subtitlesDualReversed, setSubtitlesDualReversed] = useState<Subtitle[]>([]);
     const [subtitlesLoading, setSubtitlesLoading] = useState(false);
-    const [playerTracks, setPlayerTracks] = useState<PlayerTrack[]>([]);
 
-    const createdUrlsRef = useRef<string[]>([]);
+    // Race condition protection: only the latest request should update state
+    const loadRequestIdRef = useRef(0);
 
     // Get subtitle mode from store
     const storedMode = usePlayerSubtitleMode(videoId);
@@ -58,142 +63,135 @@ export function useSubtitleManagement({
     const hasEnhancedSubtitles = content?.enhancedStatus === "ready";
     const hasTranslation = content?.translationStatus === "ready";
 
-    // Create a stable key based on subtitle state - only changes when subtitle status actually changes
-    const subtitleStateKey = `${videoId}:${hasSubtitles}:${hasEnhancedSubtitles}:${hasTranslation}`;
+    // Create a stable key based on subtitle state - changes trigger reload
+    // subtitleRefreshVersion acts as cache invalidation token for SSE-triggered regeneration
+    const subtitleStateKey = `${videoId}:${originalLanguage}:${targetLanguage}:${hasSubtitles}:${hasEnhancedSubtitles}:${hasTranslation}:${subtitleRefreshVersion}`;
 
-    // Load subtitles and create player tracks when subtitle state actually changes
+    // Load subtitles when subtitle state changes
     // Using subtitleStateKey instead of content to prevent unnecessary reloads
     useEffect(() => {
-        // Reset subtitle state and cleanup blob URLs when the subtitle state changes
-        createdUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-        createdUrlsRef.current = [];
-        setPlayerTracks([]);
+        // Increment request ID to invalidate any in-flight requests
+        const requestId = ++loadRequestIdRef.current;
 
-        setSubtitlesEn([]);
-        setSubtitlesZh([]);
-        setSubtitlesEnZh([]);
-        setSubtitlesZhEn([]);
+        // Reset subtitle state when the subtitle state changes
+        setSubtitlesSource([]);
+        setSubtitlesTarget([]);
+        setSubtitlesDual([]);
+        setSubtitlesDualReversed([]);
+        setSubtitlesLoading(false);
 
         // Ensure there is at least one kind of subtitles available
         if (!hasSubtitles && !hasEnhancedSubtitles) {
             return;
         }
 
-        const loadSubtitlesAndTracks = async () => {
+        const loadSubtitles = async () => {
             try {
                 setSubtitlesLoading(true);
 
-                // Load original English subtitles
-                const enContent = await getContentSubtitles(
-                    videoId,
-                    hasEnhancedSubtitles ? "enhanced" : "original",
-                    "srt"
-                );
-                const enSubs = parseSRT(enContent);
-                setSubtitlesEn(enSubs);
+                const sourceLang = hasEnhancedSubtitles
+                    ? `${originalLanguage}_enhanced`
+                    : originalLanguage;
 
-                const tracks: PlayerTrack[] = [];
+                // Load source subtitles (JSON segments)
+                const sourceData = await getSubtitles(videoId, sourceLang);
 
-                // Use backend API for single-language tracks
-                const enTrackUrl = `${API_BASE_URL}/api/content/${videoId}/subtitles?format=vtt&lang=${
-                    hasEnhancedSubtitles ? "enhanced" : "original"
-                }`;
-                tracks.push({
-                    src: enTrackUrl,
-                    label: "EN",
-                    language: "en",
-                });
+                // Guard: abort if a newer request has started
+                if (requestId !== loadRequestIdRef.current) return;
+
+                const sourceSubs: Subtitle[] = (sourceData.segments || []).map((seg, index) => ({
+                    id: String(index + 1),
+                    startTime: seg.start,
+                    endTime: seg.end,
+                    text: seg.text,
+                }));
+                setSubtitlesSource(sourceSubs);
 
                 // Check if translated subtitles exist
                 if (!hasTranslation) {
-                    setPlayerTracks(tracks);
                     return;
                 }
 
-                // Load translated Chinese subtitles and build bilingual tracks
-                const zhContent = await getContentSubtitles(videoId, "translated", "srt");
-                const zhSubs = parseSRT(zhContent);
-                setSubtitlesZh(zhSubs);
+                // Load translated subtitles and build bilingual arrays
+                const targetData = await getSubtitles(videoId, targetLanguage);
 
-                const enZhSubs = mergeSubtitles(enSubs, zhSubs, true);
-                const zhEnSubs = mergeSubtitles(enSubs, zhSubs, false);
-                setSubtitlesEnZh(enZhSubs);
-                setSubtitlesZhEn(zhEnSubs);
+                // Guard: abort if a newer request has started
+                if (requestId !== loadRequestIdRef.current) return;
 
-                // Use backend API for ZH track
-                const zhTrackUrl = `${API_BASE_URL}/api/content/${videoId}/subtitles?format=vtt&lang=translated`;
-                tracks.push({
-                    src: zhTrackUrl,
-                    label: "ZH",
-                    language: "zh",
-                });
+                const targetSubs: Subtitle[] = (targetData.segments || []).map((seg, index) => ({
+                    id: String(index + 1),
+                    startTime: seg.start,
+                    endTime: seg.end,
+                    text: seg.text,
+                }));
+                setSubtitlesTarget(targetSubs);
 
-                // Bilingual tracks must still be generated frontend-side
-                const enZhBlob = new Blob([stringifyVTT(enZhSubs)], { type: "text/vtt" });
-                const enZhUrl = URL.createObjectURL(enZhBlob);
-                createdUrlsRef.current.push(enZhUrl);
-                tracks.push({
-                    src: enZhUrl,
-                    label: "EN+ZH",
-                    language: "en-zh",
-                });
-
-                const zhEnBlob = new Blob([stringifyVTT(zhEnSubs)], { type: "text/vtt" });
-                const zhEnUrl = URL.createObjectURL(zhEnBlob);
-                createdUrlsRef.current.push(zhEnUrl);
-                tracks.push({
-                    src: zhEnUrl,
-                    label: "ZH+EN",
-                    language: "zh-en",
-                });
-
-                setPlayerTracks(tracks);
+                // Merge for dual modes: source-first and target-first
+                const dualSubs = mergeSubtitles(sourceSubs, targetSubs, true);
+                const dualReversedSubs = mergeSubtitles(sourceSubs, targetSubs, false);
+                setSubtitlesDual(dualSubs);
+                setSubtitlesDualReversed(dualReversedSubs);
             } catch (e) {
-                console.error("Failed to generate subtitles for player/sidebar", e);
+                // Guard: abort if a newer request has started
+                if (requestId !== loadRequestIdRef.current) return;
+
+                // 404 means subtitle doesn't exist for this language - expected state, not an error
+                if (isAPIError(e) && e.code === "NOT_FOUND") {
+                    log.debug("Subtitle not available for requested language", { videoId });
+                    return;
+                }
+
+                const error = toError(e);
+                log.error("Failed to load subtitles", error, { videoId });
+                toast.error("Failed to load subtitles", {
+                    description: error.message || "Please try again later",
+                });
             } finally {
-                setSubtitlesLoading(false);
+                // Only update loading state if this is still the current request
+                if (requestId === loadRequestIdRef.current) {
+                    setSubtitlesLoading(false);
+                }
             }
         };
 
-        loadSubtitlesAndTracks();
+        loadSubtitles();
 
+        // Cleanup: invalidate this request to prevent stale state writes
         return () => {
-            createdUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-            createdUrlsRef.current = [];
+            loadRequestIdRef.current += 1;
         };
     // Dependencies are intentionally derived through subtitleStateKey which combines:
-    // videoId, hasSubtitles, hasEnhancedSubtitles, hasTranslation
+    // videoId, hasSubtitles, hasEnhancedSubtitles, hasTranslation, subtitleRefreshVersion
     // This prevents unnecessary API calls when only unrelated content fields change
-    }, [subtitleStateKey, videoId, hasSubtitles, hasEnhancedSubtitles, hasTranslation]);
+    }, [subtitleStateKey, videoId, originalLanguage, targetLanguage, hasSubtitles, hasEnhancedSubtitles, hasTranslation]);
 
-    const setSubtitleMode = (mode: SubtitleMode) => {
+    const setSubtitleMode = (mode: SubtitleDisplayMode) => {
         if (!videoId) return;
         setSubtitleModePlayer(videoId, mode);
     };
 
-    // Compute current subtitles based on mode
+    // Compute current subtitles based on semantic mode
     const currentSubtitles = useMemo(() => {
-        if (subtitleMode === "en_zh" && subtitlesEnZh.length > 0) {
-            return subtitlesEnZh;
+        if (subtitleMode === "dual" && subtitlesDual.length > 0) {
+            return subtitlesDual;
         }
-        if (subtitleMode === "zh_en" && subtitlesZhEn.length > 0) {
-            return subtitlesZhEn;
+        if (subtitleMode === "dual_reversed" && subtitlesDualReversed.length > 0) {
+            return subtitlesDualReversed;
         }
-        if (subtitleMode === "zh" && subtitlesZh.length > 0) {
-            return subtitlesZh;
+        if (subtitleMode === "target" && subtitlesTarget.length > 0) {
+            return subtitlesTarget;
         }
-        // Default / fallback: English only
-        return subtitlesEn;
-    }, [subtitleMode, subtitlesEn, subtitlesZh, subtitlesEnZh, subtitlesZhEn]);
+        // Default / fallback: source only
+        return subtitlesSource;
+    }, [subtitleMode, subtitlesSource, subtitlesTarget, subtitlesDual, subtitlesDualReversed]);
 
     return {
         // State
-        subtitlesEn,
-        subtitlesZh,
-        subtitlesEnZh,
-        subtitlesZhEn,
+        subtitlesSource,
+        subtitlesTarget,
+        subtitlesDual,
+        subtitlesDualReversed,
         subtitlesLoading,
-        playerTracks,
         subtitleMode,
         currentSubtitles,
         // Actions

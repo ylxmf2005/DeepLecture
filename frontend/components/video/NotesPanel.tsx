@@ -354,7 +354,7 @@ export function NotesPanel({
     // If no tabs in bottom panel, show empty state
     if (tabs.length === 0) {
         return (
-            <div className="flex-1 min-h-0 flex flex-col bg-card dark:bg-[#20293a] rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className="flex-1 h-full min-h-0 flex flex-col bg-card dark:bg-[#20293a] rounded-xl border border-border shadow-sm overflow-hidden">
                 <DraggableTabBar
                     panelId="bottom"
                     tabs={tabs}
@@ -370,7 +370,7 @@ export function NotesPanel({
     }
 
     return (
-        <div className="flex-1 min-h-0 flex flex-col bg-card dark:bg-[#20293a] rounded-xl border border-border shadow-sm overflow-hidden">
+        <div className="flex-1 h-full min-h-0 flex flex-col bg-card dark:bg-[#20293a] rounded-xl border border-border shadow-sm overflow-hidden">
             <DraggableTabBar
                 panelId="bottom"
                 tabs={tabs}

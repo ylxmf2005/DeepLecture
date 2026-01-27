@@ -7,8 +7,11 @@ import {
     Volume2,
     VolumeX,
     Volume1,
+    RectangleHorizontal,
     Maximize,
     Minimize,
+    Expand,
+    Shrink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +40,14 @@ interface VideoControlsProps {
     isFullscreen: boolean;
     /** Toggle fullscreen callback */
     onToggleFullscreen: () => void;
+    /** Whether theater mode is active */
+    isTheaterMode: boolean;
+    /** Toggle theater mode callback */
+    onToggleTheaterMode: () => void;
+    /** Whether web fullscreen is active */
+    isWebFullscreen: boolean;
+    /** Toggle web fullscreen callback */
+    onToggleWebFullscreen: () => void;
     /** Optional className */
     className?: string;
 }
@@ -67,6 +78,10 @@ export function VideoControls({
     onSeek,
     isFullscreen,
     onToggleFullscreen,
+    isTheaterMode,
+    onToggleTheaterMode,
+    isWebFullscreen,
+    onToggleWebFullscreen,
     className,
 }: VideoControlsProps) {
     const [volume, setVolume] = useState(1);
@@ -341,6 +356,38 @@ export function VideoControls({
                             </div>
                         )}
                     </div>
+
+                    {/* Theater mode */}
+                    <button
+                        onClick={onToggleTheaterMode}
+                        className={cn(
+                            "p-1 transition-colors",
+                            isTheaterMode
+                                ? "text-blue-400 hover:text-blue-300"
+                                : "text-white hover:text-white/80"
+                        )}
+                        title={isTheaterMode ? "Exit theater mode" : "Theater mode"}
+                    >
+                        <RectangleHorizontal className="w-5 h-5" />
+                    </button>
+
+                    {/* Web fullscreen */}
+                    <button
+                        onClick={onToggleWebFullscreen}
+                        className={cn(
+                            "p-1 transition-colors",
+                            isWebFullscreen
+                                ? "text-blue-400 hover:text-blue-300"
+                                : "text-white hover:text-white/80"
+                        )}
+                        title={isWebFullscreen ? "Exit web fullscreen" : "Web fullscreen"}
+                    >
+                        {isWebFullscreen ? (
+                            <Shrink className="w-5 h-5" />
+                        ) : (
+                            <Expand className="w-5 h-5" />
+                        )}
+                    </button>
 
                     {/* Fullscreen */}
                     <button

@@ -22,6 +22,7 @@ llm:
   max_retries: 3
   retry_min_wait: 1.0
   retry_max_wait: 60.0
+  connect_timeout: 30.0  # Connection timeout for third-party APIs (default 30s)
   models:
     - name: default
       provider: openai

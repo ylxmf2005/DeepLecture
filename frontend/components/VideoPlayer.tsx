@@ -5,22 +5,35 @@ import { cn } from "@/lib/utils";
 import { Subtitle } from "@/lib/srt";
 import { getActiveSubtitles } from "@/lib/subtitleSearch";
 import { useGlobalSettingsStore } from "@/stores";
+import type { SubtitleDisplayMode } from "@/stores/types";
 import { useVoiceoverSync } from "@/hooks/useVoiceoverSync";
 import { VideoControls } from "./VideoControls";
+import { logger } from "@/shared/infrastructure";
+import { toError } from "@/lib/utils/errorUtils";
+
+const log = logger.scope("VideoPlayer");
+
+/** Player subtitle mode: semantic display mode + "off" for hiding subtitles */
+export type SubtitlePlayerMode = SubtitleDisplayMode | "off";
 
 interface VideoPlayerProps {
     videoId: string;
+    title?: string; // Video title for Media Session
     voiceoverId?: string | null;
     /** Sync timeline for playback-side A/V sync (when voiceoverId is set) */
     syncTimeline?: SyncTimeline | null;
     subtitles?: Subtitle[];
-    subtitleMode?: string;
-    onSubtitleModeChange?: (mode: string) => void;
+    subtitleMode?: SubtitlePlayerMode;
+    onSubtitleModeChange?: (mode: SubtitlePlayerMode) => void;
     onTimeUpdate?: (currentTime: number) => void;
     onCapture?: (timestamp: number, imagePath: string) => void;
     onAskAtTime?: (time: number) => void;
     onAddNoteAtTime?: (time: number) => void;
     onPlayerReady?: (videoElement: HTMLVideoElement) => void;
+    isTheaterMode: boolean;
+    onToggleTheaterMode: () => void;
+    isWebFullscreen: boolean;
+    onToggleWebFullscreen: () => void;
 }
 
 export interface VideoPlayerRef {
@@ -30,11 +43,14 @@ export interface VideoPlayerRef {
     pause: () => void;
     isPlaying: () => boolean;
     getVideoElement: () => HTMLVideoElement | null;
+    getAudioElement: () => HTMLAudioElement | null;
+    isSyncActive: () => boolean;
 }
 
 export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
     ({
         videoId,
+        title,
         voiceoverId,
         syncTimeline,
         subtitles,
@@ -45,6 +61,10 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
         onAskAtTime,
         onAddNoteAtTime,
         onPlayerReady,
+        isTheaterMode,
+        onToggleTheaterMode,
+        isWebFullscreen,
+        onToggleWebFullscreen,
     }, ref) => {
         const [isCapturing, setIsCapturing] = useState(false);
         const [currentTime, setCurrentTime] = useState(0);
@@ -80,21 +100,18 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                 seekToVideoTime(time);
             },
             play: () => {
-                if (isSyncActive) {
-                    syncPlay();
-                } else {
-                    videoRef.current?.play();
-                }
+                // Always delegate to syncPlay - it uses isActiveRef internally,
+                // avoiding race conditions with the lagging isSyncActive state
+                syncPlay();
             },
             pause: () => {
-                if (isSyncActive) {
-                    syncPause();
-                } else {
-                    videoRef.current?.pause();
-                }
+                // Always delegate to syncPause for consistent behavior
+                syncPause();
             },
             isPlaying: () => !!(videoRef.current && !videoRef.current.paused && !videoRef.current.ended),
             getVideoElement: () => videoRef.current,
+            getAudioElement: () => audioRef.current,
+            isSyncActive: () => isSyncActive,
         }));
 
         // Handle voiceover mode changes
@@ -107,6 +124,146 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                 stopSync();
             }
         }, [voiceoverId, syncTimeline, startSync, stopSync]);
+
+        // Custom control handlers defined early for Media Session
+        // Always delegate to sync hooks - they use isActiveRef internally to decide
+        // whether to control audio+video (sync mode) or just video (normal mode),
+        // avoiding race conditions with the lagging isSyncActive state
+        const handlePlay = useCallback(() => {
+            syncPlay();
+        }, [syncPlay]);
+
+        const handlePause = useCallback(() => {
+            syncPause();
+        }, [syncPause]);
+
+        const handleSeek = useCallback((time: number) => {
+            seekToVideoTime(time);
+        }, [seekToVideoTime]);
+
+        // Keyboard shortcuts
+        const handleKeyDown = useCallback((e: KeyboardEvent) => {
+            // Skip if user is typing in an input field
+            const target = e.target as HTMLElement;
+            if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
+                return;
+            }
+
+            const video = videoRef.current;
+            if (!video) return;
+
+            switch (e.key) {
+                case " ":
+                case "Spacebar":
+                    e.preventDefault();
+                    if (video.paused) {
+                        handlePlay();
+                    } else {
+                        handlePause();
+                    }
+                    break;
+                case "Escape":
+                    // Exit web fullscreen on ESC
+                    if (isWebFullscreen) {
+                        e.preventDefault();
+                        onToggleWebFullscreen();
+                    }
+                    break;
+                case "ArrowLeft":
+                    e.preventDefault();
+                    handleSeek(Math.max(0, getCurrentVideoTime() - 5));
+                    break;
+                case "ArrowRight":
+                    e.preventDefault();
+                    handleSeek(Math.min(duration, getCurrentVideoTime() + 5));
+                    break;
+                case "ArrowUp":
+                    e.preventDefault();
+                    if (video) {
+                        video.volume = Math.min(1, video.volume + 0.1);
+                    }
+                    break;
+                case "ArrowDown":
+                    e.preventDefault();
+                    if (video) {
+                        video.volume = Math.max(0, video.volume - 0.1);
+                    }
+                    break;
+            }
+        }, [handlePlay, handlePause, handleSeek, getCurrentVideoTime, duration, videoRef, isWebFullscreen, onToggleWebFullscreen]);
+
+        // Global keyboard listener
+        useEffect(() => {
+            document.addEventListener("keydown", handleKeyDown);
+            return () => {
+                document.removeEventListener("keydown", handleKeyDown);
+            };
+        }, [handleKeyDown]);
+
+        // Media Session API integration
+        useEffect(() => {
+            if (!("mediaSession" in navigator)) return;
+
+            // Set metadata
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: title || "Course Video",
+                // artwork: [] // Could add thumbnails here if available
+            });
+
+            // Set action handlers
+            const actionHandlers = [
+                ["play", handlePlay],
+                ["pause", handlePause],
+                ["seekbackward", () => handleSeek(Math.max(0, getCurrentVideoTime() - 10))],
+                ["seekforward", () => handleSeek(getCurrentVideoTime() + 10)],
+                ["seekto", (details: MediaSessionActionDetails) => {
+                    if (details.seekTime !== undefined && details.seekTime !== null) {
+                        handleSeek(details.seekTime);
+                    }
+                }],
+            ] as const;
+
+            for (const [action, handler] of actionHandlers) {
+                try {
+                    navigator.mediaSession.setActionHandler(action as MediaSessionAction, handler);
+                } catch (error) {
+                    log.warn(`Media Session action ${action} not supported`);
+                }
+            }
+
+            return () => {
+                // Clean up handlers (though usually overwriting them is fine)
+                for (const [action] of actionHandlers) {
+                    try {
+                        navigator.mediaSession.setActionHandler(action as MediaSessionAction, null);
+                    } catch {
+                        // ignore
+                    }
+                }
+            };
+        }, [title, handlePlay, handlePause, handleSeek, getCurrentVideoTime]);
+
+        // Update Media Session playback state
+        useEffect(() => {
+            if ("mediaSession" in navigator) {
+                navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+            }
+        }, [isPlaying]);
+
+        // Update Media Session position state (helps browser understand active playback)
+        useEffect(() => {
+            if (!("mediaSession" in navigator) || !duration || duration <= 0) return;
+
+            try {
+                navigator.mediaSession.setPositionState({
+                    duration: duration,
+                    playbackRate: videoRef.current?.playbackRate || 1,
+                    position: Math.min(currentTime, duration),
+                });
+            } catch {
+                // setPositionState may throw if values are invalid
+            }
+        }, [currentTime, duration, videoRef]);
 
         // Notify parent when player is ready
         useEffect(() => {
@@ -131,7 +288,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                 cancelled = true;
                 videoElement.removeEventListener("loadedmetadata", handleReady);
             };
-        }, [onPlayerReady, videoId]);
+        }, [onPlayerReady, videoId, videoRef]);
 
         const handleTimeUpdate = useCallback(() => {
             // CRITICAL: Always output VIDEO time to external consumers
@@ -176,25 +333,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
         }, [handleTimeUpdate, videoRef]);
 
         // Custom control handlers
-        const handlePlay = useCallback(() => {
-            if (isSyncActive) {
-                syncPlay();
-            } else {
-                videoRef.current?.play();
-            }
-        }, [isSyncActive, syncPlay, videoRef]);
-
-        const handlePause = useCallback(() => {
-            if (isSyncActive) {
-                syncPause();
-            } else {
-                videoRef.current?.pause();
-            }
-        }, [isSyncActive, syncPause, videoRef]);
-
-        const handleSeek = useCallback((time: number) => {
-            seekToVideoTime(time);
-        }, [seekToVideoTime]);
+        // Note: handlePlay, handlePause, handleSeek are defined earlier for Media Session
 
         const handleAsk = () => {
             if (!onAskAtTime) return;
@@ -215,10 +354,10 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                 const data = await captureSlide(videoId, timestamp);
 
                 if (onCapture) {
-                    onCapture(timestamp, data.image_path);
+                    onCapture(timestamp, data.imagePath ?? data.imageUrl);
                 }
             } catch (error) {
-                console.error("Failed to capture slide:", error);
+                log.error("Failed to capture slide", toError(error), { videoId });
             } finally {
                 setIsCapturing(false);
             }
@@ -228,7 +367,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
             setShowLanguageMenu(!showLanguageMenu);
         };
 
-        const handleLanguageSelect = (mode: string) => {
+        const handleLanguageSelect = (mode: SubtitlePlayerMode) => {
             if (onSubtitleModeChange) {
                 onSubtitleModeChange(mode);
             }
@@ -264,7 +403,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                     await document.exitFullscreen();
                 }
             } catch (err) {
-                console.error("Error toggling fullscreen:", err);
+                log.error("Failed to toggle fullscreen", toError(err));
             }
         };
 
@@ -276,21 +415,25 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
         return (
             <div
                 ref={containerRef}
-                className="relative group rounded-xl overflow-hidden bg-black shadow-lg flex items-center justify-center bg-black"
+                className={cn(
+                    "relative group rounded-xl bg-black shadow-lg flex items-center justify-center",
+                    // Web fullscreen: fixed positioning covering entire viewport
+                    isWebFullscreen && "fixed inset-0 z-50 rounded-none"
+                )}
             >
                 {/* Video element without native controls */}
                 <video
                     ref={videoRef}
                     className={cn(
                         "w-full",
-                        isFullscreen ? "h-full object-contain" : "aspect-video"
+                        isFullscreen || isWebFullscreen ? "h-full object-contain" : "rounded-xl aspect-video"
                     )}
                     crossOrigin="anonymous"
+                    playsInline
                     onClick={isPlaying ? handlePause : handlePlay}
                 >
                     <source
                         src={`${API_BASE_URL}/api/content/${videoId}/video`}
-                        type="video/mp4"
                     />
                     Your browser does not support the video tag.
                 </video>
@@ -300,6 +443,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                     <audio
                         ref={audioRef}
                         src={voiceoverAudioUrl}
+                        crossOrigin="anonymous"
                         preload="auto"
                         style={{ display: "none" }}
                     />
@@ -310,7 +454,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                     <div
                         className="absolute left-0 right-0 flex flex-col items-center justify-end px-8 pointer-events-none z-[1]"
                         style={{
-                            bottom: (subtitleDisplay?.bottomOffset ?? 56) + 48, // Add space for custom controls
+                            bottom: subtitleDisplay?.bottomOffset ?? 72,
                         }}
                     >
                         {activeSubtitles.map((sub, index) => (
@@ -345,6 +489,10 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                     onSeek={handleSeek}
                     isFullscreen={isFullscreen}
                     onToggleFullscreen={toggleFullscreen}
+                    isTheaterMode={isTheaterMode}
+                    onToggleTheaterMode={onToggleTheaterMode}
+                    isWebFullscreen={isWebFullscreen}
+                    onToggleWebFullscreen={onToggleWebFullscreen}
                 />
 
                 <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
@@ -369,40 +517,40 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                                         Off
                                     </button>
                                     <button
-                                        onClick={() => handleLanguageSelect("en")}
+                                        onClick={() => handleLanguageSelect("source")}
                                         className={cn(
                                             "px-4 py-2 text-sm text-left hover:bg-white/10 transition-colors",
-                                            subtitleMode === "en" ? "text-blue-400 font-medium" : "text-white"
+                                            subtitleMode === "source" ? "text-blue-400 font-medium" : "text-white"
                                         )}
                                     >
-                                        English
+                                        Source
                                     </button>
                                     <button
-                                        onClick={() => handleLanguageSelect("zh")}
+                                        onClick={() => handleLanguageSelect("target")}
                                         className={cn(
                                             "px-4 py-2 text-sm text-left hover:bg-white/10 transition-colors",
-                                            subtitleMode === "zh" ? "text-blue-400 font-medium" : "text-white"
+                                            subtitleMode === "target" ? "text-blue-400 font-medium" : "text-white"
                                         )}
                                     >
-                                        Chinese
+                                        Target
                                     </button>
                                     <button
-                                        onClick={() => handleLanguageSelect("en_zh")}
+                                        onClick={() => handleLanguageSelect("dual")}
                                         className={cn(
                                             "px-4 py-2 text-sm text-left hover:bg-white/10 transition-colors",
-                                            subtitleMode === "en_zh" ? "text-blue-400 font-medium" : "text-white"
+                                            subtitleMode === "dual" ? "text-blue-400 font-medium" : "text-white"
                                         )}
                                     >
-                                        Bilingual (EN+ZH)
+                                        Dual
                                     </button>
                                     <button
-                                        onClick={() => handleLanguageSelect("zh_en")}
+                                        onClick={() => handleLanguageSelect("dual_reversed")}
                                         className={cn(
                                             "px-4 py-2 text-sm text-left hover:bg-white/10 transition-colors",
-                                            subtitleMode === "zh_en" ? "text-blue-400 font-medium" : "text-white"
+                                            subtitleMode === "dual_reversed" ? "text-blue-400 font-medium" : "text-white"
                                         )}
                                     >
-                                        Bilingual (ZH+EN)
+                                        Dual (Reversed)
                                     </button>
                                 </div>
                             )}

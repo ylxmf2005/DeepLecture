@@ -88,3 +88,13 @@ claudedocs/
 
 # Temporary/internal docs
 API_REFACTOR_SUMMARY.md
+
+# Temporary planning artifacts
+.tmp/
+
+# Submodules / external repos
+standard-tts/
+standard_asr/
+
+# Temporary test files
+test.

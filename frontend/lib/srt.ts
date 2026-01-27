@@ -46,9 +46,6 @@ export function parseSRT(content: string): Subtitle[] {
 }
 
 function cleanSubtitleText(text: string): string {
-    // Remove HTML tags (e.g. <font>, <b>, <i>) to ensure clean text display
-    // and prevent VTT errors or raw tags showing up in the UI.
-    // We also remove curly brace tags like {\an8} often found in SRTs.
     return text
         .replace(/<[^>]+>/g, "")
         .replace(/\{.*?\}/g, "")
@@ -70,12 +67,10 @@ export function stringifyVTT(subtitles: Subtitle[]): string {
         .map((sub, index) => {
             const startTime = formatVttTimestamp(sub.startTime);
             const endTime = formatVttTimestamp(sub.endTime);
-            // Add line:85% to force subtitles to stay at the bottom and prevent jumping
             return `${index + 1}\n${startTime} --> ${endTime} line:85%\n${sub.text}\n`;
         })
         .join("\n");
 
-    // WEBVTT header is required for browsers to recognise the track
     return `WEBVTT\n\n${cues}`.trimEnd() + "\n";
 }
 
@@ -99,29 +94,69 @@ function formatVttTimestamp(seconds: number): string {
     return `${hours}:${minutes}:${secs}.${ms}`;
 }
 
+/**
+ * Merge two subtitle tracks into bilingual subtitles by matching time intervals.
+ *
+ * Uses time-interval overlap matching instead of array index to handle cases where
+ * LLM merges multiple short segments into fewer longer ones. For each primary
+ * subtitle, finds the secondary subtitle with the maximum time overlap.
+ *
+ * Algorithm: Two-pointer scan after sorting by startTime, O(n + m) complexity.
+ *
+ * @param primary - Primary subtitle track (determines output timing)
+ * @param secondary - Secondary subtitle track to merge
+ * @param primaryIsTop - If true, primary text appears first; otherwise secondary first
+ */
 export function mergeSubtitles(
     primary: Subtitle[],
     secondary: Subtitle[],
     primaryIsTop: boolean = true
 ): Subtitle[] {
-    // We assume both subtitle files are synchronized and have the same number of lines
-    // because the backend translator preserves structure.
-    // However, to be safe, we'll try to match by index, but fallback or handle mismatches gracefully?
-    // Given the strict backend logic, index matching is the most reliable assumption for this project.
+    if (secondary.length === 0) {
+        return primary.map((sub) => ({ ...sub }));
+    }
 
-    return primary.map((sub, index) => {
-        const secondarySub = secondary[index];
-        const secondaryText = secondarySub ? secondarySub.text : "";
+    // Sort both arrays by startTime (defensive copy to avoid mutation)
+    const sortedSecondary = [...secondary].sort((a, b) => a.startTime - b.startTime);
 
-        // Simple stacking: Top line \n Bottom line
-        // We can optionally add some formatting if VTT/SRT supports it (SRT supports basic tags)
+    // Two-pointer approach: for each primary, find best overlapping secondary
+    let secIdx = 0;
 
-        let text = "";
-        if (primaryIsTop) {
-            text = `${sub.text}\n${secondaryText}`;
-        } else {
-            text = `${secondaryText}\n${sub.text}`;
+    return primary.map((sub) => {
+        // Advance secIdx to first secondary that could possibly overlap
+        // (secondary.endTime > primary.startTime)
+        while (secIdx < sortedSecondary.length && sortedSecondary[secIdx].endTime <= sub.startTime) {
+            secIdx++;
         }
+
+        // Find the secondary with maximum overlap in the candidate window
+        let bestMatch: Subtitle | undefined;
+        let bestOverlap = 0;
+
+        for (let i = secIdx; i < sortedSecondary.length; i++) {
+            const sec = sortedSecondary[i];
+
+            // Stop if secondary starts after primary ends (no more possible overlaps)
+            if (sec.startTime >= sub.endTime) {
+                break;
+            }
+
+            // Calculate overlap: max(0, min(end1, end2) - max(start1, start2))
+            const overlapStart = Math.max(sub.startTime, sec.startTime);
+            const overlapEnd = Math.min(sub.endTime, sec.endTime);
+            const overlap = Math.max(0, overlapEnd - overlapStart);
+
+            if (overlap > bestOverlap) {
+                bestOverlap = overlap;
+                bestMatch = sec;
+            }
+        }
+
+        const secondaryText = bestMatch?.text ?? "";
+
+        const text = primaryIsTop
+            ? `${sub.text}\n${secondaryText}`
+            : `${secondaryText}\n${sub.text}`;
 
         return {
             ...sub,
