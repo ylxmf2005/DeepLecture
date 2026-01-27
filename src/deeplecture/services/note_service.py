@@ -14,6 +14,7 @@ from deeplecture.prompts.note_prompt import build_note_outline_prompts, build_no
 from deeplecture.services.content_service import ContentService, get_default_content_service
 from deeplecture.storage.fs_note_storage import NoteStorage, get_default_note_storage
 from deeplecture.transcription.interactive import parse_srt_to_segments
+from deeplecture.use_cases.shared.prompt_safety import normalize_llm_markdown
 from deeplecture.workers import TaskManager
 
 try:  # pragma: no cover - optional helper, falls back to stdlib json
@@ -228,6 +229,7 @@ class NoteService:
         results = pool.map(tasks=tasks, handler=self._expand_part_handler, on_error=handle_part_error)
 
         full_note = "\n\n".join(results[int(part.id)].strip() for part in outline).strip()
+        full_note = normalize_llm_markdown(full_note)
         dto = self.save_note(video_id, full_note)
 
         return GeneratedNoteResult(
@@ -515,8 +517,9 @@ class NoteService:
             summary=summary,
             focus_points=focus_points,
         )
-        return llm.generate_response(
+        raw = llm.generate_response(
             prompt=user_prompt,
             system_prompt=system_prompt,
             temperature=0.4,
         )
+        return normalize_llm_markdown(str(raw or ""))

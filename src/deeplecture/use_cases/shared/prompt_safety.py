@@ -196,6 +196,10 @@ _ESCAPED_ITALIC = re.compile(r"\\\*(.+?)\\\*")
 # "**text **" or "** text**" or "** text **" will often render as literal asterisks instead of <strong>.
 _BOLD_INNER_TRIM = re.compile(r"\*\*([^\n]*?)\*\*")
 
+# Avoid rewriting Markdown inside code spans/blocks where users may want to show raw syntax.
+_FENCED_CODE_BLOCK = re.compile(r"```[\s\S]*?```", flags=re.DOTALL)
+_INLINE_CODE_SPAN = re.compile(r"`[^`]*`")
+
 
 def normalize_llm_markdown(text: str) -> str:
     """
@@ -215,18 +219,6 @@ def normalize_llm_markdown(text: str) -> str:
     if not text:
         return ""
 
-    # Fix Unicode whitespace
-    result = _UNICODE_SPACES.sub(" ", text)
-
-    # Fix nested headings: keep the inner (more specific) heading level
-    # e.g., "#### ### Title" -> "### Title"
-    result = _NESTED_HEADINGS.sub(r"\2 ", result)
-
-    # Fix escaped bold/italic: \*\*text\*\* -> **text**, \*text\* -> *text*
-    # Bold must be fixed before italic to avoid partial matches
-    result = _ESCAPED_BOLD.sub(r"**\1**", result)
-    result = _ESCAPED_ITALIC.sub(r"*\1*", result)
-
     def _trim_bold_inner_ws(m: re.Match[str]) -> str:
         inner = m.group(1)
         trimmed = inner.strip(" \t")
@@ -234,7 +226,38 @@ def normalize_llm_markdown(text: str) -> str:
             return m.group(0)
         return f"**{trimmed}**"
 
-    # Fix whitespace inside bold markers: "** text **" -> "**text**"
-    result = _BOLD_INNER_TRIM.sub(_trim_bold_inner_ws, result)
+    def _normalize_plain(segment: str) -> str:
+        # Fix Unicode whitespace
+        result = _UNICODE_SPACES.sub(" ", segment)
 
-    return result
+        # Fix nested headings: keep the inner (more specific) heading level
+        # e.g., "#### ### Title" -> "### Title"
+        result = _NESTED_HEADINGS.sub(r"\2 ", result)
+
+        # Fix escaped bold/italic: \*\*text\*\* -> **text**, \*text\* -> *text*
+        # Bold must be fixed before italic to avoid partial matches
+        result = _ESCAPED_BOLD.sub(r"**\1**", result)
+        result = _ESCAPED_ITALIC.sub(r"*\1*", result)
+
+        # Fix whitespace inside bold markers: "** text **" -> "**text**"
+        result = _BOLD_INNER_TRIM.sub(_trim_bold_inner_ws, result)
+        return result
+
+    def _apply_outside_code_spans(segment: str) -> str:
+        parts: list[str] = []
+        cursor = 0
+        for m in _INLINE_CODE_SPAN.finditer(segment):
+            parts.append(_normalize_plain(segment[cursor : m.start()]))
+            parts.append(m.group(0))
+            cursor = m.end()
+        parts.append(_normalize_plain(segment[cursor:]))
+        return "".join(parts)
+
+    out: list[str] = []
+    cursor = 0
+    for m in _FENCED_CODE_BLOCK.finditer(text):
+        out.append(_apply_outside_code_spans(text[cursor : m.start()]))
+        out.append(m.group(0))
+        cursor = m.end()
+    out.append(_apply_outside_code_spans(text[cursor:]))
+    return "".join(out)

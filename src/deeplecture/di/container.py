@@ -20,6 +20,7 @@ from deeplecture.infrastructure import (
     FFmpegVideoProcessor,
     FsArtifactStorage,
     FsAskStorage,
+    FsCheatsheetStorage,
     FsExplanationStorage,
     FsFactVerificationStorage,
     FsFileStorage,
@@ -46,6 +47,7 @@ from deeplecture.infrastructure import (
 )
 from deeplecture.presentation.sse import EventPublisher
 from deeplecture.use_cases.ask import AskUseCase
+from deeplecture.use_cases.cheatsheet import CheatsheetUseCase
 from deeplecture.use_cases.content import ContentUseCase
 from deeplecture.use_cases.explanation import ExplanationUseCase
 from deeplecture.use_cases.fact_verification import FactVerificationUseCase
@@ -158,6 +160,13 @@ class Container:
         if "note_storage" not in self._cache:
             self._cache["note_storage"] = FsNoteStorage(self.path_resolver)
         return self._cache["note_storage"]  # type: ignore[return-value]
+
+    @property
+    def cheatsheet_storage(self) -> FsCheatsheetStorage:
+        """Filesystem-based cheatsheet persistence."""
+        if "cheatsheet_storage" not in self._cache:
+            self._cache["cheatsheet_storage"] = FsCheatsheetStorage(self.path_resolver)
+        return self._cache["cheatsheet_storage"]  # type: ignore[return-value]
 
     @property
     def explanation_storage(self) -> FsExplanationStorage:
@@ -485,6 +494,20 @@ class Container:
                 pdf_text_extractor=self.pdf_text_extractor,
             )
         return self._cache["note_uc"]  # type: ignore[return-value]
+
+    @property
+    def cheatsheet_usecase(self) -> CheatsheetUseCase:
+        """Cheatsheet generation and retrieval use case."""
+        if "cheatsheet_uc" not in self._cache:
+            self._cache["cheatsheet_uc"] = CheatsheetUseCase(
+                metadata_storage=self.metadata_storage,
+                cheatsheet_storage=self.cheatsheet_storage,
+                subtitle_storage=self.subtitle_storage,
+                path_resolver=self.path_resolver,
+                llm_provider=self.llm_provider,
+                pdf_text_extractor=self.pdf_text_extractor,
+            )
+        return self._cache["cheatsheet_uc"]  # type: ignore[return-value]
 
     @property
     def slide_lecture_usecase(self) -> SlideLectureUseCase:

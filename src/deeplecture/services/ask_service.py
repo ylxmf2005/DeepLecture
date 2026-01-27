@@ -16,6 +16,7 @@ from deeplecture.services.content_service import ContentService
 from deeplecture.storage.fs_ask_storage import AskStorage, ConversationRecord, get_default_ask_storage
 from deeplecture.storage.metadata_storage import MetadataStorage, get_default_metadata_storage
 from deeplecture.transcription.interactive import parse_srt_to_segments
+from deeplecture.use_cases.shared.prompt_safety import normalize_llm_markdown
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from deeplecture.llm.llm_factory import LLMFactory
@@ -217,6 +218,7 @@ class AskService:
             system_prompt=system_prompt,
             image_path=screenshot_image_path,
         )
+        answer = normalize_llm_markdown(str(answer or ""))
 
         now = datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z"
         conversation.messages.append(
@@ -299,11 +301,12 @@ class AskService:
             llm = factory.get_llm_for_task("ask_video")
         else:
             llm = factory.get_llm()
-        return llm.generate_response(
+        summary = llm.generate_response(
             prompt=user_prompt,
             system_prompt=system_prompt,
             image_path=None,
         )
+        return normalize_llm_markdown(str(summary or ""))
 
     def summarize_context_async(
         self,

@@ -139,6 +139,18 @@ class PathResolver:
         """
         return str(self._content_path(content_id, "notes", "notes.md"))
 
+    def build_cheatsheet_path(self, content_id: str) -> str:
+        """
+        Build path to cheatsheet.md without creating directories.
+
+        Args:
+            content_id: Content identifier
+
+        Returns:
+            Absolute path to cheatsheet.md
+        """
+        return str(self._content_path(content_id, "cheatsheet", "cheatsheet.md"))
+
     def ensure_notes_path(self, content_id: str) -> str:
         """
         Ensure notes directory exists and return path to notes.md.

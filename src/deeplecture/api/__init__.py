@@ -7,15 +7,16 @@ attaches its endpoints to the provided Flask application instance.
 
 from flask import Flask
 
-from .voiceover_routes import register_voiceover_routes
-from .timeline_routes import register_timeline_routes
-from .slide_routes import register_slide_routes
 from .ask_routes import register_ask_routes
-from .note_routes import register_note_routes
+from .cheatsheet_routes import register_cheatsheet_routes
 from .config_routes import register_config_routes
-from .live2d_routes import register_live2d_routes
 from .content_routes import register_content_routes
+from .live2d_routes import register_live2d_routes
+from .note_routes import register_note_routes
+from .slide_routes import register_slide_routes
 from .task_routes import register_task_routes
+from .timeline_routes import register_timeline_routes
+from .voiceover_routes import register_voiceover_routes
 
 
 def register_routes(
@@ -48,6 +49,7 @@ def register_routes(
     )
     register_ask_routes(app, content_service=content_service)
     register_note_routes(app, task_manager=task_manager, content_service=content_service)
+    register_cheatsheet_routes(app, task_manager=task_manager, content_service=content_service)
     register_config_routes(app)
     register_live2d_routes(app)
     register_task_routes(app, task_manager=task_manager, sse_manager=sse_manager)

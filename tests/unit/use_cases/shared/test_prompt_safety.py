@@ -17,6 +17,8 @@ class TestNormalizeLlmMarkdown:
             (r"\*\*Bold\*\*", "**Bold**"),
             ("Unmatched **bold", "Unmatched **bold"),
             ("**foo \nbar**", "**foo \nbar**"),
+            ("Use `** text **` and ** text **", "Use `** text **` and **text**"),
+            ("```md\n** text **\n```", "```md\n** text **\n```"),
         ],
     )
     def test_trims_whitespace_inside_bold_markers(self, text: str, expected: str) -> None:

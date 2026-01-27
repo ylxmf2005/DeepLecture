@@ -17,6 +17,7 @@ from deeplecture.services.subtitle_service import SubtitleService
 from deeplecture.services.timeline_service import TimelineService
 from deeplecture.transcription.interactive import parse_srt_to_segments
 from deeplecture.transcription.voiceover import SubtitleVoiceoverGenerator
+from deeplecture.use_cases.shared.prompt_safety import normalize_llm_markdown
 from deeplecture.workers.task_manager import TaskManager
 
 logger = logging.getLogger(__name__)
@@ -501,6 +502,7 @@ def _handle_slide_explanation(content_service: ContentService, metadata: Dict[st
             system_prompt=system_prompt,
             image_path=image_path,
         )
+        explanation = normalize_llm_markdown(str(explanation or ""))
         payload = dict(base_payload)
         payload["explanation"] = explanation
         payload["updated_at"] = _utc_now_iso()

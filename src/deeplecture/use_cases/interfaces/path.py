@@ -81,6 +81,18 @@ class PathResolverProtocol(Protocol):
         """
         ...
 
+    def build_cheatsheet_path(self, content_id: str) -> str:
+        """
+        Build path to cheatsheet.md without creating directories.
+
+        Args:
+            content_id: Content identifier
+
+        Returns:
+            Absolute path to cheatsheet.md
+        """
+        ...
+
     def ensure_notes_path(self, content_id: str) -> str:
         """
         Ensure notes directory exists and return path to notes.md.

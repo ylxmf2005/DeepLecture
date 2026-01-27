@@ -49,6 +49,7 @@ from deeplecture.prompts.subtitle_lecture_segmentation_prompt import (
     build_lecture_segmentation_prompt,
 )
 from deeplecture.infra.parallel_pool import ResourceWorkerPool
+from deeplecture.use_cases.shared.prompt_safety import normalize_llm_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -573,6 +574,7 @@ class TimelineGenerator:
         if not markdown:
             logger.debug("LLM requested explanation but markdown is empty")
             return None
+        markdown = normalize_llm_markdown(markdown)
 
         title = str(data.get("title") or "").strip()
         if not title:

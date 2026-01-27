@@ -2,6 +2,7 @@
 
 # Storage
 from deeplecture.use_cases.interfaces.ask import AskStorageProtocol
+from deeplecture.use_cases.interfaces.cheatsheet import CheatsheetStorageProtocol
 
 # Audio Processing
 from deeplecture.use_cases.interfaces.audio import AudioProcessorProtocol
@@ -67,6 +68,7 @@ __all__ = [
     "ArtifactStorageProtocol",
     "AskStorageProtocol",
     "AudioProcessorProtocol",
+    "CheatsheetStorageProtocol",
     "ClaudeCodeProtocol",
     "EventPublisherProtocol",
     "FactVerificationStorageProtocol",
