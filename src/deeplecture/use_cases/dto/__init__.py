@@ -1,5 +1,13 @@
 """Data Transfer Objects for Use Cases layer."""
 
+from deeplecture.use_cases.dto.cheatsheet import (
+    CheatsheetResult,
+    CheatsheetStats,
+    GenerateCheatsheetRequest,
+    GeneratedCheatsheetResult,
+    KnowledgeItem,
+    SaveCheatsheetRequest,
+)
 from deeplecture.use_cases.dto.slide import (
     PageWorkPlan,
     SlideGenerationRequest,
@@ -38,18 +46,21 @@ __all__ = [
     "AudioOpPlan",
     "BackgroundContext",
     "BilingualSegment",
+    "CheatsheetResult",
+    "CheatsheetStats",
     "ClipPlan",
     "EnhanceTranslateRequest",
-    # Subtitle
+    "GenerateCheatsheetRequest",
     "GenerateSubtitleRequest",
-    # Voiceover
     "GenerateVoiceoverRequest",
+    "GeneratedCheatsheetResult",
     "ImportJobResult",
     "ImportVideoFromURLRequest",
+    "KnowledgeItem",
     "MergePDFsRequest",
     "MergeVideosRequest",
     "PageWorkPlan",
-    # Slide Lecture
+    "SaveCheatsheetRequest",
     "SlideGenerationRequest",
     "SlideGenerationResult",
     "SubtitleResult",
@@ -57,7 +68,6 @@ __all__ = [
     "TranscriptSegment",
     "UploadPDFRequest",
     "UploadResult",
-    # Upload
     "UploadVideoRequest",
     "VoiceoverResult",
 ]

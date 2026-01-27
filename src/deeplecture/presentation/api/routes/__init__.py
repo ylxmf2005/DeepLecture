@@ -1,5 +1,6 @@
 """Route blueprints for API layer."""
 
+from deeplecture.presentation.api.routes.cheatsheet import bp as cheatsheet_bp
 from deeplecture.presentation.api.routes.config import bp as config_bp
 from deeplecture.presentation.api.routes.content import bp as content_bp
 from deeplecture.presentation.api.routes.conversation import bp as conversation_bp
@@ -18,6 +19,7 @@ from deeplecture.presentation.api.routes.upload import bp as upload_bp
 from deeplecture.presentation.api.routes.voiceover import bp as voiceover_bp
 
 __all__ = [
+    "cheatsheet_bp",
     "config_bp",
     "content_bp",
     "conversation_bp",
