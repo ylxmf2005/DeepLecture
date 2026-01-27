@@ -50,6 +50,10 @@ export type { GetTimelineOptions, GenerateTimelineOptions } from "./timeline";
 export { getVideoNote, saveVideoNote, generateVideoNote } from "./notes";
 export type { GenerateVideoNoteParams } from "./notes";
 
+// Cheatsheet APIs
+export { getVideoCheatsheet, saveVideoCheatsheet, generateVideoCheatsheet } from "./cheatsheet";
+export type { GenerateCheatsheetParams, CheatsheetContextMode, CheatsheetCriticality, CheatsheetSubjectType } from "./cheatsheet";
+
 // Explanation APIs
 export { captureSlide, explainSlide, getExplanationHistory, deleteExplanation } from "./explanation";
 export type { ExplainSlideParams } from "./explanation";

@@ -111,6 +111,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         refreshExplanations,
         setRefreshExplanations,
         refreshVerification,
+        refreshCheatsheet,
         subtitleRefreshVersion,
         askContext,
         setAskContext,
@@ -452,6 +453,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             timelineLoading={timelineLoading}
                             refreshExplanations={refreshExplanations}
                             refreshVerification={refreshVerification}
+                            refreshCheatsheet={refreshCheatsheet}
                             askContext={askContext}
                             learnerProfile={learnerProfile}
                             subtitleContextWindowSeconds={subtitleContextWindowSeconds}
@@ -484,6 +486,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                         timelineLoading={timelineLoading}
                         refreshExplanations={refreshExplanations}
                         refreshVerification={refreshVerification}
+                        refreshCheatsheet={refreshCheatsheet}
                         askContext={askContext}
                         learnerProfile={learnerProfile}
                         subtitleContextWindowSeconds={subtitleContextWindowSeconds}

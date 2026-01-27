@@ -41,6 +41,11 @@ const VerifyTab = dynamic(
     { loading: LoadingSpinner }
 );
 
+const CheatsheetTab = dynamic(
+    () => import("@/components/features/CheatsheetTab").then((mod) => mod.CheatsheetTab),
+    { loading: LoadingSpinner }
+);
+
 // Grouped prop interfaces for better organization (ISP)
 
 /** Subtitle-related props for the sidebar subtitle panel */
@@ -90,6 +95,7 @@ export interface TabContentProps extends SubtitleProps, ProcessingProps, Timelin
     currentTime: number;
     refreshExplanations: number;
     refreshVerification: number;
+    refreshCheatsheet: number;
 }
 
 // Shared placeholder for "no video yet" state
@@ -210,6 +216,7 @@ export function renderTabContent(tabId: TabId, props: TabContentProps): React.Re
         timelineLoading,
         refreshExplanations,
         refreshVerification,
+        refreshCheatsheet,
         askContext,
         learnerProfile,
         subtitleContextWindowSeconds,
@@ -335,12 +342,21 @@ export function renderTabContent(tabId: TabId, props: TabContentProps): React.Re
         case "verify":
             return <VerifyTab videoId={videoId} onSeek={onSeek} refreshTrigger={refreshVerification} />;
 
+        case "cheatsheet":
+            return (
+                <CheatsheetTab
+                    videoId={videoId}
+                    onSeek={onSeek}
+                    refreshTrigger={refreshCheatsheet}
+                    onAddToNotes={onAddToNotes}
+                />
+            );
+
         // Placeholder tabs
         case "notes":
         case "flashcard":
         case "test":
         case "report":
-        case "cheatsheet":
         case "podcast":
             return <FeaturePlaceholder label={tabId.charAt(0).toUpperCase() + tabId.slice(1)} />;
 

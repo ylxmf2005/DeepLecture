@@ -231,6 +231,28 @@ export interface GenerateVideoNoteResponse {
 }
 
 // =============================================================================
+// CHEATSHEET TYPES
+// =============================================================================
+
+export interface CheatsheetResponse {
+    contentId: string;
+    content: string;
+    updatedAt: string | null;
+}
+
+export interface CheatsheetStats {
+    totalItems: number;
+    byCategory: Record<string, number>;
+}
+
+export interface GenerateCheatsheetResponse {
+    contentId: string;
+    taskId: string;
+    status: TaskStatus;
+    message: string;
+}
+
+// =============================================================================
 // EXPLANATION TYPES
 // =============================================================================
 
