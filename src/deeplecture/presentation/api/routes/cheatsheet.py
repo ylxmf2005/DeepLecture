@@ -1,4 +1,12 @@
-"""Cheatsheet routes."""
+"""Cheatsheet routes (Clean Architecture implementation).
+
+NOTE: These routes are NOT currently active. The Flask app uses the legacy
+routes in `deeplecture/api/cheatsheet_routes.py`. These routes are prepared
+for a future migration to FastAPI/Blueprint-based architecture.
+
+When migrating, register the `cheatsheet_bp` Blueprint on the Flask app
+and remove the legacy routes.
+"""
 
 from __future__ import annotations
 

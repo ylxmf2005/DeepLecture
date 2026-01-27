@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -25,7 +25,7 @@ class KnowledgeItem:
     criticality: str  # high | medium | low
     tags: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "category": self.category,
@@ -79,7 +79,7 @@ class CheatsheetStats:
     total_items: int = 0
     by_category: dict[str, int] = field(default_factory=dict)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "total_items": self.total_items,
@@ -95,7 +95,7 @@ class CheatsheetResult:
     content: str
     updated_at: datetime | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "content_id": self.content_id,
@@ -114,7 +114,7 @@ class GeneratedCheatsheetResult:
     used_sources: list[str]  # ["subtitle", "slide"]
     stats: CheatsheetStats = field(default_factory=CheatsheetStats)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "content_id": self.content_id,

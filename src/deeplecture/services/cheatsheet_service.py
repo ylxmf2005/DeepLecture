@@ -1,4 +1,9 @@
-"""Cheatsheet service for API layer."""
+"""Cheatsheet service for API layer.
+
+This service acts as a thin adapter between the Flask API routes and the
+Clean Architecture storage layer. It delegates to FsCheatsheetStorage for
+actual file operations.
+"""
 
 from __future__ import annotations
 
@@ -6,14 +11,27 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from pathlib import Path
+
 from deeplecture.config.config import get_settings
-from deeplecture.storage.path_resolver import get_default_path_resolver
+from deeplecture.infrastructure.repositories import FsCheatsheetStorage, PathResolver
 
 if TYPE_CHECKING:
     from deeplecture.workers.task_manager import TaskManager
     from deeplecture.services.content_service import ContentService
 
 logger = logging.getLogger(__name__)
+
+
+def _get_default_path_resolver() -> PathResolver:
+    """Create PathResolver with settings-based paths."""
+    settings = get_settings()
+    data_dir = Path(settings.app.data_dir).expanduser().resolve()
+    return PathResolver(
+        content_dir=data_dir / "content",
+        temp_dir=data_dir / "temp",
+        upload_dir=data_dir / "uploads",
+    )
 
 
 @dataclass
@@ -26,10 +44,11 @@ class CheatsheetDTO:
 
 class CheatsheetService:
     """
-    Service for cheatsheet operations.
+    Service adapter for cheatsheet operations.
 
-    Provides a simple interface for the API layer to interact with
-    cheatsheet functionality.
+    Delegates to FsCheatsheetStorage (Clean Architecture repository) for
+    actual file I/O. This service exists to maintain API layer compatibility
+    while the codebase migrates to Clean Architecture.
     """
 
     def __init__(
@@ -40,44 +59,36 @@ class CheatsheetService:
     ) -> None:
         self._task_manager = task_manager
         self._content_service = content_service
-        self._path_resolver = get_default_path_resolver()
-        self._settings = get_settings()
+        # Use the Clean Architecture storage layer
+        self._path_resolver = _get_default_path_resolver()
+        self._storage = FsCheatsheetStorage(self._path_resolver)
 
     def get_cheatsheet_path(self, content_id: str) -> str:
         """Get the path to the cheatsheet file."""
-        cheatsheet_dir = self._path_resolver.ensure_content_dir(content_id, "cheatsheet")
-        return f"{cheatsheet_dir}/cheatsheet.md"
+        return self._path_resolver.build_cheatsheet_path(content_id)
 
     def get_cheatsheet(self, content_id: str) -> CheatsheetDTO:
-        """Get cheatsheet content for a video."""
-        import os
-        from datetime import datetime
+        """Get cheatsheet content for a video.
 
-        path = self.get_cheatsheet_path(content_id)
-        if not os.path.exists(path):
+        Delegates to FsCheatsheetStorage.load() for actual file I/O.
+        """
+        result = self._storage.load(content_id)
+        if result is None:
             return CheatsheetDTO(content="", updated_at=None)
 
-        try:
-            with open(path, encoding="utf-8") as f:
-                content = f.read()
-            stat = os.stat(path)
-            updated_at = datetime.fromtimestamp(stat.st_mtime).isoformat()
-            return CheatsheetDTO(content=content, updated_at=updated_at)
-        except Exception as exc:
-            logger.warning("Failed to read cheatsheet %s: %s", path, exc)
-            return CheatsheetDTO(content="", updated_at=None)
+        content, updated_at = result
+        return CheatsheetDTO(
+            content=content,
+            updated_at=updated_at.isoformat() if updated_at else None,
+        )
 
     def save_cheatsheet(self, content_id: str, content: str) -> CheatsheetDTO:
-        """Save cheatsheet content."""
-        import os
-        from datetime import datetime
+        """Save cheatsheet content.
 
-        path = self.get_cheatsheet_path(content_id)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
-
-        stat = os.stat(path)
-        updated_at = datetime.fromtimestamp(stat.st_mtime).isoformat()
-        return CheatsheetDTO(content=content, updated_at=updated_at)
+        Delegates to FsCheatsheetStorage.save() for atomic file writes.
+        """
+        updated_at = self._storage.save(content_id, content)
+        return CheatsheetDTO(
+            content=content,
+            updated_at=updated_at.isoformat(),
+        )
