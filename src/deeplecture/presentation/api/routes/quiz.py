@@ -65,6 +65,20 @@ def generate_quiz(content_id: str) -> Response:
     user_instruction = data.get("user_instruction", "").strip()
     min_criticality = data.get("min_criticality", "medium")
     subject_type = data.get("subject_type", "auto")
+
+    # Validate enum values
+    valid_context_modes = {"auto", "subtitle", "slide", "both"}
+    if context_mode not in valid_context_modes:
+        return bad_request(f"context_mode must be one of: {', '.join(valid_context_modes)}")
+
+    valid_criticality = {"high", "medium", "low"}
+    if min_criticality not in valid_criticality:
+        return bad_request(f"min_criticality must be one of: {', '.join(valid_criticality)}")
+
+    valid_subjects = {"auto", "stem", "humanities"}
+    if subject_type not in valid_subjects:
+        return bad_request(f"subject_type must be one of: {', '.join(valid_subjects)}")
+
     llm_model = data.get("llm_model") or None
     prompts = data.get("prompts") or None
 
@@ -104,15 +118,3 @@ def generate_quiz(content_id: str) -> Response:
             "message": "Quiz generation started",
         }
     )
-
-
-def _serialize_item(item: object) -> dict:
-    """Serialize quiz item to API format."""
-    return {
-        "stem": item.stem,
-        "options": item.options,
-        "answer_index": item.answer_index,
-        "explanation": item.explanation,
-        "source_category": item.source_category,
-        "source_tags": item.source_tags,
-    }
