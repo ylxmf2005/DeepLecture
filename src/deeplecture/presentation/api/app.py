@@ -59,6 +59,7 @@ def _register_blueprints(app: Flask) -> None:
         live2d_bp,
         media_bp,
         note_bp,
+        quiz_bp,
         screenshot_bp,
         subtitle_bp,
         summaries_bp,
@@ -78,6 +79,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(live2d_bp, url_prefix="/api/live2d")
     app.register_blueprint(media_bp, url_prefix="/api/content")
     app.register_blueprint(note_bp, url_prefix="/api/notes")
+    app.register_blueprint(quiz_bp, url_prefix="/api/quiz")
     app.register_blueprint(screenshot_bp, url_prefix="/api/content")
     app.register_blueprint(subtitle_bp, url_prefix="/api/subtitle")
     app.register_blueprint(summaries_bp, url_prefix="/api/summaries")

@@ -35,6 +35,9 @@ from deeplecture.use_cases.interfaces.prompt_registry import (
     PromptSpec,
 )
 
+# Quiz
+from deeplecture.use_cases.interfaces.quiz import QuizStorageProtocol
+
 # External Services
 from deeplecture.use_cases.interfaces.services import ASRProtocol, LLMProtocol, TTSProtocol
 from deeplecture.use_cases.interfaces.storage import (
@@ -87,6 +90,7 @@ __all__ = [
     "PromptInfo",
     "PromptRegistryProtocol",
     "PromptSpec",
+    "QuizStorageProtocol",
     "SubtitleStorageProtocol",
     "TTSModelInfo",
     "TTSProtocol",

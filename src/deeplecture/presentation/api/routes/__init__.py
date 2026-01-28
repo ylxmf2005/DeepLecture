@@ -11,6 +11,7 @@ from deeplecture.presentation.api.routes.generation import bp as generation_bp
 from deeplecture.presentation.api.routes.live2d import bp as live2d_bp
 from deeplecture.presentation.api.routes.media import bp as media_bp
 from deeplecture.presentation.api.routes.note import bp as note_bp
+from deeplecture.presentation.api.routes.quiz import bp as quiz_bp
 from deeplecture.presentation.api.routes.screenshot import bp as screenshot_bp
 from deeplecture.presentation.api.routes.subtitle import bp as subtitle_bp
 from deeplecture.presentation.api.routes.task import bp as task_bp
@@ -29,6 +30,7 @@ __all__ = [
     "live2d_bp",
     "media_bp",
     "note_bp",
+    "quiz_bp",
     "screenshot_bp",
     "subtitle_bp",
     "summaries_bp",

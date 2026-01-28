@@ -19,6 +19,7 @@
 
 ### 笔记与学习
 - **[笔记](features/notes.md)** - WYSIWYG + KaTeX，自动关联视频时间点
+- **[Quiz 小测验](demo/quiz.md)** - AI 根据课程内容生成选择题
 
 ### 高级功能
 - **[课件生成视频](features/slide-lecture.md)** ⭐ - 上传 PDF，AI 生成讲解和配音

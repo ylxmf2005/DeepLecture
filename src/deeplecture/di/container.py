@@ -25,6 +25,7 @@ from deeplecture.infrastructure import (
     FsFactVerificationStorage,
     FsFileStorage,
     FsNoteStorage,
+    FsQuizStorage,
     FsSubtitleStorage,
     FsTimelineStorage,
     FsVoiceoverStorage,
@@ -52,6 +53,7 @@ from deeplecture.use_cases.explanation import ExplanationUseCase
 from deeplecture.use_cases.fact_verification import FactVerificationUseCase
 from deeplecture.use_cases.note import NoteUseCase
 from deeplecture.use_cases.prompts import create_default_registry
+from deeplecture.use_cases.quiz import QuizUseCase
 from deeplecture.use_cases.slide_lecture import SlideLectureUseCase
 from deeplecture.use_cases.subtitle import SubtitleUseCase
 from deeplecture.use_cases.timeline import TimelineUseCase
@@ -166,6 +168,13 @@ class Container:
         if "cheatsheet_storage" not in self._cache:
             self._cache["cheatsheet_storage"] = FsCheatsheetStorage(self.path_resolver)
         return self._cache["cheatsheet_storage"]  # type: ignore[return-value]
+
+    @property
+    def quiz_storage(self) -> FsQuizStorage:
+        """Filesystem-based quiz persistence."""
+        if "quiz_storage" not in self._cache:
+            self._cache["quiz_storage"] = FsQuizStorage(self.path_resolver)
+        return self._cache["quiz_storage"]  # type: ignore[return-value]
 
     @property
     def explanation_storage(self) -> FsExplanationStorage:
@@ -497,6 +506,18 @@ class Container:
                 llm_provider=self.llm_provider,
             )
         return self._cache["cheatsheet_uc"]  # type: ignore[return-value]
+
+    @property
+    def quiz_usecase(self) -> QuizUseCase:
+        """Quiz generation and retrieval use case."""
+        if "quiz_uc" not in self._cache:
+            self._cache["quiz_uc"] = QuizUseCase(
+                quiz_storage=self.quiz_storage,
+                subtitle_storage=self.subtitle_storage,
+                llm_provider=self.llm_provider,
+                path_resolver=self.path_resolver,
+            )
+        return self._cache["quiz_uc"]  # type: ignore[return-value]
 
     @property
     def slide_lecture_usecase(self) -> SlideLectureUseCase:
