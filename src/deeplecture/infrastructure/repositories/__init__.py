@@ -7,6 +7,7 @@ from deeplecture.infrastructure.repositories.fs_explanation_storage import FsExp
 from deeplecture.infrastructure.repositories.fs_fact_verification_storage import FsFactVerificationStorage
 from deeplecture.infrastructure.repositories.fs_file_storage import FsFileStorage
 from deeplecture.infrastructure.repositories.fs_note_storage import FsNoteStorage
+from deeplecture.infrastructure.repositories.fs_quiz_storage import FsQuizStorage
 from deeplecture.infrastructure.repositories.fs_subtitle_storage import FsSubtitleStorage
 from deeplecture.infrastructure.repositories.fs_timeline_storage import FsTimelineStorage
 from deeplecture.infrastructure.repositories.fs_voiceover_storage import FsVoiceoverStorage
@@ -25,6 +26,7 @@ __all__ = [
     "FsFactVerificationStorage",
     "FsFileStorage",
     "FsNoteStorage",
+    "FsQuizStorage",
     "FsSubtitleStorage",
     "FsTimelineStorage",
     "FsVoiceoverStorage",
