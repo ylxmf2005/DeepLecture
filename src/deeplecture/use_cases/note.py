@@ -214,7 +214,7 @@ class NoteUseCase:
 
         Args:
             content_id: Content identifier
-            context_mode: "subtitle" | "slide" | "both"
+            context_mode: "auto" | "subtitle" | "slide" | "both"
             content_type: "video" | "pdf"
 
         Returns:

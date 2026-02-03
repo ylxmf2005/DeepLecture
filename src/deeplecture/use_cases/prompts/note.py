@@ -188,8 +188,10 @@ def build_note_part_prompt(
                 sib_entry += f" (focus: {sib_fps})"
             sibling_lines.append(sib_entry)
         user_lines.append(
-            "OTHER PARTS IN THIS NOTE (do not elaborate on their focus points):\n" + "\n".join(sibling_lines) + "\n"
-            "Only explain YOUR focus points listed above. "
+            "OTHER PARTS IN THIS NOTE (do not elaborate on their focus points):\n"
+            + "\n".join(sibling_lines)
+            + "\n\n"
+            + "Only explain YOUR focus points listed above. "
             "A brief reference (1–2 sentences) to related concepts in other parts is acceptable, "
             "but do not provide full explanations of their topics."
         )
