@@ -391,6 +391,7 @@ class NotePartBuilder(BasePromptBuilder):
             instruction=kwargs.get("instruction", ""),
             profile=kwargs.get("profile", ""),
             part=kwargs["part"],
+            outline=kwargs.get("outline"),
         )
         return PromptSpec(user_prompt=user_prompt, system_prompt=system_prompt)
 

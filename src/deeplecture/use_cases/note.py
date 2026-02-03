@@ -13,7 +13,7 @@ from deeplecture.use_cases.dto.note import (
     SaveNoteRequest,
 )
 from deeplecture.use_cases.shared.llm_json import parse_llm_json
-from deeplecture.use_cases.shared.prompt_safety import sanitize_learner_profile
+from deeplecture.use_cases.shared.prompt_safety import sanitize_learner_profile, sanitize_question
 from deeplecture.use_cases.shared.subtitle import (
     load_first_available_subtitle_segments,
     prioritize_subtitle_languages,
@@ -157,15 +157,16 @@ class NoteUseCase:
         if not context_block:
             raise ValueError("Cannot generate notes: failed to load usable context from subtitles or slides.")
 
-        # Sanitize user-provided learner profile
+        # Sanitize user-provided inputs
         profile = sanitize_learner_profile(request.learner_profile)
+        instruction = sanitize_question(request.user_instruction)
 
         # 4. Build outline
         language = request.language
         outline = self._build_outline(
             language=language,
             context_block=context_block,
-            instruction=request.user_instruction,
+            instruction=instruction,
             profile=profile,
             max_parts=request.max_parts,
             llm=llm,
@@ -180,7 +181,7 @@ class NoteUseCase:
             outline=outline,
             language=language,
             context_block=context_block,
-            instruction=request.user_instruction,
+            instruction=instruction,
             profile=profile,
             llm=llm,
             prompts=request.prompts,
@@ -213,13 +214,13 @@ class NoteUseCase:
 
         Args:
             content_id: Content identifier
-            context_mode: "subtitle" | "slide" | "both"
+            context_mode: "auto" | "subtitle" | "slide" | "both"
             content_type: "video" | "pdf"
 
         Returns:
             (context_block, used_sources)
         """
-        mode = (context_mode or "both").strip().lower()
+        mode = (context_mode or "auto").strip().lower()
 
         # Check available sources
         subtitle_text = self._load_subtitle_context(content_id)
@@ -285,12 +286,11 @@ class NoteUseCase:
                 raise ValueError("Requested slide context, but no slide deck is available.")
             return False, True
 
-        if mode == "both":
-            if not has_subtitle or not has_slides:
-                raise ValueError("Requested 'both' context, but subtitles or slide deck are missing.")
-            return True, True
+        if mode in ("auto", "both"):
+            # "both" means: use both if available (not "require both").
+            return has_subtitle, has_slides
 
-        raise ValueError("Unsupported context_mode. Allowed values are 'subtitle', 'slide', or 'both'.")
+        raise ValueError("Unsupported context_mode. Allowed values are 'auto', 'subtitle', 'slide', or 'both'.")
 
     def _load_subtitle_context(self, content_id: str) -> str:
         """Load subtitle text from best available source."""
@@ -317,8 +317,12 @@ class NoteUseCase:
         if self._pdf_text_extractor is None:
             return ""
 
-        pdf_path = self._paths.build_content_path(content_id, "slide", "slide.pdf")
-        return self._pdf_text_extractor.extract_text(pdf_path)
+        try:
+            pdf_path = self._paths.build_content_path(content_id, "slide", "slide.pdf")
+            return self._pdf_text_extractor.extract_text(pdf_path)
+        except Exception as exc:
+            logger.warning("Failed to extract PDF text for %s: %s", content_id, exc)
+            return ""
 
     # =========================================================================
     # OUTLINE GENERATION
@@ -373,10 +377,12 @@ class NoteUseCase:
         data = parse_llm_json(raw, context="note outline")
 
         if not isinstance(data, dict):
+            logger.warning("Outline parse returned non-dict type %s (preview: %.200s)", type(data).__name__, raw)
             return []
 
         raw_parts = data.get("parts")
         if not isinstance(raw_parts, list):
+            logger.warning("Outline JSON missing 'parts' list (preview: %.200s)", raw)
             return []
 
         parts = []
@@ -387,7 +393,7 @@ class NoteUseCase:
             raw_id = item.get("id", index)
             try:
                 pid = int(raw_id)
-            except Exception:
+            except (TypeError, ValueError):
                 pid = index
 
             title = str(item.get("title") or "").strip()
@@ -454,7 +460,7 @@ class NoteUseCase:
 
         def _render_error(part: NotePart, exc: Exception) -> str:
             logger.error("Failed to generate note part %s: %s", part.id, exc)
-            return f"## Part {part.id}: {part.title}\n\n[Generation failed: {exc}]"
+            return f"## Part {part.id}: {part.title}\n\n*This section could not be generated. Please try again.*"
 
         def _generate(part: NotePart) -> str:
             spec = prompt_builder.build(
@@ -463,6 +469,7 @@ class NoteUseCase:
                 instruction=instruction,
                 profile=profile,
                 part=part,
+                outline=outline,
             )
             return llm.complete(
                 spec.user_prompt,
