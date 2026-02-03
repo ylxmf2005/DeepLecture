@@ -406,14 +406,17 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
         return (
             <div
                 ref={containerRef}
-                className="relative group rounded-xl bg-black shadow-lg flex items-center justify-center"
+                className={cn(
+                    "relative group rounded-xl bg-black shadow-lg flex items-center justify-center",
+                    viewMode === "web-fullscreen" && "w-full h-full"
+                )}
             >
                 {/* Video element without native controls */}
                 <video
                     ref={videoRef}
                     className={cn(
                         "w-full rounded-xl",
-                        isFullscreen ? "h-full object-contain" : "aspect-video"
+                        isFullscreen || viewMode === "web-fullscreen" ? "h-full object-contain" : "aspect-video"
                     )}
                     crossOrigin="anonymous"
                     playsInline
@@ -450,7 +453,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                                 className="bg-black/70 text-white text-center px-4 py-1 rounded-lg mb-1 max-w-[80%] whitespace-pre-wrap"
                                 style={{
                                     fontSize: `${
-                                        (subtitleDisplay?.fontSize ?? 16) * (isFullscreen ? 2 : 1)
+                                        (subtitleDisplay?.fontSize ?? 16) * (isFullscreen || viewMode === "web-fullscreen" ? 2 : 1)
                                     }px`,
                                     lineHeight: "1.5",
                                     textShadow: "0px 1px 2px rgba(0,0,0,0.8)"

@@ -35,6 +35,8 @@ interface VideoPlayerSectionProps {
     viewMode?: ViewMode;
     /** Callback when view mode changes */
     onViewModeChange?: (mode: ViewMode) => void;
+    /** Optional className for the container */
+    className?: string;
 }
 
 export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionProps>(
@@ -58,6 +60,7 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
             onUploadSlide,
             viewMode,
             onViewModeChange,
+            className,
         },
         ref
     ) {
@@ -166,7 +169,11 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
         };
 
         return (
-            <div className="shrink-0 relative group">
+            <div className={cn(
+                "relative group",
+                viewMode === "web-fullscreen" ? "w-full h-full" : "shrink-0",
+                className
+            )}>
                 {/* Floating toggle button - only visible on hover */}
                 <div className="absolute top-4 left-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <div className="flex gap-1 bg-black/70 backdrop-blur-sm rounded-lg p-1 shadow-lg">
@@ -195,7 +202,10 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                     </div>
                 </div>
 
-                <div className={cn(playerTab === "player" ? "" : "hidden")}>
+                <div className={cn(
+                    playerTab === "player" ? "" : "hidden",
+                    viewMode === "web-fullscreen" && "h-full"
+                )}>
                     {content.type === "slide" && (content.videoStatus !== "ready" || generatingVideo) ? (
                         // Slide without video OR regenerating: Show generate/loading state
                         <div className="relative w-full aspect-video bg-card rounded-xl border border-border shadow-sm overflow-hidden flex items-center justify-center">
