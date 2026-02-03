@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { Subtitle } from "@/lib/srt";
 import { getActiveSubtitles } from "@/lib/subtitleSearch";
 import { useGlobalSettingsStore } from "@/stores";
-import type { SubtitleDisplayMode } from "@/stores/types";
+import type { SubtitleDisplayMode, ViewMode } from "@/stores/types";
 import { useVoiceoverSync } from "@/hooks/useVoiceoverSync";
 import { VideoControls } from "./VideoControls";
 import { logger } from "@/shared/infrastructure";
@@ -30,6 +30,10 @@ interface VideoPlayerProps {
     onAskAtTime?: (time: number) => void;
     onAddNoteAtTime?: (time: number) => void;
     onPlayerReady?: (videoElement: HTMLVideoElement) => void;
+    /** Current view mode for layout control */
+    viewMode?: ViewMode;
+    /** Callback when view mode changes */
+    onViewModeChange?: (mode: ViewMode) => void;
 }
 
 export interface VideoPlayerRef {
@@ -57,6 +61,8 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
         onAskAtTime,
         onAddNoteAtTime,
         onPlayerReady,
+        viewMode,
+        onViewModeChange,
     }, ref) => {
         const [isCapturing, setIsCapturing] = useState(false);
         const [currentTime, setCurrentTime] = useState(0);
@@ -470,6 +476,8 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                     onSeek={handleSeek}
                     isFullscreen={isFullscreen}
                     onToggleFullscreen={toggleFullscreen}
+                    viewMode={viewMode}
+                    onViewModeChange={onViewModeChange}
                 />
 
                 <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">

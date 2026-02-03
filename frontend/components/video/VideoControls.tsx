@@ -9,7 +9,12 @@ import {
     Volume1,
     Maximize,
     Minimize,
+    Maximize2,
+    Minimize2,
+    ChevronsLeftRight,
+    ChevronsRightLeft,
 } from "lucide-react";
+import type { ViewMode } from "@/stores/types";
 import { cn } from "@/lib/utils";
 import { VideoProgressBar } from "./VideoProgressBar";
 
@@ -38,6 +43,10 @@ interface VideoControlsProps {
     isFullscreen: boolean;
     /** Toggle fullscreen callback */
     onToggleFullscreen: () => void;
+    /** Current view mode */
+    viewMode?: ViewMode;
+    /** View mode change callback */
+    onViewModeChange?: (mode: ViewMode) => void;
     /** Optional className */
     className?: string;
 }
@@ -68,6 +77,8 @@ export function VideoControls({
     onSeek,
     isFullscreen,
     onToggleFullscreen,
+    viewMode = "normal",
+    onViewModeChange,
     className,
 }: VideoControlsProps) {
     const [volume, setVolume] = useState(1);
@@ -327,16 +338,55 @@ export function VideoControls({
                         )}
                     </div>
 
-                    {/* Fullscreen */}
+                    {/* Widescreen mode */}
+                    {onViewModeChange && (
+                        <button
+                            onClick={() => onViewModeChange(viewMode === "widescreen" ? "normal" : "widescreen")}
+                            className={cn(
+                                "p-1 transition-colors",
+                                viewMode === "widescreen" ? "text-blue-400" : "text-white hover:text-white/80"
+                            )}
+                            title={viewMode === "widescreen" ? "Exit widescreen" : "Widescreen"}
+                        >
+                            {viewMode === "widescreen" ? (
+                                <ChevronsRightLeft className="w-5 h-5" />
+                            ) : (
+                                <ChevronsLeftRight className="w-5 h-5" />
+                            )}
+                        </button>
+                    )}
+
+                    {/* Web fullscreen mode */}
+                    {onViewModeChange && (
+                        <button
+                            onClick={() => onViewModeChange(viewMode === "web-fullscreen" ? "normal" : "web-fullscreen")}
+                            className={cn(
+                                "p-1 transition-colors",
+                                viewMode === "web-fullscreen" ? "text-blue-400" : "text-white hover:text-white/80"
+                            )}
+                            title={viewMode === "web-fullscreen" ? "Exit web fullscreen" : "Web fullscreen"}
+                        >
+                            {viewMode === "web-fullscreen" ? (
+                                <Minimize className="w-5 h-5" />
+                            ) : (
+                                <Maximize className="w-5 h-5" />
+                            )}
+                        </button>
+                    )}
+
+                    {/* System Fullscreen */}
                     <button
                         onClick={onToggleFullscreen}
-                        className="p-1 text-white hover:text-white/80 transition-colors"
+                        className={cn(
+                            "p-1 transition-colors",
+                            isFullscreen ? "text-blue-400" : "text-white hover:text-white/80"
+                        )}
                         title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
                     >
                         {isFullscreen ? (
-                            <Minimize className="w-5 h-5" />
+                            <Minimize2 className="w-5 h-5" />
                         ) : (
-                            <Maximize className="w-5 h-5" />
+                            <Maximize2 className="w-5 h-5" />
                         )}
                     </button>
                 </div>
