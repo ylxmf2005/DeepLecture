@@ -40,6 +40,10 @@ def build_note_outline_prompt(
         "- Earlier parts: prerequisites and foundational concepts.\n"
         "- Later parts: advanced ideas, applications, and synthesis.\n"
         "- Each part should be self-contained enough to study independently.\n\n"
+        "FOCUS POINTS — EXCLUSIVE OWNERSHIP RULE:\n"
+        "- Each concept or knowledge point must appear in exactly one part's focus_points.\n"
+        "- focus_points are mutually exclusive across parts — no concept may appear in more than one part.\n"
+        "- If two parts relate to a concept, assign it to the part where it is MOST central.\n\n"
         "Output rules:\n"
         "- Respond with a SINGLE JSON object.\n"
         "- Do NOT wrap JSON in markdown fences or add commentary.\n"
@@ -74,6 +78,7 @@ def build_note_outline_prompt(
         "- Earlier parts should cover prerequisite ideas and basic concepts.\n"
         "- Later parts may go deeper, build on previous parts, or cover applications.\n"
         "- Each part should group closely related ideas that belong together.\n"
+        "- focus_points must not overlap: a concept must not appear in more than one part.\n"
     )
 
     if parts_hint:
@@ -118,6 +123,7 @@ def build_note_part_prompt(
     instruction: str = "",
     profile: str = "",
     part: NotePart,
+    outline: list[NotePart] | None = None,
 ) -> tuple[str, str]:
     """
     Build prompt for a single note part expansion.
@@ -128,6 +134,7 @@ def build_note_part_prompt(
         instruction: User-provided instruction for note generation
         profile: Learner profile describing background and goals
         part: Note part to expand
+        outline: Full outline (all parts) for sibling awareness
 
     Returns:
         (user_prompt, system_prompt)
@@ -169,6 +176,23 @@ def build_note_part_prompt(
     if focus_points:
         bullet = "\n".join(f"- {point}" for point in focus_points)
         user_lines.append("Focus points for this part:\n" + bullet)
+
+    # Sibling awareness: show what other parts cover so this part doesn't repeat
+    siblings = [p for p in (outline or []) if p.id != part.id]
+    if siblings:
+        sibling_lines = []
+        for sib in siblings:
+            sib_fps = ", ".join(str(fp) for fp in (sib.focus_points or []))
+            sib_entry = f"- Part {sib.id}: {sib.title}"
+            if sib_fps:
+                sib_entry += f" (focus: {sib_fps})"
+            sibling_lines.append(sib_entry)
+        user_lines.append(
+            "OTHER PARTS IN THIS NOTE (do not elaborate on their focus points):\n" + "\n".join(sibling_lines) + "\n"
+            "Only explain YOUR focus points listed above. "
+            "A brief reference (1–2 sentences) to related concepts in other parts is acceptable, "
+            "but do not provide full explanations of their topics."
+        )
 
     if instruction:
         user_lines.append(f"Global user instruction for this note (apply if meaningful):\n{instruction}\n")
