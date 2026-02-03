@@ -102,6 +102,8 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
             toggleHideSidebars: () =>
                 set((state) => ({ hideSidebars: !state.hideSidebars })),
 
+            setViewMode: (mode) => set({ viewMode: mode }),
+
             setBrowserNotificationsEnabled: (value) =>
                 set((state) => ({
                     notifications: { ...state.notifications, browserNotificationsEnabled: value },
@@ -214,6 +216,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
                 subtitleDisplay: state.subtitleDisplay,
                 notifications: state.notifications,
                 hideSidebars: state.hideSidebars,
+                viewMode: state.viewMode,
                 live2d: state.live2d,
                 learnerProfile: state.learnerProfile,
                 note: state.note,
@@ -312,3 +315,6 @@ export const useIsHydrated = () =>
 
 export const useAISettings = () =>
     useGlobalSettingsStore((state) => state.ai);
+
+export const useViewMode = () =>
+    useGlobalSettingsStore((state) => state.viewMode);

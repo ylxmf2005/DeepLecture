@@ -61,6 +61,7 @@ export interface GlobalSettings {
     playback: PlaybackSettings;
     language: LanguageSettings;
     hideSidebars: boolean;
+    viewMode: ViewMode;
     subtitleDisplay: SubtitleDisplaySettings;
     notifications: NotificationSettings;
     live2d: Live2DSettings;
@@ -91,6 +92,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
         translated: "zh",
     },
     hideSidebars: false,
+    viewMode: "normal",
     live2d: {
         enabled: false,
         modelPath: `${API_BASE_URL}/api/live2d/models/Haru/Haru.model3.json`,
@@ -117,6 +119,15 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
  * - dual_reversed: Show target on top, source below
  */
 export type SubtitleDisplayMode = "source" | "target" | "dual" | "dual_reversed";
+
+/**
+ * Video player view mode for layout control.
+ * - normal: Default layout (video + sidebar side by side)
+ * - widescreen: Video full width, sidebar + notes below
+ * - web-fullscreen: Video fills browser viewport
+ * - fullscreen: Native browser fullscreen API
+ */
+export type ViewMode = "normal" | "widescreen" | "web-fullscreen" | "fullscreen";
 
 export interface VideoNotes {
     draft: string;
@@ -167,6 +178,7 @@ export interface GlobalSettingsActions {
     setTranslatedLanguage: (lang: string) => void;
     loadLanguageFromServer: () => Promise<void>;
     toggleHideSidebars: () => void;
+    setViewMode: (mode: ViewMode) => void;
     setBrowserNotificationsEnabled: (value: boolean) => void;
     setToastNotificationsEnabled: (value: boolean) => void;
     setTitleFlashEnabled: (value: boolean) => void;

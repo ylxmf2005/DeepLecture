@@ -64,8 +64,8 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
 
     // Global settings from optimized hook (uses useShallow internally)
     const { settings, actions: settingsActions } = useVideoPageSettings();
-    const { playback, language, hideSidebars, live2d } = settings;
-    const { toggleLive2d, setLive2dModelPosition, setLive2dModelScale } = settingsActions;
+    const { playback, language, hideSidebars, viewMode, live2d } = settings;
+    const { toggleLive2d, setLive2dModelPosition, setLive2dModelScale, setViewMode } = settingsActions;
 
     // Derived values for convenience (used by FocusModeHandler, handlers, etc.)
     const autoPauseOnLeave = playback.autoPauseOnLeave;
@@ -121,6 +121,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         setIsActionsOpen,
         generatingNote,
         setGeneratingNote,
+        tasks,
     } = pageState;
 
     // Store hooks
@@ -182,6 +183,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         learnerProfile,
         generatingNote,
         setGeneratingNote,
+        tasks,
         confirm,
     });
 
@@ -389,9 +391,21 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
             onDragEnd={handleDragEnd}
             onDragCancel={handleDragCancel}
         >
-            <div className={`grid gap-6 h-[130vh] ${hideSidebars ? "grid-cols-1" : "grid-cols-1 md:grid-cols-3"}`}>
-                {/* Left Column: Video Player & Notes */}
-                <div className={`flex flex-col gap-4 h-full min-h-0 ${hideSidebars ? "col-span-1" : "md:col-span-2"}`}>
+            <div className={`grid gap-6 h-[130vh] ${
+                hideSidebars
+                    ? "grid-cols-1"
+                    : viewMode === "widescreen"
+                        ? "grid-cols-1"
+                        : "grid-cols-1 md:grid-cols-3"
+            }`}>
+                {/* Video Player Column - full width in widescreen mode */}
+                <div className={`flex flex-col gap-4 ${
+                    viewMode === "widescreen"
+                        ? "col-span-1"
+                        : hideSidebars
+                            ? "col-span-1"
+                            : "md:col-span-2"
+                } ${viewMode === "widescreen" ? "" : "h-full min-h-0"}`}>
                     {/* Video Title and Metadata */}
                     <div className="flex items-baseline justify-between gap-4">
                         <h1 className="text-xl font-semibold truncate">{content.filename}</h1>
@@ -432,9 +446,13 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             onGenerateSlideLecture={handlers.handleGenerateSlideLecture}
                             slideDeck={deck}
                             onUploadSlide={handlers.handleUploadSlide}
+                            viewMode={viewMode}
+                            onViewModeChange={setViewMode}
                         />
                     </ErrorBoundary>
-                    {!hideSidebars && (
+
+                    {/* NotesPanel in normal mode (not widescreen) */}
+                    {!hideSidebars && viewMode !== "widescreen" && (
                         <NotesPanel
                             videoId={videoId}
                             onEditorReady={handleNoteEditorReady}
@@ -467,8 +485,8 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                     )}
                 </div>
 
-                {/* Right Column: Tabs */}
-                {!hideSidebars && (
+                {/* Sidebar in normal mode (not widescreen) */}
+                {!hideSidebars && viewMode !== "widescreen" && (
                     <SidebarTabs
                         content={content}
                         videoId={videoId}
@@ -497,6 +515,69 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                         onGenerateSubtitles={handlers.handleGenerateSubtitles}
                         onGenerateTimeline={handlers.handleGenerateTimeline}
                     />
+                )}
+
+                {/* Widescreen mode: NotesPanel and Sidebar side by side below video */}
+                {!hideSidebars && viewMode === "widescreen" && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[80vh]">
+                        <NotesPanel
+                            videoId={videoId}
+                            onEditorReady={handleNoteEditorReady}
+                            content={content}
+                            currentTime={currentTime}
+                            sidebarSubtitleMode={sidebarSubtitleMode}
+                            setSidebarSubtitleMode={(mode) => setSubtitleModeSidebarStore(videoId, mode)}
+                            sidebarSubtitles={sidebarSubtitles}
+                            subtitlesTarget={subtitlesTarget}
+                            subtitlesDual={subtitlesDual}
+                            subtitlesDualReversed={subtitlesDualReversed}
+                            subtitlesLoading={subtitlesLoading}
+                            processing={processing}
+                            processingAction={processingAction}
+                            timelineEntries={timelineEntries}
+                            timelineLoading={timelineLoading}
+                            refreshExplanations={refreshExplanations}
+                            refreshVerification={refreshVerification}
+                            refreshCheatsheet={refreshCheatsheet}
+                            askContext={askContext}
+                            learnerProfile={learnerProfile}
+                            subtitleContextWindowSeconds={subtitleContextWindowSeconds}
+                            onSeek={handleSeek}
+                            onAddToAsk={handlers.handleAddToAsk}
+                            onAddToNotes={handlers.handleAddToNotes}
+                            onRemoveFromAsk={handlers.handleRemoveFromAsk}
+                            onGenerateSubtitles={handlers.handleGenerateSubtitles}
+                            onGenerateTimeline={handlers.handleGenerateTimeline}
+                        />
+                        <SidebarTabs
+                            content={content}
+                            videoId={videoId}
+                            currentTime={currentTime}
+                            sidebarSubtitleMode={sidebarSubtitleMode}
+                            setSidebarSubtitleMode={(mode) => setSubtitleModeSidebarStore(videoId, mode)}
+                            sidebarSubtitles={sidebarSubtitles}
+                            subtitlesTarget={subtitlesTarget}
+                            subtitlesDual={subtitlesDual}
+                            subtitlesDualReversed={subtitlesDualReversed}
+                            subtitlesLoading={subtitlesLoading}
+                            processing={processing}
+                            processingAction={processingAction}
+                            timelineEntries={timelineEntries}
+                            timelineLoading={timelineLoading}
+                            refreshExplanations={refreshExplanations}
+                            refreshVerification={refreshVerification}
+                            refreshCheatsheet={refreshCheatsheet}
+                            askContext={askContext}
+                            learnerProfile={learnerProfile}
+                            subtitleContextWindowSeconds={subtitleContextWindowSeconds}
+                            onSeek={handleSeek}
+                            onAddToAsk={handlers.handleAddToAsk}
+                            onAddToNotes={handlers.handleAddToNotes}
+                            onRemoveFromAsk={handlers.handleRemoveFromAsk}
+                            onGenerateSubtitles={handlers.handleGenerateSubtitles}
+                            onGenerateTimeline={handlers.handleGenerateTimeline}
+                        />
+                    </div>
                 )}
 
             <SettingsDialog

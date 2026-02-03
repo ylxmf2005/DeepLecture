@@ -15,6 +15,7 @@ export function useVideoPageSettings() {
             playback: s.playback,
             language: s.language,
             hideSidebars: s.hideSidebars,
+            viewMode: s.viewMode,
             subtitleDisplay: s.subtitleDisplay,
             live2d: s.live2d,
         }))
@@ -51,6 +52,7 @@ export function useVideoPageSettings() {
             setSubtitleFontSize: s.setSubtitleFontSize,
             setSubtitleBottomOffset: s.setSubtitleBottomOffset,
             toggleHideSidebars: s.toggleHideSidebars,
+            setViewMode: s.setViewMode,
             setOriginalLanguage: s.setOriginalLanguage,
             setTargetLanguage: s.setTranslatedLanguage,
             toggleLive2d: s.toggleLive2d,

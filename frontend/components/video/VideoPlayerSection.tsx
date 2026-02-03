@@ -1,11 +1,11 @@
 "use client";
 
-import { forwardRef, useState, useRef, useEffect } from "react";
-import { VideoPlayer, VideoPlayerRef } from "@/components/video/VideoPlayer";
+import { forwardRef, useState, useRef, useEffect, useMemo } from "react";
+import { VideoPlayer, VideoPlayerRef, SubtitlePlayerMode } from "@/components/video/VideoPlayer";
 import { ContentItem, API_BASE_URL, SyncTimeline } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { FileText, BookOpen, Loader2, Maximize, Minimize } from "lucide-react";
-import type { SubtitleDisplayMode } from "@/stores/types";
+import type { SubtitleDisplayMode, ViewMode } from "@/stores/types";
 import { Subtitle } from "@/lib/srt";
 import { logger } from "@/shared/infrastructure";
 
@@ -31,6 +31,10 @@ interface VideoPlayerSectionProps {
         name: string;
     } | null;
     onUploadSlide?: (file: File) => void;
+    /** Current view mode for layout control */
+    viewMode?: ViewMode;
+    /** Callback when view mode changes */
+    onViewModeChange?: (mode: ViewMode) => void;
 }
 
 export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionProps>(
@@ -52,10 +56,17 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
             onGenerateSlideLecture,
             slideDeck,
             onUploadSlide,
+            viewMode,
+            onViewModeChange,
         },
         ref
     ) {
         const [playerTab, setPlayerTab] = useState<"player" | "slide">("player");
+        const [subtitleModeOverride, setSubtitleModeOverride] = useState<Extract<SubtitlePlayerMode, "off"> | null>(null);
+        const subtitleModeUI = useMemo<SubtitlePlayerMode>(
+            () => subtitleModeOverride ?? playerSubtitleMode,
+            [subtitleModeOverride, playerSubtitleMode]
+        );
         const fileRef = useRef<HTMLInputElement | null>(null);
         const slideContainerRef = useRef<HTMLDivElement>(null);
         const [isSlideFullscreen, setIsSlideFullscreen] = useState(false);
@@ -225,18 +236,22 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                             voiceoverId={selectedVoiceoverId}
                             syncTimeline={selectedVoiceoverSyncTimeline}
                             subtitles={playerSubtitles}
-                            subtitleMode={playerSubtitleMode}
+                            subtitleMode={subtitleModeUI}
                             onSubtitleModeChange={(mode) => {
-                                // "off" is ephemeral UI state, don't persist it to store
-                                if (mode !== "off") {
-                                    setPlayerSubtitleMode(mode);
+                                if (mode === "off") {
+                                    setSubtitleModeOverride("off");
+                                    return;
                                 }
+                                setSubtitleModeOverride(null);
+                                setPlayerSubtitleMode(mode);
                             }}
                             onTimeUpdate={onTimeUpdate}
                             onCapture={onCapture}
                             onAskAtTime={onAskAtTime}
                             onAddNoteAtTime={onAddNoteAtTime}
                             onPlayerReady={onPlayerReady}
+                            viewMode={viewMode}
+                            onViewModeChange={onViewModeChange}
                         />
                     )}
                 </div>
