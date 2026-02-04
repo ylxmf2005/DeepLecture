@@ -32,12 +32,16 @@ interface AutoSwitchContext {
 
 Determines if subtitles should switch when the page becomes hidden.
 
+**Parameter**: `ctx` is `Omit<AutoSwitchContext, "state">` (state not needed for hide logic)
+
 - Returns `"target"` if auto-switch should occur
 - Returns `null` if no switch needed (disabled, no translation, or already on target)
 
 #### `getAutoSwitchModeOnShow(ctx): SubtitleDisplayMode | null`
 
 Determines the mode to restore when the page becomes visible.
+
+**Parameter**: `ctx` is full `AutoSwitchContext` (needs state to check if was auto-switched)
 
 - Returns the previous mode if it should be restored
 - Returns `null` if no restore needed (disabled, wasn't auto-switched, or user manually changed mode while away)

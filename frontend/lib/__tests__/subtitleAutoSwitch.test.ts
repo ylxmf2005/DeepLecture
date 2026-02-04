@@ -134,7 +134,12 @@ describe("subtitleAutoSwitch", () => {
         });
 
         it("resets state correctly", () => {
-            const _state = updateStateOnAutoSwitch("source");
+            // First verify state was set
+            const state = updateStateOnAutoSwitch("source");
+            expect(state.wasAutoSwitched).toBe(true);
+            expect(state.previousMode).toBe("source");
+
+            // Then verify reset returns to initial values
             const resetState = resetAutoSwitchState();
             expect(resetState.previousMode).toBeNull();
             expect(resetState.wasAutoSwitched).toBe(false);
