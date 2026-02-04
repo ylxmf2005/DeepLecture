@@ -18,6 +18,7 @@ export function PlayerTab(_props: SettingsTabProps) {
 
     const setAutoPauseOnLeave = useGlobalSettingsStore((s) => s.setAutoPauseOnLeave);
     const setAutoResumeOnReturn = useGlobalSettingsStore((s) => s.setAutoResumeOnReturn);
+    const setAutoSwitchSubtitlesOnLeave = useGlobalSettingsStore((s) => s.setAutoSwitchSubtitlesOnLeave);
     const setSummaryThresholdSeconds = useGlobalSettingsStore((s) => s.setSummaryThresholdSeconds);
     const setSubtitleRepeatCount = useGlobalSettingsStore((s) => s.setSubtitleRepeatCount);
     const setSubtitleFontSize = useGlobalSettingsStore((s) => s.setSubtitleFontSize);
@@ -122,6 +123,17 @@ export function PlayerTab(_props: SettingsTabProps) {
                             enabled={playback.autoResumeOnReturn}
                             onChange={() => setAutoResumeOnReturn(!playback.autoResumeOnReturn)}
                             disabled={!playback.autoPauseOnLeave}
+                            accentColor="rose"
+                        />
+                    </SettingsRow>
+
+                    <SettingsRow
+                        label="Auto-switch Subtitles"
+                        description="Switch to translated when you leave, restore on return"
+                    >
+                        <ToggleSwitch
+                            enabled={playback.autoSwitchSubtitlesOnLeave}
+                            onChange={() => setAutoSwitchSubtitlesOnLeave(!playback.autoSwitchSubtitlesOnLeave)}
                             accentColor="rose"
                         />
                     </SettingsRow>

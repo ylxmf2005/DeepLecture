@@ -70,6 +70,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
     // Derived values for convenience (used by FocusModeHandler, handlers, etc.)
     const autoPauseOnLeave = playback.autoPauseOnLeave;
     const autoResumeOnReturn = playback.autoResumeOnReturn;
+    const autoSwitchSubtitlesOnLeave = playback.autoSwitchSubtitlesOnLeave;
     const summaryThresholdSeconds = playback.summaryThresholdSeconds;
     const subtitleContextWindowSeconds = playback.subtitleContextWindowSeconds;
     const subtitleRepeatCount = playback.subtitleRepeatCount;
@@ -426,6 +427,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                         playerSubtitles={playerSubtitles}
                         playerSubtitleMode={playerSubtitleMode}
                         setPlayerSubtitleMode={setPlayerSubtitleMode}
+                        hasTranslation={content.translationStatus === "ready"}
                         generatingVideo={generatingVideo}
                         onTimeUpdate={handleTimeUpdate}
                         onCapture={handlers.handleCapture}
@@ -683,6 +685,10 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 learnerProfile={learnerProfile}
                 autoPauseOnLeave={autoPauseOnLeave}
                 autoResumeOnReturn={autoResumeOnReturn}
+                autoSwitchSubtitlesOnLeave={autoSwitchSubtitlesOnLeave}
+                subtitleMode={playerSubtitleMode}
+                hasTranslation={content.translationStatus === "ready"}
+                onSubtitleModeChange={setPlayerSubtitleMode}
                 summaryThresholdSeconds={summaryThresholdSeconds}
                 skipRamblingEnabled={skipRamblingEnabled}
                 timelineEntries={timelineEntries}

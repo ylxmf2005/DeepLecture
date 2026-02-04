@@ -19,6 +19,8 @@ interface VideoPlayerSectionProps {
     playerSubtitles: Subtitle[];
     playerSubtitleMode: SubtitleDisplayMode;
     setPlayerSubtitleMode: (mode: SubtitleDisplayMode) => void;
+    /** Whether translation is available for quick toggle */
+    hasTranslation?: boolean;
     generatingVideo: boolean;
     onTimeUpdate: (time: number) => void;
     onCapture: (timestamp: number, imagePath: string) => void;
@@ -49,6 +51,7 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
             playerSubtitles,
             playerSubtitleMode,
             setPlayerSubtitleMode,
+            hasTranslation,
             generatingVideo,
             onTimeUpdate,
             onCapture,
@@ -255,6 +258,7 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                                 setSubtitleModeOverride(null);
                                 setPlayerSubtitleMode(mode);
                             }}
+                            hasTranslation={hasTranslation}
                             onTimeUpdate={onTimeUpdate}
                             onCapture={onCapture}
                             onAskAtTime={onAskAtTime}

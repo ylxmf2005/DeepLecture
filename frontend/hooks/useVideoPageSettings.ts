@@ -25,6 +25,7 @@ export function useVideoPageSettings() {
     const derived = {
         autoPauseOnLeave: settings.playback.autoPauseOnLeave,
         autoResumeOnReturn: settings.playback.autoResumeOnReturn,
+        autoSwitchSubtitlesOnLeave: settings.playback.autoSwitchSubtitlesOnLeave,
         summaryThresholdSeconds: settings.playback.summaryThresholdSeconds,
         subtitleContextWindowSeconds: settings.playback.subtitleContextWindowSeconds,
         subtitleRepeatCount: settings.playback.subtitleRepeatCount,
@@ -46,6 +47,7 @@ export function useVideoPageSettings() {
         useShallow((s) => ({
             setAutoPauseOnLeave: s.setAutoPauseOnLeave,
             setAutoResumeOnReturn: s.setAutoResumeOnReturn,
+            setAutoSwitchSubtitlesOnLeave: s.setAutoSwitchSubtitlesOnLeave,
             setSummaryThresholdSeconds: s.setSummaryThresholdSeconds,
             setSubtitleContextWindowSeconds: s.setSubtitleContextWindowSeconds,
             setSubtitleRepeatCount: s.setSubtitleRepeatCount,

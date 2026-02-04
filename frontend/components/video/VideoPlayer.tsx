@@ -1,5 +1,5 @@
 import { useRef, useState, forwardRef, useImperativeHandle, useEffect, useMemo, useCallback } from "react";
-import { Camera, Loader2, MessageSquare, FilePlus, Languages } from "lucide-react";
+import { Camera, Loader2, MessageSquare, FilePlus, Languages, ArrowLeftRight } from "lucide-react";
 import { captureSlide, API_BASE_URL, SyncTimeline } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Subtitle } from "@/lib/srt";
@@ -25,6 +25,8 @@ interface VideoPlayerProps {
     subtitles?: Subtitle[];
     subtitleMode?: SubtitlePlayerMode;
     onSubtitleModeChange?: (mode: SubtitlePlayerMode) => void;
+    /** Whether translation is available for quick toggle */
+    hasTranslation?: boolean;
     onTimeUpdate?: (currentTime: number) => void;
     onCapture?: (timestamp: number, imagePath: string) => void;
     onAskAtTime?: (time: number) => void;
@@ -56,6 +58,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
         subtitles,
         subtitleMode,
         onSubtitleModeChange,
+        hasTranslation,
         onTimeUpdate,
         onCapture,
         onAskAtTime,
@@ -365,6 +368,15 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
             setShowLanguageMenu(false);
         };
 
+        // Quick toggle between source and target subtitles
+        const handleQuickToggle = useCallback(() => {
+            if (!onSubtitleModeChange || !hasTranslation) return;
+
+            // Toggle between source and target
+            const newMode: SubtitlePlayerMode = subtitleMode === "source" ? "target" : "source";
+            onSubtitleModeChange(newMode);
+        }, [onSubtitleModeChange, hasTranslation, subtitleMode]);
+
         // Filter active subtitles for the overlay using binary search
         const activeSubtitles = useMemo(() => {
             return getActiveSubtitles(subtitles || [], currentTime);
@@ -372,6 +384,25 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
 
         // Global subtitle display preferences
         const subtitleDisplay = useGlobalSettingsStore((s) => s.subtitleDisplay);
+
+        // T key shortcut for quick subtitle toggle
+        useEffect(() => {
+            const handleToggleKey = (e: KeyboardEvent) => {
+                const target = e.target as HTMLElement;
+                if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
+                    return;
+                }
+                if (e.key === "t" || e.key === "T") {
+                    e.preventDefault();
+                    handleQuickToggle();
+                }
+            };
+
+            document.addEventListener("keydown", handleToggleKey);
+            return () => {
+                document.removeEventListener("keydown", handleToggleKey);
+            };
+        }, [handleQuickToggle]);
 
         useEffect(() => {
             const handleFullscreenChange = () => {
@@ -484,6 +515,20 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                 />
 
                 <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                    {/* Quick toggle button for source/target */}
+                    {onSubtitleModeChange && hasTranslation && subtitleMode !== "off" && (
+                        <button
+                            onClick={handleQuickToggle}
+                            className={cn(
+                                "p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors",
+                                (subtitleMode === "source" || subtitleMode === "target") && "ring-2 ring-blue-400/50"
+                            )}
+                            title={`Toggle subtitle (T) - Currently: ${subtitleMode === "source" ? "Source" : "Target"}`}
+                        >
+                            <ArrowLeftRight className="w-5 h-5" />
+                        </button>
+                    )}
+
                     {onSubtitleModeChange && (
                         <div className="relative">
                             <button

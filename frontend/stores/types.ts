@@ -29,6 +29,7 @@ export interface LanguageSettings {
 export interface PlaybackSettings {
     autoPauseOnLeave: boolean;
     autoResumeOnReturn: boolean;
+    autoSwitchSubtitlesOnLeave: boolean;
     summaryThresholdSeconds: number;
     subtitleContextWindowSeconds: number;
     subtitleRepeatCount: number;
@@ -74,6 +75,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     playback: {
         autoPauseOnLeave: false,
         autoResumeOnReturn: false,
+        autoSwitchSubtitlesOnLeave: false,
         summaryThresholdSeconds: 60,
         subtitleContextWindowSeconds: 30,
         subtitleRepeatCount: 1,
@@ -169,6 +171,7 @@ export const DEFAULT_VIDEO_STATE: VideoState = {
 export interface GlobalSettingsActions {
     setAutoPauseOnLeave: (value: boolean) => void;
     setAutoResumeOnReturn: (value: boolean) => void;
+    setAutoSwitchSubtitlesOnLeave: (value: boolean) => void;
     setSummaryThresholdSeconds: (seconds: number) => void;
     setSubtitleContextWindowSeconds: (seconds: number) => void;
     setSubtitleRepeatCount: (count: number) => void;
