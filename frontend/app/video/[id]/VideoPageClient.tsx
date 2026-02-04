@@ -41,6 +41,8 @@ import {
     useVideoDeck,
     useSmartSkipEnabled,
     useVideoStateStore,
+    useQuickToggleOriginalVoiceoverId,
+    useQuickToggleTranslatedVoiceoverId,
 } from "@/stores";
 import { useVideoPageSettings } from "@/hooks/useVideoPageSettings";
 import { TAB_CONFIG } from "@/components/dnd/DraggableTabBar";
@@ -131,6 +133,10 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
     const setSubtitleModeSidebarStore = useVideoStateStore((store) => store.setSubtitleModeSidebar);
     const setDeckStore = useVideoStateStore((store) => store.setDeck);
     const setSmartSkipEnabledStore = useVideoStateStore((store) => store.setSmartSkipEnabled);
+    const quickToggleOriginalVoiceoverId = useQuickToggleOriginalVoiceoverId(videoId);
+    const quickToggleTranslatedVoiceoverId = useQuickToggleTranslatedVoiceoverId(videoId);
+    const setQuickToggleOriginalVoiceoverIdStore = useVideoStateStore((store) => store.setQuickToggleOriginalVoiceoverId);
+    const setQuickToggleTranslatedVoiceoverIdStore = useVideoStateStore((store) => store.setQuickToggleTranslatedVoiceoverId);
 
     // DnD tab layout (extracted hook)
     const {
@@ -428,6 +434,9 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                         playerSubtitleMode={playerSubtitleMode}
                         setPlayerSubtitleMode={setPlayerSubtitleMode}
                         hasTranslation={content.translationStatus === "ready"}
+                        quickToggleOriginalVoiceoverId={quickToggleOriginalVoiceoverId}
+                        quickToggleTranslatedVoiceoverId={quickToggleTranslatedVoiceoverId}
+                        onVoiceoverChange={setSelectedVoiceoverId}
                         generatingVideo={generatingVideo}
                         onTimeUpdate={handleTimeUpdate}
                         onCapture={handlers.handleCapture}
@@ -503,6 +512,9 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             playerSubtitleMode={playerSubtitleMode}
                             setPlayerSubtitleMode={setPlayerSubtitleMode}
                             hasTranslation={content.translationStatus === "ready"}
+                            quickToggleOriginalVoiceoverId={quickToggleOriginalVoiceoverId}
+                            quickToggleTranslatedVoiceoverId={quickToggleTranslatedVoiceoverId}
+                            onVoiceoverChange={setSelectedVoiceoverId}
                             generatingVideo={generatingVideo}
                             onTimeUpdate={handleTimeUpdate}
                             onCapture={handlers.handleCapture}
@@ -527,10 +539,12 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             sidebarSubtitleMode={sidebarSubtitleMode}
                             setSidebarSubtitleMode={handleSetSidebarSubtitleMode}
                             sidebarSubtitles={sidebarSubtitles}
+                            subtitlesSource={subtitlesSource}
                             subtitlesTarget={subtitlesTarget}
                             subtitlesDual={subtitlesDual}
                             subtitlesDualReversed={subtitlesDualReversed}
                             subtitlesLoading={subtitlesLoading}
+                            originalLanguage={originalLanguage}
                             processing={processing}
                             processingAction={processingAction}
                             timelineEntries={timelineEntries}
@@ -560,10 +574,12 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                         sidebarSubtitleMode={sidebarSubtitleMode}
                         setSidebarSubtitleMode={handleSetSidebarSubtitleMode}
                         sidebarSubtitles={sidebarSubtitles}
+                        subtitlesSource={subtitlesSource}
                         subtitlesTarget={subtitlesTarget}
                         subtitlesDual={subtitlesDual}
                         subtitlesDualReversed={subtitlesDualReversed}
                         subtitlesLoading={subtitlesLoading}
+                        originalLanguage={originalLanguage}
                         processing={processing}
                         processingAction={processingAction}
                         timelineEntries={timelineEntries}
@@ -594,10 +610,12 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             sidebarSubtitleMode={sidebarSubtitleMode}
                             setSidebarSubtitleMode={handleSetSidebarSubtitleMode}
                             sidebarSubtitles={sidebarSubtitles}
+                            subtitlesSource={subtitlesSource}
                             subtitlesTarget={subtitlesTarget}
                             subtitlesDual={subtitlesDual}
                             subtitlesDualReversed={subtitlesDualReversed}
                             subtitlesLoading={subtitlesLoading}
+                            originalLanguage={originalLanguage}
                             processing={processing}
                             processingAction={processingAction}
                             timelineEntries={timelineEntries}
@@ -622,10 +640,12 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             sidebarSubtitleMode={sidebarSubtitleMode}
                             setSidebarSubtitleMode={handleSetSidebarSubtitleMode}
                             sidebarSubtitles={sidebarSubtitles}
+                            subtitlesSource={subtitlesSource}
                             subtitlesTarget={subtitlesTarget}
                             subtitlesDual={subtitlesDual}
                             subtitlesDualReversed={subtitlesDualReversed}
                             subtitlesLoading={subtitlesLoading}
+                            originalLanguage={originalLanguage}
                             processing={processing}
                             processingAction={processingAction}
                             timelineEntries={timelineEntries}
@@ -670,6 +690,10 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 voiceoversLoading={voiceoversLoading}
                 handleDeleteVoiceover={handlers.handleDeleteVoiceover}
                 handleUpdateVoiceover={handlers.handleUpdateVoiceover}
+                quickToggleOriginalVoiceoverId={quickToggleOriginalVoiceoverId}
+                setQuickToggleOriginalVoiceoverId={(id) => setQuickToggleOriginalVoiceoverIdStore(videoId, id)}
+                quickToggleTranslatedVoiceoverId={quickToggleTranslatedVoiceoverId}
+                setQuickToggleTranslatedVoiceoverId={(id) => setQuickToggleTranslatedVoiceoverIdStore(videoId, id)}
                 timelineLoading={timelineLoading}
                 hasTimeline={timelineEntries.length > 0}
                 handleGenerateTimeline={handlers.handleGenerateTimeline}
@@ -691,6 +715,10 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 hasTranslation={content.translationStatus === "ready"}
                 onSubtitleModeChange={setPlayerSubtitleMode}
                 summaryThresholdSeconds={summaryThresholdSeconds}
+                selectedVoiceoverId={selectedVoiceoverId}
+                quickToggleOriginalVoiceoverId={quickToggleOriginalVoiceoverId}
+                quickToggleTranslatedVoiceoverId={quickToggleTranslatedVoiceoverId}
+                onVoiceoverChange={setSelectedVoiceoverId}
                 skipRamblingEnabled={skipRamblingEnabled}
                 timelineEntries={timelineEntries}
                 onAddToAsk={handlers.handleAddToAsk}

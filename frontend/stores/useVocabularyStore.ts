@@ -120,9 +120,9 @@ export const useVocabularyStore = create<VocabularyStore>()(
             name: "deeplecture-vocabulary",
             storage: createJSONStorage(() => localStorage),
             version: 1,
-            onRehydrateStorage: () => (state) => {
-                if (state) {
-                    state._hydrated = true;
+            onRehydrateStorage: () => (_state, error) => {
+                if (!error) {
+                    useVocabularyStore.setState({ _hydrated: true });
                 }
             },
         }

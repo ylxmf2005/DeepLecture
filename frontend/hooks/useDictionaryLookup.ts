@@ -105,6 +105,7 @@ export function useDictionaryLookup(
             // Start debounce
             setLoading(true);
             setError(null);
+            setEntry(null);
 
             timeoutRef.current = setTimeout(async () => {
                 const controller = new AbortController();
@@ -127,6 +128,7 @@ export function useDictionaryLookup(
                     }
                 } catch (err) {
                     if (!controller.signal.aborted) {
+                        console.warn("[useDictionaryLookup] Lookup failed:", err);
                         setError("Lookup failed");
                         setEntry(null);
                         setLoading(false);

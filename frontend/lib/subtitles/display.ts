@@ -77,9 +77,12 @@ export function createSubtitleRows(
         case "dual":
         case "dual_reversed":
             // Show both, use source subtitles as the base
-            // (they have the canonical timing information)
-            return subtitlesSource.map((sub, index) => {
-                const targetSub = subtitlesTarget[index];
+            // Match target by id for robustness when arrays diverge
+            const targetLookup = new Map(
+                subtitlesTarget.map((sub) => [sub.id, sub])
+            );
+            return subtitlesSource.map((sub) => {
+                const targetSub = targetLookup.get(sub.id);
                 return {
                     id: sub.id,
                     startTime: sub.startTime,

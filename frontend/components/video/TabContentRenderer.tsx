@@ -46,6 +46,11 @@ const CheatsheetTab = dynamic(
     { loading: LoadingSpinner }
 );
 
+const FlashcardTab = dynamic(
+    () => import("@/components/features/FlashcardTab").then((mod) => mod.FlashcardTab),
+    { loading: LoadingSpinner }
+);
+
 // Grouped prop interfaces for better organization (ISP)
 
 /** Subtitle-related props for the sidebar subtitle panel */
@@ -53,10 +58,14 @@ export interface SubtitleProps {
     sidebarSubtitleMode: SubtitleDisplayMode;
     setSidebarSubtitleMode: (mode: SubtitleDisplayMode) => void;
     sidebarSubtitles: Subtitle[];
+    /** Source language subtitles (separate from combined sidebarSubtitles) */
+    subtitlesSource: Subtitle[];
     subtitlesTarget: Subtitle[];
     subtitlesDual: Subtitle[];
     subtitlesDualReversed: Subtitle[];
     subtitlesLoading: boolean;
+    /** Original language code for dictionary lookups */
+    originalLanguage: string;
 }
 
 /** Processing state for async operations */
@@ -206,10 +215,12 @@ export function renderTabContent(tabId: TabId, props: TabContentProps): React.Re
         sidebarSubtitleMode,
         setSidebarSubtitleMode,
         sidebarSubtitles,
+        subtitlesSource,
         subtitlesTarget,
         subtitlesDual,
         subtitlesDualReversed,
         subtitlesLoading,
+        originalLanguage,
         processing,
         processingAction,
         timelineEntries,
@@ -271,6 +282,11 @@ export function renderTabContent(tabId: TabId, props: TabContentProps): React.Re
                         ) : sidebarSubtitles.length > 0 ? (
                             <SubtitleList
                                 subtitles={sidebarSubtitles}
+                                subtitlesSource={subtitlesSource}
+                                subtitlesTarget={subtitlesTarget}
+                                subtitleMode={sidebarSubtitleMode}
+                                originalLanguage={originalLanguage}
+                                videoId={videoId}
                                 currentTime={currentTime}
                                 onSeek={onSeek}
                                 onAddToAsk={onAddToAsk}
@@ -353,8 +369,14 @@ export function renderTabContent(tabId: TabId, props: TabContentProps): React.Re
             );
 
         // Placeholder tabs
-        case "notes":
         case "flashcard":
+            return (
+                <FlashcardTab
+                    videoId={videoId}
+                    onSeek={onSeek}
+                />
+            );
+        case "notes":
         case "test":
         case "report":
         case "podcast":

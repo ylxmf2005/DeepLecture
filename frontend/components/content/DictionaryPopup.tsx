@@ -86,7 +86,7 @@ function DictionaryPopupBase({
         }
 
         // Wait for next frame to measure popup
-        requestAnimationFrame(() => {
+        const frameId = requestAnimationFrame(() => {
             if (popupRef.current) {
                 const rect = popupRef.current.getBoundingClientRect();
                 const pos = calculatePosition(anchorRect, rect.width, rect.height);
@@ -94,6 +94,8 @@ function DictionaryPopupBase({
                 setVisible(true);
             }
         });
+
+        return () => cancelAnimationFrame(frameId);
     }, [anchorRect, entry, loading, error]);
 
     // Close on escape key
