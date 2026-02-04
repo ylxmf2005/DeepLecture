@@ -220,7 +220,8 @@ describe("createDictionaryLookup", () => {
                     })
             );
 
-            const promise = provider.lookup("test", "en", controller.signal);
+            // Use a unique word that won't be cached from previous tests
+            const promise = provider.lookup("abortableword", "en", controller.signal);
             controller.abort();
 
             const result = await promise;
