@@ -75,7 +75,7 @@ export function createSubtitleRows(
             }));
 
         case "dual":
-        case "dual_reversed":
+        case "dual_reversed": {
             // Show both, use source subtitles as the base
             // Match target by id for robustness when arrays diverge
             const targetLookup = new Map(
@@ -91,6 +91,7 @@ export function createSubtitleRows(
                     targetText: targetSub?.text,
                 };
             });
+        }
 
         default:
             return [];

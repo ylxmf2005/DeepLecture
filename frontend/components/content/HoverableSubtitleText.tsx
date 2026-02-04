@@ -7,7 +7,7 @@
  * When a word is hovered, it triggers a dictionary lookup.
  */
 
-import { memo, useCallback, useState, useRef, useMemo } from "react";
+import { memo, useCallback, useState, useMemo } from "react";
 import { tokenizeText, type Token } from "@/lib/dictionary/tokenize";
 import { cn } from "@/lib/utils";
 
@@ -57,7 +57,6 @@ function HoverableSubtitleTextBase({
     onWordLeave,
 }: HoverableSubtitleTextProps) {
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-    const containerRef = useRef<HTMLSpanElement>(null);
 
     // Memoize tokenization
     const tokens = useMemo(() => tokenizeText(text, locale), [text, locale]);
@@ -95,7 +94,7 @@ function HoverableSubtitleTextBase({
     }
 
     return (
-        <span ref={containerRef} className={cn("inline", className)}>
+        <span className={cn("inline", className)}>
             {tokens.map((token, index) => {
                 if (!token.isWord) {
                     // Non-word tokens (whitespace, punctuation) - render as-is

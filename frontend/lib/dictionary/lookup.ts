@@ -10,8 +10,18 @@ export type { DictionaryEntry, DictionaryProvider };
 // Supported base language codes (Free Dictionary API supports these)
 const SUPPORTED_BASE_LOCALES = new Set(["en"]);
 
-// In-memory cache for lookups
+// In-memory cache for lookups (bounded to prevent unbounded growth)
+const MAX_CACHE_SIZE = 500;
 const cache = new Map<string, DictionaryEntry>();
+
+function setCache(key: string, value: DictionaryEntry): void {
+    if (cache.size >= MAX_CACHE_SIZE) {
+        // Remove oldest entry (first key in Map iteration order)
+        const firstKey = cache.keys().next().value;
+        if (firstKey) cache.delete(firstKey);
+    }
+    cache.set(key, value);
+}
 
 /**
  * Generate cache key from word and locale
@@ -175,7 +185,7 @@ export function createDictionaryLookup(): DictionaryProvider {
 
             // Cache successful lookups only
             if (entry) {
-                cache.set(cacheKey, entry);
+                setCache(cacheKey, entry);
             }
 
             return entry;
