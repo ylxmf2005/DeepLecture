@@ -66,7 +66,7 @@ describe("subtitleAutoSwitch", () => {
 
     describe("getAutoSwitchModeOnShow", () => {
         it("returns null when auto-switch is disabled", () => {
-            const state = updateStateOnAutoSwitch(createAutoSwitchState(), "source");
+            const state = updateStateOnAutoSwitch("source");
             const result = getAutoSwitchModeOnShow({
                 enabled: false,
                 hasTranslation: true,
@@ -87,7 +87,7 @@ describe("subtitleAutoSwitch", () => {
         });
 
         it("returns null when user manually changed mode while away", () => {
-            const state = updateStateOnAutoSwitch(createAutoSwitchState(), "source");
+            const state = updateStateOnAutoSwitch("source");
             const result = getAutoSwitchModeOnShow({
                 enabled: true,
                 hasTranslation: true,
@@ -98,7 +98,7 @@ describe("subtitleAutoSwitch", () => {
         });
 
         it("restores previous mode when auto-switched and still on target", () => {
-            const state = updateStateOnAutoSwitch(createAutoSwitchState(), "source");
+            const state = updateStateOnAutoSwitch("source");
             const result = getAutoSwitchModeOnShow({
                 enabled: true,
                 hasTranslation: true,
@@ -109,7 +109,7 @@ describe("subtitleAutoSwitch", () => {
         });
 
         it("restores dual mode correctly", () => {
-            const state = updateStateOnAutoSwitch(createAutoSwitchState(), "dual");
+            const state = updateStateOnAutoSwitch("dual");
             const result = getAutoSwitchModeOnShow({
                 enabled: true,
                 hasTranslation: true,
@@ -128,14 +128,13 @@ describe("subtitleAutoSwitch", () => {
         });
 
         it("updates state correctly on auto-switch", () => {
-            const initialState = createAutoSwitchState();
-            const newState = updateStateOnAutoSwitch(initialState, "dual_reversed");
+            const newState = updateStateOnAutoSwitch("dual_reversed");
             expect(newState.previousMode).toBe("dual_reversed");
             expect(newState.wasAutoSwitched).toBe(true);
         });
 
         it("resets state correctly", () => {
-            const _state = updateStateOnAutoSwitch(createAutoSwitchState(), "source");
+            const _state = updateStateOnAutoSwitch("source");
             const resetState = resetAutoSwitchState();
             expect(resetState.previousMode).toBeNull();
             expect(resetState.wasAutoSwitched).toBe(false);

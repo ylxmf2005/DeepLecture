@@ -73,9 +73,9 @@ export function createAutoSwitchState(): AutoSwitchState {
 
 /**
  * Updates state when auto-switching on hide.
+ * Returns new state recording the previous mode for later restoration.
  */
 export function updateStateOnAutoSwitch(
-    state: AutoSwitchState,
     previousMode: SubtitleDisplayMode
 ): AutoSwitchState {
     return {

@@ -502,6 +502,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             playerSubtitles={playerSubtitles}
                             playerSubtitleMode={playerSubtitleMode}
                             setPlayerSubtitleMode={setPlayerSubtitleMode}
+                            hasTranslation={content.translationStatus === "ready"}
                             generatingVideo={generatingVideo}
                             onTimeUpdate={handleTimeUpdate}
                             onCapture={handlers.handleCapture}

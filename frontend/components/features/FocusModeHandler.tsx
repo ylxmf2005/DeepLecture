@@ -124,10 +124,7 @@ export function FocusModeHandler({
                     });
 
                     if (newMode !== null) {
-                        autoSwitchStateRef.current = updateStateOnAutoSwitch(
-                            autoSwitchStateRef.current,
-                            subtitleMode
-                        );
+                        autoSwitchStateRef.current = updateStateOnAutoSwitch(subtitleMode);
                         onSubtitleModeChange(newMode);
                     }
                 }, AUTO_SWITCH_DEBOUNCE_MS);
@@ -204,6 +201,12 @@ export function FocusModeHandler({
         document.addEventListener("visibilitychange", handleVisibilityChange);
         return () => {
             document.removeEventListener("visibilitychange", handleVisibilityChange);
+            // Clear pending debounce timeout on unmount to prevent memory leak
+            // and avoid calling onSubtitleModeChange on unmounted component
+            if (hideDebounceRef.current) {
+                clearTimeout(hideDebounceRef.current);
+                hideDebounceRef.current = null;
+            }
         };
     }, [handleVisibilityChange]);
 

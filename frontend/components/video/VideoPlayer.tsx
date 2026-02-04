@@ -142,6 +142,15 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
             seekToVideoTime(time);
         }, [seekToVideoTime]);
 
+        // Quick toggle between source and target subtitles
+        const handleQuickToggle = useCallback(() => {
+            if (!onSubtitleModeChange || !hasTranslation) return;
+
+            // Toggle between source and target
+            const newMode: SubtitlePlayerMode = subtitleMode === "source" ? "target" : "source";
+            onSubtitleModeChange(newMode);
+        }, [onSubtitleModeChange, hasTranslation, subtitleMode]);
+
         // Keyboard shortcuts
         const handleKeyDown = useCallback((e: KeyboardEvent) => {
             // Skip if user is typing in an input field
@@ -372,15 +381,6 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
             }
             setShowLanguageMenu(false);
         };
-
-        // Quick toggle between source and target subtitles
-        const handleQuickToggle = useCallback(() => {
-            if (!onSubtitleModeChange || !hasTranslation) return;
-
-            // Toggle between source and target
-            const newMode: SubtitlePlayerMode = subtitleMode === "source" ? "target" : "source";
-            onSubtitleModeChange(newMode);
-        }, [onSubtitleModeChange, hasTranslation, subtitleMode]);
 
         // Filter active subtitles for the overlay using binary search
         const activeSubtitles = useMemo(() => {
