@@ -18,6 +18,9 @@ import { logger } from "@/shared/infrastructure";
 
 const log = logger.scope("FocusModeHandler");
 
+/** Debounce delay before auto-switching subtitles to avoid false triggers from brief tab switches */
+const AUTO_SWITCH_DEBOUNCE_MS = 1500;
+
 const MissedContentDialog = dynamic(
     () => import("@/components/dialogs/MissedContentDialog").then((mod) => mod.MissedContentDialog),
     { ssr: false }
@@ -127,7 +130,7 @@ export function FocusModeHandler({
                         );
                         onSubtitleModeChange(newMode);
                     }
-                }, 1500);
+                }, AUTO_SWITCH_DEBOUNCE_MS);
             }
 
             if (isPlaying && autoPauseOnLeave) {

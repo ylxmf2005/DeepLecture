@@ -183,8 +183,13 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                         video.volume = Math.max(0, video.volume - 0.1);
                     }
                     break;
+                case "t":
+                case "T":
+                    e.preventDefault();
+                    handleQuickToggle();
+                    break;
             }
-        }, [handlePlay, handlePause, handleSeek, getCurrentVideoTime, duration, videoRef]);
+        }, [handlePlay, handlePause, handleSeek, getCurrentVideoTime, duration, videoRef, handleQuickToggle]);
 
         // Global keyboard listener
         useEffect(() => {
@@ -384,25 +389,6 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
 
         // Global subtitle display preferences
         const subtitleDisplay = useGlobalSettingsStore((s) => s.subtitleDisplay);
-
-        // T key shortcut for quick subtitle toggle
-        useEffect(() => {
-            const handleToggleKey = (e: KeyboardEvent) => {
-                const target = e.target as HTMLElement;
-                if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
-                    return;
-                }
-                if (e.key === "t" || e.key === "T") {
-                    e.preventDefault();
-                    handleQuickToggle();
-                }
-            };
-
-            document.addEventListener("keydown", handleToggleKey);
-            return () => {
-                document.removeEventListener("keydown", handleToggleKey);
-            };
-        }, [handleQuickToggle]);
 
         useEffect(() => {
             const handleFullscreenChange = () => {
