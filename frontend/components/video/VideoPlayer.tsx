@@ -1,5 +1,5 @@
 import { useRef, useState, forwardRef, useImperativeHandle, useEffect, useMemo, useCallback } from "react";
-import { Camera, Loader2, MessageSquare, FilePlus, Languages } from "lucide-react";
+import { Camera, Loader2, MessageSquare, FilePlus, Languages, ArrowLeftRight } from "lucide-react";
 import { captureSlide, API_BASE_URL, SyncTimeline } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Subtitle } from "@/lib/srt";
@@ -25,6 +25,8 @@ interface VideoPlayerProps {
     subtitles?: Subtitle[];
     subtitleMode?: SubtitlePlayerMode;
     onSubtitleModeChange?: (mode: SubtitlePlayerMode) => void;
+    /** Whether translation is available for quick toggle */
+    hasTranslation?: boolean;
     onTimeUpdate?: (currentTime: number) => void;
     onCapture?: (timestamp: number, imagePath: string) => void;
     onAskAtTime?: (time: number) => void;
@@ -56,6 +58,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
         subtitles,
         subtitleMode,
         onSubtitleModeChange,
+        hasTranslation,
         onTimeUpdate,
         onCapture,
         onAskAtTime,
@@ -139,6 +142,15 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
             seekToVideoTime(time);
         }, [seekToVideoTime]);
 
+        // Quick toggle between source and target subtitles
+        const handleQuickToggle = useCallback(() => {
+            if (!onSubtitleModeChange || !hasTranslation) return;
+
+            // Toggle between source and target
+            const newMode: SubtitlePlayerMode = subtitleMode === "source" ? "target" : "source";
+            onSubtitleModeChange(newMode);
+        }, [onSubtitleModeChange, hasTranslation, subtitleMode]);
+
         // Keyboard shortcuts
         const handleKeyDown = useCallback((e: KeyboardEvent) => {
             // Skip if user is typing in an input field
@@ -180,8 +192,13 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                         video.volume = Math.max(0, video.volume - 0.1);
                     }
                     break;
+                case "t":
+                case "T":
+                    e.preventDefault();
+                    handleQuickToggle();
+                    break;
             }
-        }, [handlePlay, handlePause, handleSeek, getCurrentVideoTime, duration, videoRef]);
+        }, [handlePlay, handlePause, handleSeek, getCurrentVideoTime, duration, videoRef, handleQuickToggle]);
 
         // Global keyboard listener
         useEffect(() => {
@@ -406,14 +423,17 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
         return (
             <div
                 ref={containerRef}
-                className="relative group rounded-xl bg-black shadow-lg flex items-center justify-center"
+                className={cn(
+                    "relative group rounded-xl bg-black shadow-lg flex items-center justify-center",
+                    viewMode === "web-fullscreen" && "w-full h-full"
+                )}
             >
                 {/* Video element without native controls */}
                 <video
                     ref={videoRef}
                     className={cn(
                         "w-full rounded-xl",
-                        isFullscreen ? "h-full object-contain" : "aspect-video"
+                        isFullscreen || viewMode === "web-fullscreen" ? "h-full object-contain" : "aspect-video"
                     )}
                     crossOrigin="anonymous"
                     playsInline
@@ -450,7 +470,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                                 className="bg-black/70 text-white text-center px-4 py-1 rounded-lg mb-1 max-w-[80%] whitespace-pre-wrap"
                                 style={{
                                     fontSize: `${
-                                        (subtitleDisplay?.fontSize ?? 16) * (isFullscreen ? 2 : 1)
+                                        (subtitleDisplay?.fontSize ?? 16) * (isFullscreen || viewMode === "web-fullscreen" ? 2 : 1)
                                     }px`,
                                     lineHeight: "1.5",
                                     textShadow: "0px 1px 2px rgba(0,0,0,0.8)"
@@ -481,6 +501,20 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                 />
 
                 <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                    {/* Quick toggle button for source/target */}
+                    {onSubtitleModeChange && hasTranslation && subtitleMode !== "off" && (
+                        <button
+                            onClick={handleQuickToggle}
+                            className={cn(
+                                "p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors",
+                                (subtitleMode === "source" || subtitleMode === "target") && "ring-2 ring-blue-400/50"
+                            )}
+                            title={`Toggle subtitle (T) - Currently: ${subtitleMode === "source" ? "Source" : "Target"}`}
+                        >
+                            <ArrowLeftRight className="w-5 h-5" />
+                        </button>
+                    )}
+
                     {onSubtitleModeChange && (
                         <div className="relative">
                             <button

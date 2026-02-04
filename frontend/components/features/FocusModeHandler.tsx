@@ -5,9 +5,21 @@ import { VideoPlayerRef } from "@/components/video/VideoPlayer";
 import { Subtitle } from "@/lib/srt";
 import { summarizeContext, TimelineEntry } from "@/lib/api";
 import type { AskContextItem } from "@/lib/askTypes";
+import type { SubtitleDisplayMode } from "@/stores/types";
+import {
+    getAutoSwitchModeOnHide,
+    getAutoSwitchModeOnShow,
+    createAutoSwitchState,
+    updateStateOnAutoSwitch,
+    resetAutoSwitchState,
+    type AutoSwitchState,
+} from "@/lib/subtitleAutoSwitch";
 import { logger } from "@/shared/infrastructure";
 
 const log = logger.scope("FocusModeHandler");
+
+/** Debounce delay before auto-switching subtitles to avoid false triggers from brief tab switches */
+const AUTO_SWITCH_DEBOUNCE_MS = 1500;
 
 const MissedContentDialog = dynamic(
     () => import("@/components/dialogs/MissedContentDialog").then((mod) => mod.MissedContentDialog),
@@ -22,6 +34,10 @@ interface FocusModeHandlerProps {
     // Settings
     autoPauseOnLeave: boolean;
     autoResumeOnReturn: boolean;
+    autoSwitchSubtitlesOnLeave: boolean;
+    subtitleMode: SubtitleDisplayMode;
+    hasTranslation: boolean;
+    onSubtitleModeChange: (mode: SubtitleDisplayMode) => void;
     summaryThresholdSeconds: number; // e.g. 60
     // Smart Skip settings
     skipRamblingEnabled: boolean;
@@ -37,6 +53,10 @@ export function FocusModeHandler({
     learnerProfile,
     autoPauseOnLeave,
     autoResumeOnReturn,
+    autoSwitchSubtitlesOnLeave,
+    subtitleMode,
+    hasTranslation,
+    onSubtitleModeChange,
     summaryThresholdSeconds,
     skipRamblingEnabled,
     timelineEntries,
@@ -53,6 +73,8 @@ export function FocusModeHandler({
 
     const leaveTimeRef = useRef<number | null>(null);
     const wasPlayingRef = useRef(false);
+    const autoSwitchStateRef = useRef<AutoSwitchState>(createAutoSwitchState());
+    const hideDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Compute the amount of "kept" content between two timestamps,
     // excluding gaps that Smart Skip would jump over.
@@ -86,10 +108,53 @@ export function FocusModeHandler({
             wasPlayingRef.current = isPlaying;
             leaveTimeRef.current = currentTime;
 
+            // Clear any existing debounce timer
+            if (hideDebounceRef.current) {
+                clearTimeout(hideDebounceRef.current);
+                hideDebounceRef.current = null;
+            }
+
+            // Handle auto-switch subtitles with debounce (1.5s delay to avoid brief tab switches)
+            if (autoSwitchSubtitlesOnLeave) {
+                hideDebounceRef.current = setTimeout(() => {
+                    const newMode = getAutoSwitchModeOnHide({
+                        enabled: autoSwitchSubtitlesOnLeave,
+                        hasTranslation,
+                        currentMode: subtitleMode,
+                    });
+
+                    if (newMode !== null) {
+                        autoSwitchStateRef.current = updateStateOnAutoSwitch(subtitleMode);
+                        onSubtitleModeChange(newMode);
+                    }
+                }, AUTO_SWITCH_DEBOUNCE_MS);
+            }
+
             if (isPlaying && autoPauseOnLeave) {
                 playerRef.current?.pause();
             }
         } else {
+            // Clear debounce timer if returning quickly
+            if (hideDebounceRef.current) {
+                clearTimeout(hideDebounceRef.current);
+                hideDebounceRef.current = null;
+            }
+
+            // Handle auto-switch subtitle restore
+            if (autoSwitchSubtitlesOnLeave) {
+                const restoreMode = getAutoSwitchModeOnShow({
+                    enabled: autoSwitchSubtitlesOnLeave,
+                    hasTranslation,
+                    currentMode: subtitleMode,
+                    state: autoSwitchStateRef.current,
+                });
+
+                if (restoreMode !== null) {
+                    onSubtitleModeChange(restoreMode);
+                }
+                autoSwitchStateRef.current = resetAutoSwitchState();
+            }
+
             const leaveTimestamp = leaveTimeRef.current;
 
             if (autoPauseOnLeave) {
@@ -122,6 +187,10 @@ export function FocusModeHandler({
     }, [
         autoPauseOnLeave,
         autoResumeOnReturn,
+        autoSwitchSubtitlesOnLeave,
+        subtitleMode,
+        hasTranslation,
+        onSubtitleModeChange,
         summaryThresholdSeconds,
         currentTime,
         playerRef,
@@ -132,6 +201,12 @@ export function FocusModeHandler({
         document.addEventListener("visibilitychange", handleVisibilityChange);
         return () => {
             document.removeEventListener("visibilitychange", handleVisibilityChange);
+            // Clear pending debounce timeout on unmount to prevent memory leak
+            // and avoid calling onSubtitleModeChange on unmounted component
+            if (hideDebounceRef.current) {
+                clearTimeout(hideDebounceRef.current);
+                hideDebounceRef.current = null;
+            }
         };
     }, [handleVisibilityChange]);
 

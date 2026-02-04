@@ -70,6 +70,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
     // Derived values for convenience (used by FocusModeHandler, handlers, etc.)
     const autoPauseOnLeave = playback.autoPauseOnLeave;
     const autoResumeOnReturn = playback.autoResumeOnReturn;
+    const autoSwitchSubtitlesOnLeave = playback.autoSwitchSubtitlesOnLeave;
     const summaryThresholdSeconds = playback.summaryThresholdSeconds;
     const subtitleContextWindowSeconds = playback.subtitleContextWindowSeconds;
     const subtitleRepeatCount = playback.subtitleRepeatCount;
@@ -163,6 +164,12 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         if (sidebarSubtitleMode === "target" && subtitlesTarget.length > 0) return subtitlesTarget;
         return subtitlesSource;
     }, [sidebarSubtitleMode, subtitlesSource, subtitlesTarget, subtitlesDual, subtitlesDualReversed]);
+
+    // Callback for setting sidebar subtitle mode
+    const handleSetSidebarSubtitleMode = useCallback(
+        (mode: SubtitleDisplayMode) => setSubtitleModeSidebarStore(videoId, mode),
+        [setSubtitleModeSidebarStore, videoId]
+    );
 
     // Refs
     const playerRef = useRef<VideoPlayerRef>(null);
@@ -363,6 +370,20 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         [clearProgress, lastPersistedProgressRef, resumeAttemptsRef, resumeTargetRef, setCurrentTime, connectLive2DAudio]
     );
 
+    // Handle ESC key to exit web-fullscreen mode
+    useEffect(() => {
+        if (viewMode !== "web-fullscreen") return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                setViewMode("normal");
+            }
+        };
+
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [viewMode, setViewMode]);
+
     // Loading state
     if (loading) {
         return (
@@ -382,6 +403,48 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
     }
 
     return (
+        <>
+        {/* Web fullscreen overlay - renders video only when in web-fullscreen mode */}
+        {viewMode === "web-fullscreen" && (
+            <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+                <ErrorBoundary
+                    component="VideoPlayerSection"
+                    fallback={(error, reset) => (
+                        <div className="flex flex-col items-center justify-center p-8 bg-muted/50 rounded-lg">
+                            <p className="text-destructive mb-4">Video player error: {error.message}</p>
+                            <button onClick={reset} className="px-4 py-2 bg-primary text-primary-foreground rounded-md">
+                                Reload Player
+                            </button>
+                        </div>
+                    )}
+                >
+                    <VideoPlayerSection
+                        ref={playerRef}
+                        content={content}
+                        videoId={videoId}
+                        selectedVoiceoverId={selectedVoiceoverId}
+                        selectedVoiceoverSyncTimeline={selectedVoiceoverSyncTimeline}
+                        playerSubtitles={playerSubtitles}
+                        playerSubtitleMode={playerSubtitleMode}
+                        setPlayerSubtitleMode={setPlayerSubtitleMode}
+                        hasTranslation={content.translationStatus === "ready"}
+                        generatingVideo={generatingVideo}
+                        onTimeUpdate={handleTimeUpdate}
+                        onCapture={handlers.handleCapture}
+                        onAskAtTime={handlers.handleAskAtTime}
+                        onAddNoteAtTime={handlers.handleAddNoteAtTime}
+                        onPlayerReady={handlePlayerReady}
+                        onGenerateSlideLecture={handlers.handleGenerateSlideLecture}
+                        slideDeck={deck}
+                        onUploadSlide={handlers.handleUploadSlide}
+                        viewMode={viewMode}
+                        onViewModeChange={setViewMode}
+                        className="w-full h-full"
+                    />
+                </ErrorBoundary>
+            </div>
+        )}
+
         <DndContext
             id={dndContextId}
             sensors={sensors}
@@ -392,11 +455,13 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
             onDragCancel={handleDragCancel}
         >
             <div className={`grid gap-6 h-[130vh] ${
-                hideSidebars
-                    ? "grid-cols-1"
-                    : viewMode === "widescreen"
+                viewMode === "web-fullscreen"
+                    ? "invisible" // Hide main content but keep in DOM for state preservation
+                    : hideSidebars
                         ? "grid-cols-1"
-                        : "grid-cols-1 md:grid-cols-3"
+                        : viewMode === "widescreen"
+                            ? "grid-cols-1"
+                            : "grid-cols-1 md:grid-cols-3"
             }`}>
                 {/* Video Player Column - full width in widescreen mode */}
                 <div className={`flex flex-col gap-4 ${
@@ -437,6 +502,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             playerSubtitles={playerSubtitles}
                             playerSubtitleMode={playerSubtitleMode}
                             setPlayerSubtitleMode={setPlayerSubtitleMode}
+                            hasTranslation={content.translationStatus === "ready"}
                             generatingVideo={generatingVideo}
                             onTimeUpdate={handleTimeUpdate}
                             onCapture={handlers.handleCapture}
@@ -459,7 +525,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             content={content}
                             currentTime={currentTime}
                             sidebarSubtitleMode={sidebarSubtitleMode}
-                            setSidebarSubtitleMode={(mode) => setSubtitleModeSidebarStore(videoId, mode)}
+                            setSidebarSubtitleMode={handleSetSidebarSubtitleMode}
                             sidebarSubtitles={sidebarSubtitles}
                             subtitlesTarget={subtitlesTarget}
                             subtitlesDual={subtitlesDual}
@@ -492,7 +558,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                         videoId={videoId}
                         currentTime={currentTime}
                         sidebarSubtitleMode={sidebarSubtitleMode}
-                        setSidebarSubtitleMode={(mode) => setSubtitleModeSidebarStore(videoId, mode)}
+                        setSidebarSubtitleMode={handleSetSidebarSubtitleMode}
                         sidebarSubtitles={sidebarSubtitles}
                         subtitlesTarget={subtitlesTarget}
                         subtitlesDual={subtitlesDual}
@@ -519,14 +585,14 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
 
                 {/* Widescreen mode: NotesPanel and Sidebar side by side below video */}
                 {!hideSidebars && viewMode === "widescreen" && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[80vh]">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-h-[50vh] max-h-[80vh]">
                         <NotesPanel
                             videoId={videoId}
                             onEditorReady={handleNoteEditorReady}
                             content={content}
                             currentTime={currentTime}
                             sidebarSubtitleMode={sidebarSubtitleMode}
-                            setSidebarSubtitleMode={(mode) => setSubtitleModeSidebarStore(videoId, mode)}
+                            setSidebarSubtitleMode={handleSetSidebarSubtitleMode}
                             sidebarSubtitles={sidebarSubtitles}
                             subtitlesTarget={subtitlesTarget}
                             subtitlesDual={subtitlesDual}
@@ -554,7 +620,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             videoId={videoId}
                             currentTime={currentTime}
                             sidebarSubtitleMode={sidebarSubtitleMode}
-                            setSidebarSubtitleMode={(mode) => setSubtitleModeSidebarStore(videoId, mode)}
+                            setSidebarSubtitleMode={handleSetSidebarSubtitleMode}
                             sidebarSubtitles={sidebarSubtitles}
                             subtitlesTarget={subtitlesTarget}
                             subtitlesDual={subtitlesDual}
@@ -620,6 +686,10 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 learnerProfile={learnerProfile}
                 autoPauseOnLeave={autoPauseOnLeave}
                 autoResumeOnReturn={autoResumeOnReturn}
+                autoSwitchSubtitlesOnLeave={autoSwitchSubtitlesOnLeave}
+                subtitleMode={playerSubtitleMode}
+                hasTranslation={content.translationStatus === "ready"}
+                onSubtitleModeChange={setPlayerSubtitleMode}
                 summaryThresholdSeconds={summaryThresholdSeconds}
                 skipRamblingEnabled={skipRamblingEnabled}
                 timelineEntries={timelineEntries}
@@ -683,5 +753,6 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
             </DragOverlay>
         </div>
         </DndContext>
+        </>
     );
 }
