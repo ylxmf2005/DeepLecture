@@ -14,6 +14,14 @@ import {
     resetAutoSwitchState,
     type AutoSwitchState,
 } from "@/lib/subtitleAutoSwitch";
+import {
+    getAutoSwitchVoiceoverOnHide,
+    getAutoSwitchVoiceoverOnShow,
+    createVoiceoverAutoSwitchState,
+    updateStateOnVoiceoverAutoSwitch,
+    resetVoiceoverAutoSwitchState,
+    type VoiceoverAutoSwitchState,
+} from "@/lib/voiceoverAutoSwitch";
 import { logger } from "@/shared/infrastructure";
 
 const log = logger.scope("FocusModeHandler");
@@ -39,6 +47,11 @@ interface FocusModeHandlerProps {
     hasTranslation: boolean;
     onSubtitleModeChange: (mode: SubtitleDisplayMode) => void;
     summaryThresholdSeconds: number; // e.g. 60
+    // Voiceover auto-switch
+    selectedVoiceoverId: string | null;
+    quickToggleOriginalVoiceoverId: string | null;
+    quickToggleTranslatedVoiceoverId: string | null;
+    onVoiceoverChange: (voiceoverId: string | null) => void;
     // Smart Skip settings
     skipRamblingEnabled: boolean;
     timelineEntries: TimelineEntry[];
@@ -58,6 +71,10 @@ export function FocusModeHandler({
     hasTranslation,
     onSubtitleModeChange,
     summaryThresholdSeconds,
+    selectedVoiceoverId,
+    quickToggleOriginalVoiceoverId,
+    quickToggleTranslatedVoiceoverId,
+    onVoiceoverChange,
     skipRamblingEnabled,
     timelineEntries,
     onAddToAsk,
@@ -74,6 +91,7 @@ export function FocusModeHandler({
     const leaveTimeRef = useRef<number | null>(null);
     const wasPlayingRef = useRef(false);
     const autoSwitchStateRef = useRef<AutoSwitchState>(createAutoSwitchState());
+    const voiceoverAutoSwitchStateRef = useRef<VoiceoverAutoSwitchState>(createVoiceoverAutoSwitchState());
     const hideDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Compute the amount of "kept" content between two timestamps,
@@ -127,6 +145,19 @@ export function FocusModeHandler({
                         autoSwitchStateRef.current = updateStateOnAutoSwitch(subtitleMode);
                         onSubtitleModeChange(newMode);
                     }
+
+                    // Auto-switch voiceover (piggybacks on same debounce)
+                    const newVoiceover = getAutoSwitchVoiceoverOnHide({
+                        enabled: true,
+                        selectedVoiceoverId,
+                        originalVoiceoverId: quickToggleOriginalVoiceoverId,
+                        translatedVoiceoverId: quickToggleTranslatedVoiceoverId,
+                    });
+
+                    if (newVoiceover !== undefined) {
+                        voiceoverAutoSwitchStateRef.current = updateStateOnVoiceoverAutoSwitch(selectedVoiceoverId);
+                        onVoiceoverChange(newVoiceover);
+                    }
                 }, AUTO_SWITCH_DEBOUNCE_MS);
             }
 
@@ -153,6 +184,20 @@ export function FocusModeHandler({
                     onSubtitleModeChange(restoreMode);
                 }
                 autoSwitchStateRef.current = resetAutoSwitchState();
+
+                // Restore voiceover
+                const restoreVoiceover = getAutoSwitchVoiceoverOnShow({
+                    enabled: true,
+                    selectedVoiceoverId,
+                    originalVoiceoverId: quickToggleOriginalVoiceoverId,
+                    translatedVoiceoverId: quickToggleTranslatedVoiceoverId,
+                    state: voiceoverAutoSwitchStateRef.current,
+                });
+
+                if (restoreVoiceover !== undefined) {
+                    onVoiceoverChange(restoreVoiceover);
+                }
+                voiceoverAutoSwitchStateRef.current = resetVoiceoverAutoSwitchState();
             }
 
             const leaveTimestamp = leaveTimeRef.current;
@@ -191,6 +236,10 @@ export function FocusModeHandler({
         subtitleMode,
         hasTranslation,
         onSubtitleModeChange,
+        selectedVoiceoverId,
+        quickToggleOriginalVoiceoverId,
+        quickToggleTranslatedVoiceoverId,
+        onVoiceoverChange,
         summaryThresholdSeconds,
         currentTime,
         playerRef,

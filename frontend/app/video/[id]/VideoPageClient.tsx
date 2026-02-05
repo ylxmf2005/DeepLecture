@@ -196,7 +196,6 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         learnerProfile,
         generatingNote,
         setGeneratingNote,
-        tasks,
         confirm,
     });
 

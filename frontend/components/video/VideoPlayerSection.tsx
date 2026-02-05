@@ -21,6 +21,12 @@ interface VideoPlayerSectionProps {
     setPlayerSubtitleMode: (mode: SubtitleDisplayMode) => void;
     /** Whether translation is available for quick toggle */
     hasTranslation?: boolean;
+    /** Quick toggle preset: Original voiceover ID (null = video original audio) */
+    quickToggleOriginalVoiceoverId: string | null;
+    /** Quick toggle preset: Translated voiceover ID (null = not set) */
+    quickToggleTranslatedVoiceoverId: string | null;
+    /** Callback to change the active voiceover */
+    onVoiceoverChange: (voiceoverId: string | null) => void;
     generatingVideo: boolean;
     onTimeUpdate: (time: number) => void;
     onCapture: (timestamp: number, imagePath: string) => void;
@@ -52,6 +58,9 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
             playerSubtitleMode,
             setPlayerSubtitleMode,
             hasTranslation,
+            quickToggleOriginalVoiceoverId,
+            quickToggleTranslatedVoiceoverId,
+            onVoiceoverChange,
             generatingVideo,
             onTimeUpdate,
             onCapture,
@@ -259,6 +268,9 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                                 setPlayerSubtitleMode(mode);
                             }}
                             hasTranslation={hasTranslation}
+                            quickToggleOriginalVoiceoverId={quickToggleOriginalVoiceoverId}
+                            quickToggleTranslatedVoiceoverId={quickToggleTranslatedVoiceoverId}
+                            onVoiceoverChange={onVoiceoverChange}
                             onTimeUpdate={onTimeUpdate}
                             onCapture={onCapture}
                             onAskAtTime={onAskAtTime}

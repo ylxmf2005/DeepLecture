@@ -10,6 +10,7 @@ import { useVoiceoverSync } from "@/hooks/useVoiceoverSync";
 import { VideoControls } from "./VideoControls";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
+import { toast } from "sonner";
 
 const log = logger.scope("VideoPlayer");
 
@@ -27,6 +28,12 @@ interface VideoPlayerProps {
     onSubtitleModeChange?: (mode: SubtitlePlayerMode) => void;
     /** Whether translation is available for quick toggle */
     hasTranslation?: boolean;
+    /** Quick toggle: preset Original voiceover ID (null = video original audio) */
+    quickToggleOriginalVoiceoverId?: string | null;
+    /** Quick toggle: preset Translated voiceover ID (null = not set) */
+    quickToggleTranslatedVoiceoverId?: string | null;
+    /** Callback to change the active voiceover */
+    onVoiceoverChange?: (voiceoverId: string | null) => void;
     onTimeUpdate?: (currentTime: number) => void;
     onCapture?: (timestamp: number, imagePath: string) => void;
     onAskAtTime?: (time: number) => void;
@@ -59,6 +66,9 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
         subtitleMode,
         onSubtitleModeChange,
         hasTranslation,
+        quickToggleOriginalVoiceoverId,
+        quickToggleTranslatedVoiceoverId,
+        onVoiceoverChange,
         onTimeUpdate,
         onCapture,
         onAskAtTime,
@@ -142,14 +152,20 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
             seekToVideoTime(time);
         }, [seekToVideoTime]);
 
-        // Quick toggle between source and target subtitles
+        // Quick toggle between original and translated voiceover tracks
         const handleQuickToggle = useCallback(() => {
-            if (!onSubtitleModeChange || !hasTranslation) return;
+            if (!onVoiceoverChange) return;
 
-            // Toggle between source and target
-            const newMode: SubtitlePlayerMode = subtitleMode === "source" ? "target" : "source";
-            onSubtitleModeChange(newMode);
-        }, [onSubtitleModeChange, hasTranslation, subtitleMode]);
+            if (quickToggleTranslatedVoiceoverId == null) {
+                toast.info("Set up quick toggle presets in the Actions dialog first");
+                return;
+            }
+
+            // Determine which preset we're currently on and switch to the other
+            const isOnOriginal = voiceoverId === (quickToggleOriginalVoiceoverId ?? null);
+            const newId = isOnOriginal ? quickToggleTranslatedVoiceoverId : (quickToggleOriginalVoiceoverId ?? null);
+            onVoiceoverChange(newId);
+        }, [onVoiceoverChange, voiceoverId, quickToggleOriginalVoiceoverId, quickToggleTranslatedVoiceoverId]);
 
         // Keyboard shortcuts
         const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -501,15 +517,14 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                 />
 
                 <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                    {/* Quick toggle button for source/target */}
-                    {onSubtitleModeChange && hasTranslation && subtitleMode !== "off" && (
+                    {/* Quick toggle button for voiceover tracks */}
+                    {onVoiceoverChange && (
                         <button
                             onClick={handleQuickToggle}
-                            className={cn(
-                                "p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors",
-                                (subtitleMode === "source" || subtitleMode === "target") && "ring-2 ring-blue-400/50"
-                            )}
-                            title={`Toggle subtitle (T) - Currently: ${subtitleMode === "source" ? "Source" : "Target"}`}
+                            className="p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
+                            title={quickToggleTranslatedVoiceoverId == null
+                                ? "Toggle audio track (T) - Not configured"
+                                : `Toggle audio track (T) - Currently: ${voiceoverId === quickToggleOriginalVoiceoverId ? "Original" : "Translated"}`}
                         >
                             <ArrowLeftRight className="w-5 h-5" />
                         </button>

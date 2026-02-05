@@ -150,6 +150,10 @@ export interface VideoState {
     deck: VideoDeck | null;
     notes: VideoNotes;
     selectedVoiceoverId: string | null;
+    /** Quick toggle preset: Original track (null = video original audio, string = voiceover ID) */
+    quickToggleOriginalVoiceoverId: string | null;
+    /** Quick toggle preset: Translated track (null = not set, string = voiceover ID) */
+    quickToggleTranslatedVoiceoverId: string | null;
 }
 
 export const EMPTY_VIDEO_NOTES: VideoNotes = Object.freeze({
@@ -166,6 +170,8 @@ export const DEFAULT_VIDEO_STATE: VideoState = {
     deck: null,
     notes: EMPTY_VIDEO_NOTES,
     selectedVoiceoverId: null,
+    quickToggleOriginalVoiceoverId: null,
+    quickToggleTranslatedVoiceoverId: null,
 };
 
 export interface GlobalSettingsActions {
@@ -213,6 +219,8 @@ export interface VideoStateActions {
     setNotesDraft: (videoId: string, draft: string) => void;
     markNotesSynced: (videoId: string) => void;
     setSelectedVoiceoverId: (videoId: string, voiceoverId: string | null) => void;
+    setQuickToggleOriginalVoiceoverId: (videoId: string, voiceoverId: string | null) => void;
+    setQuickToggleTranslatedVoiceoverId: (videoId: string, voiceoverId: string | null) => void;
     clearVideoState: (videoId: string) => void;
     clearAllVideoStates: () => void;
 }

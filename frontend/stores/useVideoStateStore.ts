@@ -162,6 +162,30 @@ export const useVideoStateStore = create<VideoStateStore>()(
                     },
                 })),
 
+            setQuickToggleOriginalVoiceoverId: (videoId, voiceoverId) =>
+                set((state) => ({
+                    videos: {
+                        ...state.videos,
+                        [videoId]: {
+                            ...DEFAULT_VIDEO_STATE,
+                            ...state.videos[videoId],
+                            quickToggleOriginalVoiceoverId: voiceoverId,
+                        },
+                    },
+                })),
+
+            setQuickToggleTranslatedVoiceoverId: (videoId, voiceoverId) =>
+                set((state) => ({
+                    videos: {
+                        ...state.videos,
+                        [videoId]: {
+                            ...DEFAULT_VIDEO_STATE,
+                            ...state.videos[videoId],
+                            quickToggleTranslatedVoiceoverId: voiceoverId,
+                        },
+                    },
+                })),
+
             clearVideoState: (videoId) =>
                 set((state) => {
                     const { [videoId]: _removed, ...rest } = state.videos;
@@ -242,3 +266,9 @@ export const useVideoNotes = (videoId: string) =>
 
 export const useSelectedVoiceoverId = (videoId: string) =>
     useVideoStateStore((state) => state.videos[videoId]?.selectedVoiceoverId ?? null);
+
+export const useQuickToggleOriginalVoiceoverId = (videoId: string) =>
+    useVideoStateStore((state) => state.videos[videoId]?.quickToggleOriginalVoiceoverId ?? null);
+
+export const useQuickToggleTranslatedVoiceoverId = (videoId: string) =>
+    useVideoStateStore((state) => state.videos[videoId]?.quickToggleTranslatedVoiceoverId ?? null);
