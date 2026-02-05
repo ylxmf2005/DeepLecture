@@ -131,9 +131,12 @@ class TimelineUseCase:
             if not knowledge_units:
                 logger.warning("Knowledge segmentation produced no units")
                 entries = []
+                total_units = 0
+                failed_units = 0
+                error_message = None
             else:
                 # Stage 2: Generate explanations (parallel, LLM uses output_language)
-                entries = self._generate_explanations(
+                entries, total_units, failed_units, error_message = self._generate_explanations(
                     segments,
                     knowledge_units,
                     language=output_language,
@@ -147,18 +150,39 @@ class TimelineUseCase:
             for new_id, entry in enumerate(entries, start=1):
                 entry.id = new_id
 
-            # Save timeline - keyed by output_language
-            self._save_timeline(request.content_id, output_language, learner_profile, entries)
+            # Determine status based on failures
+            if failed_units > 0:
+                if len(entries) == 0:
+                    status = "error"
+                    metadata = metadata.with_status(FeatureType.TIMELINE.value, FeatureStatus.ERROR)
+                else:
+                    status = "partial_success"
+                    metadata = metadata.with_status(FeatureType.TIMELINE.value, FeatureStatus.READY)
+            else:
+                status = "ready"
+                metadata = metadata.with_status(FeatureType.TIMELINE.value, FeatureStatus.READY)
 
-            # Update metadata
-            metadata = metadata.with_status(FeatureType.TIMELINE.value, FeatureStatus.READY)
+            # Save timeline - keyed by output_language
+            self._save_timeline(
+                request.content_id,
+                output_language,
+                learner_profile,
+                entries,
+                total_units=total_units,
+                failed_units=failed_units,
+                error_message=error_message,
+            )
+
             self._metadata.save(metadata)
 
             return TimelineResult(
                 content_id=request.content_id,
                 language=output_language,
                 entries=entries,
-                status="ready",
+                status=status,
+                total_units=total_units,
+                failed_units=failed_units,
+                error_message=error_message,
             )
 
         except Exception as e:
@@ -183,6 +207,9 @@ class TimelineUseCase:
             entries=entries,
             cached=True,
             status=payload.get("status", "ready"),
+            total_units=payload.get("total_units", 0),
+            failed_units=payload.get("failed_units", 0),
+            error_message=payload.get("error"),
         )
 
     # =========================================================================
@@ -311,6 +338,9 @@ class TimelineUseCase:
     # STAGE 2: EXPLANATION GENERATION
     # =========================================================================
 
+    # Sentinel to distinguish LLM errors from intentional skips
+    _GENERATION_ERROR = object()
+
     def _generate_explanations(
         self,
         segments: list[SubtitleSegment],
@@ -320,25 +350,41 @@ class TimelineUseCase:
         learner_profile: str | None,
         llm: LLMProtocol,
         prompts: dict[str, str] | None,
-    ) -> list[TimelineEntry]:
+    ) -> tuple[list[TimelineEntry], int, int, str | None]:
         """
         Generate timeline entries by running one LLM call per knowledge unit.
 
         Uses parallel execution for efficiency.
+
+        Returns:
+            Tuple of (entries, total_units, failed_count, error_message)
+            - entries: Successfully generated timeline entries
+            - total_units: Total number of knowledge units attempted
+            - failed_count: Number of units that failed due to LLM errors
+            - error_message: Last error message if any failures occurred
         """
         if not knowledge_units:
-            return []
+            return [], 0, 0, None
 
         # Get prompt builder from registry (once, reused in parallel)
         impl_id = prompts.get("timeline_explanation") if prompts else None
         prompt_builder = self._prompt_registry.get("timeline_explanation", impl_id)
 
+        # Track the last error message for reporting
+        last_error: list[str] = []  # Use list to allow mutation in nested function
+
         def segments_for_unit(unit: KnowledgeUnit) -> list[SubtitleSegment]:
             """Get subtitle segments within a unit's time range."""
             return [seg for seg in segments if seg.end > unit.start and seg.start < unit.end]
 
-        def process_unit(unit_idx: int, unit: KnowledgeUnit) -> TimelineEntry | None:
-            """Process a single knowledge unit."""
+        def process_unit(unit_idx: int, unit: KnowledgeUnit) -> TimelineEntry | object | None:
+            """Process a single knowledge unit.
+
+            Returns:
+                TimelineEntry: Success
+                _GENERATION_ERROR: LLM API error (should be counted as failure)
+                None: Intentionally skipped (should_explain=false or empty)
+            """
             unit_segments = segments_for_unit(unit)
             if not unit_segments:
                 return None
@@ -361,13 +407,11 @@ class TimelineUseCase:
                     temperature=self._config.temperature,
                 )
             except Exception as exc:
-                logger.error(
-                    "LLM error for unit [%.2f, %.2f]: %s",
-                    unit_start,
-                    unit_end,
-                    exc,
-                )
-                return None
+                error_msg = f"LLM error for unit {unit_idx+1} [{unit_start:.1f}s-{unit_end:.1f}s]: {exc}"
+                logger.error(error_msg)
+                last_error.clear()
+                last_error.append(str(exc))
+                return self._GENERATION_ERROR  # Mark as error, not skip
 
             entry = self._parse_explanation_output(
                 raw,
@@ -384,18 +428,41 @@ class TimelineUseCase:
 
         items = list(enumerate(knowledge_units))
 
-        def _run(item: tuple[int, KnowledgeUnit]) -> TimelineEntry | None:
+        def _run(item: tuple[int, KnowledgeUnit]) -> TimelineEntry | object | None:
             idx, unit = item
             return process_unit(idx, unit)
+
+        def _on_error(exc: Exception, item: tuple[int, KnowledgeUnit]) -> object:
+            """Handle parallel runner errors - count as failure."""
+            idx, _unit = item
+            error_msg = f"Parallel execution error for unit {idx+1}: {exc}"
+            logger.error(error_msg)
+            last_error.clear()
+            last_error.append(str(exc))
+            return self._GENERATION_ERROR
 
         results = self._parallel.map_ordered(
             items,
             _run,
             group="timeline_units",
-            on_error=lambda exc, _item: None,
+            on_error=_on_error,
         )
 
-        return [entry for entry in results if entry]
+        # Count failures and filter results
+        total_units = len(knowledge_units)
+        failed_count = sum(1 for r in results if r is self._GENERATION_ERROR)
+        entries = [entry for entry in results if isinstance(entry, TimelineEntry)]
+        error_message = last_error[0] if last_error else None
+
+        if failed_count > 0:
+            logger.warning(
+                "Timeline generation: %d/%d units failed. Last error: %s",
+                failed_count,
+                total_units,
+                error_message,
+            )
+
+        return entries, total_units, failed_count, error_message
 
     def _parse_explanation_output(
         self,
@@ -457,15 +524,28 @@ class TimelineUseCase:
         language: str,
         learner_profile: str | None,
         entries: list[TimelineEntry],
+        *,
+        total_units: int = 0,
+        failed_units: int = 0,
+        error_message: str | None = None,
     ) -> None:
         """Save timeline to storage."""
+        # Determine status based on failures
+        status = ("error" if len(entries) == 0 else "partial_success") if failed_units > 0 else "ready"
+
         payload = {
             "video_id": content_id,  # Legacy API compatibility
             "language": language,
             "timeline": [entry.to_dict() for entry in entries],
-            "status": "ready",
-            "error": None,
+            "status": status,
+            "error": error_message,
         }
+
+        # Include failure tracking info
+        if total_units > 0:
+            payload["total_units"] = total_units
+        if failed_units > 0:
+            payload["failed_units"] = failed_units
 
         if learner_profile:
             payload["learner_profile"] = learner_profile
@@ -487,8 +567,8 @@ class TimelineUseCase:
         current_profile = (learner_profile or "").strip()
         status = str(payload.get("status", "ready")).lower()
 
-        # Cache is valid if profile matches and status is ready
-        if cached_profile != current_profile or status != "ready":
+        # Cache is valid if profile matches and status is ready or partial_success
+        if cached_profile != current_profile or status not in ("ready", "partial_success"):
             return None
 
         entries = self._parse_timeline_entries(payload.get("timeline", []))
@@ -499,6 +579,9 @@ class TimelineUseCase:
             entries=entries,
             cached=True,
             status=status,
+            total_units=payload.get("total_units", 0),
+            failed_units=payload.get("failed_units", 0),
+            error_message=payload.get("error"),
         )
 
     def _parse_timeline_entries(self, entries_raw: list) -> list[TimelineEntry]:

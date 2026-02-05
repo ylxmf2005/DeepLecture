@@ -68,15 +68,24 @@ class TimelineResult:
     entries: list[TimelineEntry]
     cached: bool = False
     status: str = "ready"
+    # Track partial failures during generation
+    total_units: int = 0  # Total knowledge units attempted
+    failed_units: int = 0  # Units that failed to generate explanations
+    error_message: str | None = None  # Error details if any failures
 
     @property
     def count(self) -> int:
         """Number of timeline entries."""
         return len(self.entries)
 
+    @property
+    def has_partial_failures(self) -> bool:
+        """True if some units failed to generate."""
+        return self.failed_units > 0
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-serializable dict."""
-        return {
+        result = {
             "video_id": self.content_id,  # Keep legacy API compatibility
             "language": self.language,
             "timeline": [entry.to_dict() for entry in self.entries],
@@ -84,6 +93,14 @@ class TimelineResult:
             "cached": self.cached,
             "status": self.status,
         }
+        # Include failure info if any
+        if self.total_units > 0:
+            result["total_units"] = self.total_units
+        if self.failed_units > 0:
+            result["failed_units"] = self.failed_units
+        if self.error_message:
+            result["error_message"] = self.error_message
+        return result
 
 
 # =============================================================================

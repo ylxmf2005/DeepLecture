@@ -1,5 +1,6 @@
 """Outbound gateways - external service implementations."""
 
+from deeplecture.infrastructure.gateways.anthropic import AnthropicLLM
 from deeplecture.infrastructure.gateways.claude_code import ClaudeCodeGateway
 from deeplecture.infrastructure.gateways.ffmpeg_audio import FFmpegAudioProcessor
 from deeplecture.infrastructure.gateways.ffmpeg_video import FFmpegVideoProcessor
@@ -12,6 +13,7 @@ from deeplecture.infrastructure.gateways.whisper import WhisperASR
 from deeplecture.infrastructure.gateways.ytdlp_downloader import YtdlpDownloader
 
 __all__ = [
+    "AnthropicLLM",
     "ClaudeCodeGateway",
     "EdgeTTS",
     "FFmpegAudioProcessor",

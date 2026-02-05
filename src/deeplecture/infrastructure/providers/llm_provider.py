@@ -12,6 +12,7 @@ from __future__ import annotations
 import threading
 from typing import TYPE_CHECKING
 
+from deeplecture.infrastructure.gateways.anthropic import AnthropicLLM
 from deeplecture.infrastructure.gateways.openai import OpenAILLM
 from deeplecture.infrastructure.shared.decorators import RateLimitedLLM, RetryableLLM
 from deeplecture.infrastructure.shared.rate_limiter import RateLimiter
@@ -102,13 +103,26 @@ class LLMProvider:
         return tuple(LLMModelInfo(name=cfg.name, provider=cfg.provider, model=cfg.model) for cfg in self._config.models)
 
     def _build(self, cfg: LLMModelConfig) -> LLMProtocol:
-        """Build wrapped LLM instance."""
-        base = OpenAILLM(
-            api_key=cfg.api_key,
-            model=cfg.model,
-            base_url=cfg.base_url,
-            temperature=cfg.temperature,
-            allowed_image_roots=self._allowed_image_roots,
-        )
+        """Build wrapped LLM instance based on provider type."""
+        provider = cfg.provider.lower()
+
+        if provider == "anthropic":
+            base: LLMProtocol = AnthropicLLM(
+                api_key=cfg.api_key,
+                model=cfg.model,
+                base_url=cfg.base_url,
+                temperature=cfg.temperature,
+                max_tokens=cfg.max_tokens,
+            )
+        else:
+            # Default to OpenAI-compatible API (openai, gemini, etc.)
+            base = OpenAILLM(
+                api_key=cfg.api_key,
+                model=cfg.model,
+                base_url=cfg.base_url,
+                temperature=cfg.temperature,
+                allowed_image_roots=self._allowed_image_roots,
+            )
+
         rate_limited = RateLimitedLLM(base, self._rate_limiter)
         return RetryableLLM(rate_limited, self._retry_config)
