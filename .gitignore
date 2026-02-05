@@ -85,3 +85,4 @@ GEMINI.md
 
 # Claude generated docs
 claudedocs/
+.tmp/
