@@ -7,7 +7,7 @@
  */
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { X, BookmarkPlus, BookmarkCheck, Loader2 } from "lucide-react";
+import { X, BookmarkPlus, BookmarkCheck, Loader2, Volume2, VolumeX } from "lucide-react";
 import type { DictionaryEntry } from "@/lib/dictionary/types";
 import { cn } from "@/lib/utils";
 
@@ -75,8 +75,10 @@ function DictionaryPopupBase({
     onClose,
 }: DictionaryPopupProps) {
     const popupRef = useRef<HTMLDivElement>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
     const [position, setPosition] = useState({ top: 0, left: 0 });
     const [visible, setVisible] = useState(false);
+    const [audioState, setAudioState] = useState<"idle" | "loading" | "playing" | "error">("idle");
 
     // Calculate position when anchor or content changes
     useEffect(() => {
@@ -136,6 +138,32 @@ function DictionaryPopupBase({
         onSave?.();
     }, [onSave]);
 
+    const handlePlayAudio = useCallback(() => {
+        if (!entry?.audioUrl) return;
+
+        // Create or reuse audio element
+        if (!audioRef.current) {
+            audioRef.current = new Audio();
+            audioRef.current.onloadstart = () => setAudioState("loading");
+            audioRef.current.onplaying = () => setAudioState("playing");
+            audioRef.current.onended = () => setAudioState("idle");
+            audioRef.current.onerror = () => setAudioState("error");
+        }
+
+        // Play the audio
+        audioRef.current.src = entry.audioUrl;
+        audioRef.current.play().catch(() => setAudioState("error"));
+    }, [entry?.audioUrl]);
+
+    // Reset audio state when entry changes
+    useEffect(() => {
+        setAudioState("idle");
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.src = "";
+        }
+    }, [entry?.word]);
+
     if (!anchorRect) {
         return null;
     }
@@ -169,6 +197,29 @@ function DictionaryPopupBase({
                                 <span className="text-sm text-gray-500 dark:text-gray-400">
                                     {entry.phonetic}
                                 </span>
+                            )}
+                            {entry.audioUrl && (
+                                <button
+                                    onClick={handlePlayAudio}
+                                    disabled={audioState === "loading" || audioState === "playing"}
+                                    className={cn(
+                                        "p-1 rounded transition-colors",
+                                        audioState === "error"
+                                            ? "text-red-500 cursor-not-allowed"
+                                            : audioState === "loading" || audioState === "playing"
+                                                ? "text-blue-500"
+                                                : "text-gray-500 hover:text-blue-600 dark:hover:text-blue-400"
+                                    )}
+                                    title={audioState === "error" ? "Audio unavailable" : "Play pronunciation"}
+                                >
+                                    {audioState === "error" ? (
+                                        <VolumeX className="w-4 h-4" />
+                                    ) : audioState === "loading" ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <Volume2 className="w-4 h-4" />
+                                    )}
+                                </button>
                             )}
                         </>
                     )}

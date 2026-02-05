@@ -21,6 +21,7 @@ import {
 import { DictionaryPopup } from "./DictionaryPopup";
 import { useDictionaryLookup } from "@/hooks/useDictionaryLookup";
 import { useVocabularyStore } from "@/stores/useVocabularyStore";
+import { useDictionarySettings } from "@/stores/useGlobalSettingsStore";
 
 interface SubtitleListProps {
     /** Legacy prop - combined subtitles (used when subtitlesSource/Target not provided) */
@@ -78,6 +79,9 @@ function SubtitleListBase({
     // Vocabulary store
     const addVocabulary = useVocabularyStore((state) => state.add);
     const hasVocabulary = useVocabularyStore((state) => state.has);
+
+    // Dictionary settings
+    const dictionarySettings = useDictionarySettings();
 
     // Create subtitle rows with separate source/target
     const rows: SubtitleRow[] = useMemo(() => {
@@ -215,6 +219,7 @@ function SubtitleListBase({
             locale: currentWordContext.locale,
             definition: firstDefinition?.meaning || "",
             phonetic: entry.phonetic,
+            audioUrl: entry.audioUrl,
             context: {
                 videoId: currentWordContext.videoId,
                 timestamp: currentWordContext.timestamp,
@@ -230,7 +235,7 @@ function SubtitleListBase({
     }, [currentWordContext, hasVocabulary]);
 
     // Check if dictionary is enabled for this language
-    const dictionaryEnabled = supports(originalLanguage);
+    const dictionaryEnabled = dictionarySettings.enabled && supports(originalLanguage);
 
     // Determine source-first rendering
     const sourceFirst = isSourceFirst(subtitleMode);
@@ -310,6 +315,7 @@ function SubtitleListBase({
                                                 text={row.sourceText}
                                                 locale={originalLanguage}
                                                 interactive={dictionaryEnabled}
+                                                interactionMode={dictionarySettings.interactionMode}
                                                 videoId={videoId}
                                                 timestamp={row.startTime}
                                                 onWordHover={handleWordHover}
@@ -333,6 +339,7 @@ function SubtitleListBase({
                                                     text={row.sourceText}
                                                     locale={originalLanguage}
                                                     interactive={dictionaryEnabled}
+                                                    interactionMode={dictionarySettings.interactionMode}
                                                     videoId={videoId}
                                                     timestamp={row.startTime}
                                                     onWordHover={handleWordHover}

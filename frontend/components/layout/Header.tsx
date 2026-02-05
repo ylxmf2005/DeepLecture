@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Video } from "lucide-react";
+import { Video, BookMarked } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 
 export function Header() {
@@ -20,6 +20,13 @@ export function Header() {
                         className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
                     >
                         Dashboard
+                    </Link>
+                    <Link
+                        href="/vocabulary"
+                        className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground flex items-center gap-1.5"
+                    >
+                        <BookMarked className="w-4 h-4" />
+                        Vocabulary
                     </Link>
                     <a
                         href="https://github.com/your-repo/CourseSubtitle"

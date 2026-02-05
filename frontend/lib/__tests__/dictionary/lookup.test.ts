@@ -229,6 +229,117 @@ describe("createDictionaryLookup", () => {
         });
     });
 
+    describe("audio URL extraction", () => {
+        it("extracts audio URL from phonetics array", async () => {
+            const mockResponse = [
+                {
+                    word: "example",
+                    phonetic: "/ɪɡˈzæmpəl/",
+                    phonetics: [
+                        { text: "/ɪɡˈzæmpəl/", audio: "" },
+                        {
+                            text: "/ɪɡˈzæmpəl/",
+                            audio: "https://api.dictionaryapi.dev/media/pronunciations/en/example-us.mp3",
+                        },
+                    ],
+                    meanings: [
+                        {
+                            partOfSpeech: "noun",
+                            definitions: [{ definition: "Something to be imitated" }],
+                        },
+                    ],
+                },
+            ];
+
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve(mockResponse),
+            });
+
+            const result = await provider.lookup("example", "en");
+
+            expect(result).not.toBeNull();
+            expect(result?.audioUrl).toBe(
+                "https://api.dictionaryapi.dev/media/pronunciations/en/example-us.mp3"
+            );
+        });
+
+        it("returns undefined audioUrl when no audio in phonetics", async () => {
+            const mockResponse = [
+                {
+                    word: "rare",
+                    phonetic: "/reər/",
+                    phonetics: [{ text: "/reər/", audio: "" }],
+                    meanings: [
+                        {
+                            partOfSpeech: "adjective",
+                            definitions: [{ definition: "Not common" }],
+                        },
+                    ],
+                },
+            ];
+
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve(mockResponse),
+            });
+
+            const result = await provider.lookup("rare", "en");
+
+            expect(result).not.toBeNull();
+            expect(result?.audioUrl).toBeUndefined();
+        });
+
+        it("returns undefined audioUrl when phonetics array is missing", async () => {
+            const mockResponse = [
+                {
+                    word: "test",
+                    meanings: [
+                        {
+                            partOfSpeech: "noun",
+                            definitions: [{ definition: "A test" }],
+                        },
+                    ],
+                },
+            ];
+
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve(mockResponse),
+            });
+
+            const result = await provider.lookup("test", "en");
+
+            expect(result).not.toBeNull();
+            expect(result?.audioUrl).toBeUndefined();
+        });
+
+        it("ignores non-HTTP audio URLs", async () => {
+            const mockResponse = [
+                {
+                    word: "invalid",
+                    phonetics: [{ text: "/ɪnˈvælɪd/", audio: "relative/path.mp3" }],
+                    meanings: [
+                        {
+                            partOfSpeech: "adjective",
+                            definitions: [{ definition: "Not valid" }],
+                        },
+                    ],
+                },
+            ];
+
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve(mockResponse),
+            });
+
+            const result = await provider.lookup("invalid", "en");
+
+            expect(result).not.toBeNull();
+            expect(result?.audioUrl).toBeUndefined();
+        });
+    });
+
     describe("word normalization", () => {
         it("normalizes word to lowercase before lookup", async () => {
             const mockResponse = [

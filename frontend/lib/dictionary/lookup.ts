@@ -79,6 +79,9 @@ function parseApiResponse(data: FreeDictApiResponse[]): DictionaryEntry | null {
         phonetic = first.phonetics.find((p) => p.text)?.text;
     }
 
+    // Extract audio URL from phonetics array (first valid http URL)
+    let audioUrl = first.phonetics?.find((p) => p.audio && p.audio.startsWith("http"))?.audio;
+
     // Extract definitions
     const definitions: Definition[] = [];
     const examples: string[] = [];
@@ -103,6 +106,7 @@ function parseApiResponse(data: FreeDictApiResponse[]): DictionaryEntry | null {
     return {
         word: first.word,
         phonetic,
+        audioUrl,
         definitions,
         examples,
         source: "api",

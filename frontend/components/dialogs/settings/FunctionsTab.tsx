@@ -1,8 +1,8 @@
 "use client";
 
-import { ListVideo, MessageSquare, FileText } from "lucide-react";
+import { ListVideo, MessageSquare, FileText, BookOpen } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
-import { useGlobalSettingsStore, useNoteSettings } from "@/stores/useGlobalSettingsStore";
+import { useGlobalSettingsStore, useNoteSettings, useDictionarySettings } from "@/stores/useGlobalSettingsStore";
 import { useVideoStateStore } from "@/stores/useVideoStateStore";
 import { SettingsSection, SettingsCard, SettingsRow } from "./SettingsSection";
 import { ToggleSwitch } from "./ToggleSwitch";
@@ -12,7 +12,10 @@ import type { SettingsTabProps } from "./types";
 export function FunctionsTab({ video }: SettingsTabProps) {
     const playback = useGlobalSettingsStore(useShallow((state) => state.playback));
     const noteSettings = useNoteSettings();
+    const dictionarySettings = useDictionarySettings();
     const setNoteContextMode = useGlobalSettingsStore((s) => s.setNoteContextMode);
+    const setDictionaryEnabled = useGlobalSettingsStore((s) => s.setDictionaryEnabled);
+    const setDictionaryInteractionMode = useGlobalSettingsStore((s) => s.setDictionaryInteractionMode);
 
     const setSubtitleContextWindowSeconds = useGlobalSettingsStore((s) => s.setSubtitleContextWindowSeconds);
     const setSubtitleRepeatCount = useGlobalSettingsStore((s) => s.setSubtitleRepeatCount);
@@ -116,6 +119,61 @@ export function FunctionsTab({ video }: SettingsTabProps) {
                                 : noteSettings.contextMode === "subtitle"
                                     ? "Using only transcript text"
                                     : "Using only slide/PDF content"}
+                        </p>
+                    </div>
+                </SettingsCard>
+            </SettingsSection>
+
+            {/* Dictionary Section */}
+            <SettingsSection icon={BookOpen} title="Dictionary" accentColor="blue">
+                <SettingsCard>
+                    <SettingsRow
+                        label="Enable Dictionary"
+                        description="Look up word definitions in subtitles"
+                    >
+                        <ToggleSwitch
+                            enabled={dictionarySettings.enabled}
+                            onChange={() => setDictionaryEnabled(!dictionarySettings.enabled)}
+                            accentColor="blue"
+                        />
+                    </SettingsRow>
+
+                    <div className="space-y-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                        <div className="flex items-baseline justify-between gap-4">
+                            <span className="font-medium text-gray-900 dark:text-gray-100">
+                                Interaction Mode
+                            </span>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setDictionaryInteractionMode("hover")}
+                                disabled={!dictionarySettings.enabled}
+                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                    dictionarySettings.interactionMode === "hover"
+                                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
+                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                                } ${!dictionarySettings.enabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                            >
+                                Hover
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setDictionaryInteractionMode("click")}
+                                disabled={!dictionarySettings.enabled}
+                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                    dictionarySettings.interactionMode === "click"
+                                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
+                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                                } ${!dictionarySettings.enabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                            >
+                                Click
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                            {dictionarySettings.interactionMode === "hover"
+                                ? "Hover over words to see definitions (auto-trigger)"
+                                : "Click on words to see definitions (click won't seek video)"}
                         </p>
                     </div>
                 </SettingsCard>

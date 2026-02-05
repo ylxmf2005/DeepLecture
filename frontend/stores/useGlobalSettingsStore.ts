@@ -204,6 +204,16 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
                 }
             },
 
+            setDictionaryEnabled: (value) =>
+                set((state) => ({
+                    dictionary: { ...state.dictionary, enabled: value },
+                })),
+
+            setDictionaryInteractionMode: (mode) =>
+                set((state) => ({
+                    dictionary: { ...state.dictionary, interactionMode: mode },
+                })),
+
             resetToDefaults: () =>
                 set({
                     ...DEFAULT_GLOBAL_SETTINGS,
@@ -226,6 +236,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
                 learnerProfile: state.learnerProfile,
                 note: state.note,
                 ai: state.ai,
+                dictionary: state.dictionary,
             }),
 
             onRehydrateStorage: () => () => {
@@ -291,6 +302,10 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
                         ...DEFAULT_GLOBAL_SETTINGS.ai,
                         ...(state.ai ?? DEFAULT_GLOBAL_SETTINGS.ai),
                     },
+                    dictionary: {
+                        ...DEFAULT_GLOBAL_SETTINGS.dictionary,
+                        ...(state.dictionary ?? DEFAULT_GLOBAL_SETTINGS.dictionary),
+                    },
                 } as GlobalSettingsState;
             },
         }
@@ -323,3 +338,6 @@ export const useAISettings = () =>
 
 export const useViewMode = () =>
     useGlobalSettingsStore((state) => state.viewMode);
+
+export const useDictionarySettings = () =>
+    useGlobalSettingsStore((state) => state.dictionary);

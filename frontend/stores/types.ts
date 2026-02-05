@@ -58,6 +58,13 @@ export interface AISettings {
     prompts: Record<string, string>;
 }
 
+export type DictionaryInteractionMode = "hover" | "click";
+
+export interface DictionarySettings {
+    enabled: boolean;
+    interactionMode: DictionaryInteractionMode;
+}
+
 export interface GlobalSettings {
     playback: PlaybackSettings;
     language: LanguageSettings;
@@ -69,6 +76,7 @@ export interface GlobalSettings {
     learnerProfile: string;
     note: NoteSettings;
     ai: AISettings;
+    dictionary: DictionarySettings;
 }
 
 export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
@@ -110,6 +118,10 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
         llmModel: null,
         ttsModel: null,
         prompts: {},
+    },
+    dictionary: {
+        enabled: true,
+        interactionMode: "hover",
     },
 };
 
@@ -204,6 +216,8 @@ export interface GlobalSettingsActions {
     setAIPrompt: (funcId: string, implId: string) => void;
     resetAIPrompt: (funcId: string) => void;
     loadAIConfigFromServer: () => Promise<void>;
+    setDictionaryEnabled: (value: boolean) => void;
+    setDictionaryInteractionMode: (mode: DictionaryInteractionMode) => void;
     resetToDefaults: () => void;
 }
 

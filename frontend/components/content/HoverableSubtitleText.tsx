@@ -10,6 +10,7 @@
 import { memo, useCallback, useState, useMemo } from "react";
 import { tokenizeText, type Token } from "@/lib/dictionary/tokenize";
 import { cn } from "@/lib/utils";
+import type { DictionaryInteractionMode } from "@/stores/types";
 
 export interface WordContext {
     word: string;
@@ -26,6 +27,8 @@ interface HoverableSubtitleTextProps {
     locale: string;
     /** Whether hover interactions are enabled */
     interactive?: boolean;
+    /** Interaction mode: hover triggers on mouse enter, click triggers on click */
+    interactionMode?: DictionaryInteractionMode;
     /** Additional CSS classes for the container */
     className?: string;
     /** Video ID for context */
@@ -50,24 +53,25 @@ function HoverableSubtitleTextBase({
     text,
     locale,
     interactive = true,
+    interactionMode = "hover",
     className,
     videoId = "",
     timestamp = 0,
     onWordHover,
     onWordLeave,
 }: HoverableSubtitleTextProps) {
-    const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+    const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
     // Memoize tokenization
     const tokens = useMemo(() => tokenizeText(text, locale), [text, locale]);
 
-    const handleMouseEnter = useCallback(
+    const triggerWordLookup = useCallback(
         (token: Token, index: number, event: React.MouseEvent<HTMLSpanElement>) => {
             if (!interactive || !token.isWord || !onWordHover) {
                 return;
             }
 
-            setHoveredIndex(index);
+            setActiveIndex(index);
 
             const target = event.currentTarget;
             const rect = target.getBoundingClientRect();
@@ -83,8 +87,26 @@ function HoverableSubtitleTextBase({
         [interactive, locale, text, videoId, timestamp, onWordHover]
     );
 
+    const handleMouseEnter = useCallback(
+        (token: Token, index: number, event: React.MouseEvent<HTMLSpanElement>) => {
+            if (interactionMode !== "hover") return;
+            triggerWordLookup(token, index, event);
+        },
+        [interactionMode, triggerWordLookup]
+    );
+
+    const handleClick = useCallback(
+        (token: Token, index: number, event: React.MouseEvent<HTMLSpanElement>) => {
+            if (interactionMode !== "click") return;
+            // Prevent parent click handlers (e.g., subtitle row seek)
+            event.stopPropagation();
+            triggerWordLookup(token, index, event);
+        },
+        [interactionMode, triggerWordLookup]
+    );
+
     const handleMouseLeave = useCallback(() => {
-        setHoveredIndex(null);
+        setActiveIndex(null);
         onWordLeave?.();
     }, [onWordLeave]);
 
@@ -105,19 +127,20 @@ function HoverableSubtitleTextBase({
                     );
                 }
 
-                // Word tokens - make hoverable
-                const isHovered = hoveredIndex === index;
+                // Word tokens - make hoverable/clickable
+                const isActive = activeIndex === index;
 
                 return (
                     <span
                         key={index}
                         onMouseEnter={(e) => handleMouseEnter(token, index, e)}
                         onMouseLeave={handleMouseLeave}
+                        onClick={(e) => handleClick(token, index, e)}
                         className={cn(
                             "cursor-pointer select-text transition-colors duration-150",
                             "hover:text-blue-600 dark:hover:text-blue-400",
                             "hover:underline hover:decoration-dotted",
-                            isHovered && "text-blue-600 dark:text-blue-400 underline decoration-dotted"
+                            isActive && "text-blue-600 dark:text-blue-400 underline decoration-dotted"
                         )}
                     >
                         {token.text}

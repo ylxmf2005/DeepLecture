@@ -17,6 +17,7 @@ export interface Definition {
 export interface DictionaryEntry {
     word: string;
     phonetic?: string;
+    audioUrl?: string;
     definitions: Definition[];
     examples: string[];
     source: "api" | "cache";
@@ -71,6 +72,7 @@ export interface VocabularyItem {
     locale: string;
     definition: string;
     phonetic?: string;
+    audioUrl?: string;
     context: {
         videoId: string;
         timestamp: number;
