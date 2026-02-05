@@ -15,7 +15,10 @@ const MAX_CACHE_SIZE = 500;
 const cache = new Map<string, DictionaryEntry>();
 
 function setCache(key: string, value: DictionaryEntry): void {
-    if (cache.size >= MAX_CACHE_SIZE) {
+    if (cache.has(key)) {
+        // Delete and re-add to refresh recency (LRU behavior)
+        cache.delete(key);
+    } else if (cache.size >= MAX_CACHE_SIZE) {
         // Remove oldest entry (first key in Map iteration order)
         const firstKey = cache.keys().next().value;
         if (firstKey) cache.delete(firstKey);
@@ -177,6 +180,8 @@ export function createDictionaryLookup(): DictionaryProvider {
             const cacheKey = getCacheKey(normalizedWord, locale);
             const cached = cache.get(cacheKey);
             if (cached) {
+                // Refresh recency for LRU behavior
+                setCache(cacheKey, cached);
                 return { ...cached, source: "cache" };
             }
 
