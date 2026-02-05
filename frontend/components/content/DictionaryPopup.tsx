@@ -150,7 +150,9 @@ function DictionaryPopupBase({
             audioRef.current.onerror = () => setAudioState("error");
         }
 
-        // Play the audio
+        // Reset state and stop current playback before starting new
+        setAudioState("loading");
+        audioRef.current.pause();
         audioRef.current.src = entry.audioUrl;
         audioRef.current.play().catch(() => setAudioState("error"));
     }, [entry?.audioUrl]);
@@ -163,6 +165,17 @@ function DictionaryPopupBase({
             audioRef.current.src = "";
         }
     }, [entry?.word]);
+
+    // Cleanup audio element on unmount
+    useEffect(() => {
+        return () => {
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current.src = "";
+                audioRef.current = null;
+            }
+        };
+    }, []);
 
     if (!anchorRect) {
         return null;
@@ -202,6 +215,15 @@ function DictionaryPopupBase({
                                 <button
                                     onClick={handlePlayAudio}
                                     disabled={audioState === "loading" || audioState === "playing"}
+                                    aria-label={
+                                        audioState === "error"
+                                            ? "Audio unavailable"
+                                            : audioState === "loading"
+                                              ? "Loading audio"
+                                              : audioState === "playing"
+                                                ? "Playing pronunciation"
+                                                : "Play pronunciation"
+                                    }
                                     className={cn(
                                         "p-1 rounded transition-colors",
                                         audioState === "error"

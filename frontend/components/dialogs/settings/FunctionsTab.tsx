@@ -144,11 +144,12 @@ export function FunctionsTab({ video }: SettingsTabProps) {
                                 Interaction Mode
                             </span>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2" role="group" aria-label="Interaction mode">
                             <button
                                 type="button"
                                 onClick={() => setDictionaryInteractionMode("hover")}
                                 disabled={!dictionarySettings.enabled}
+                                aria-pressed={dictionarySettings.interactionMode === "hover"}
                                 className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                                     dictionarySettings.interactionMode === "hover"
                                         ? "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
@@ -161,6 +162,7 @@ export function FunctionsTab({ video }: SettingsTabProps) {
                                 type="button"
                                 onClick={() => setDictionaryInteractionMode("click")}
                                 disabled={!dictionarySettings.enabled}
+                                aria-pressed={dictionarySettings.interactionMode === "click"}
                                 className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                                     dictionarySettings.interactionMode === "click"
                                         ? "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
