@@ -76,7 +76,7 @@ export function deriveProcessingState(content: ContentItem | null): {
     if (content.subtitleStatus === "processing") {
         return { processing: true, action: "generate", timelineLoading: false };
     }
-    if (content.translationStatus === "processing" || content.enhancedStatus === "processing") {
+    if (content.translationStatus === "processing") {
         return { processing: true, action: "translate", timelineLoading: false };
     }
     if (content.videoStatus === "processing") {
