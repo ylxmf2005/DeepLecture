@@ -34,3 +34,15 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Task Stream Reconnect
+
+Frontend task state is driven by SSE (`useTaskStatus` → `EventSource`):
+
+1. **Connect**: `EventSource` opens `/api/task/stream/{contentId}`
+2. **Snapshot**: Server sends `retry: 3000` + `initial` events for all active tasks
+3. **Live**: Real-time `started`/`progress`/`completed`/`failed` events
+4. **Reconnect**: On disconnect, browser auto-reconnects per `retry:` interval; new snapshot is sent
+5. **Fallback**: Metadata polling only runs when SSE is disconnected (`isConnected === false`)
+
+Task type normalization and mapping logic is in `lib/taskTypes.ts`.

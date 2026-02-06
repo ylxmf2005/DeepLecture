@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from deeplecture.domain import Task
+    from deeplecture.infrastructure.repositories.sqlite_task_storage import SQLiteTaskStorage
     from deeplecture.use_cases.interfaces.task import EventPublisherProtocol, TaskFn
 
 logger = logging.getLogger(__name__)
@@ -105,9 +106,11 @@ class TaskManager:
         self,
         config: TaskConfig,
         event_publisher: EventPublisherProtocol | None = None,
+        task_storage: SQLiteTaskStorage | None = None,
     ) -> None:
         self._config = config
         self._event_publisher = event_publisher
+        self._storage = task_storage
 
         # Task state storage
         self._tasks: dict[str, Task] = {}
@@ -118,6 +121,12 @@ class TaskManager:
 
         # Cleanup tracking
         self._last_cleanup = time.monotonic()
+
+        # Startup reconciliation: mark any persisted inflight tasks as error
+        if self._storage:
+            affected = self._storage.mark_inflight_as_error("Task interrupted by server restart")
+            if affected:
+                logger.info("Startup reconciliation: marked %d inflight tasks as error", affected)
 
     def submit(
         self,
@@ -163,6 +172,10 @@ class TaskManager:
 
         with self._lock:
             self._tasks[task_id] = task_entity
+            snapshot = self._serialize_task(task_entity)
+
+        # Persist to durable storage
+        self._persist_snapshot(snapshot)
 
         # Create queue item
         item = _QueueItem(
@@ -181,7 +194,7 @@ class TaskManager:
             raise RuntimeError(f"Task queue is full (max {self._config.queue_max_size})") from err
 
         # Emit start event
-        self._broadcast(content_id, {"event": "started", "task": self._serialize_task(task_entity)})
+        self._broadcast(content_id, {"event": "started", "task": snapshot})
 
         return task_id
 
@@ -211,12 +224,18 @@ class TaskManager:
             if not task or task.is_terminal():
                 return task
 
+            old_status = task.status
             task.progress = max(0, min(100, progress))
             if task.is_pending():
                 task.status = TaskStatus.PROCESSING
             task.updated_at = self._now_iso()
             snapshot = self._serialize_task(task)
             content_id = task.content_id
+            status_changed = task.status != old_status
+
+        # Persist on status transitions (not every progress tick)
+        if status_changed:
+            self._persist_snapshot(snapshot)
 
         if emit_event:
             self._broadcast(content_id, {"event": "progress", "task": snapshot})
@@ -239,6 +258,7 @@ class TaskManager:
             snapshot = self._serialize_task(task)
             content_id = task.content_id
 
+        self._persist_snapshot(snapshot)
         self._broadcast(content_id, {"event": "completed", "task": snapshot})
         return task
 
@@ -263,6 +283,7 @@ class TaskManager:
             snapshot = self._serialize_task(task)
             content_id = task.content_id
 
+        self._persist_snapshot(snapshot)
         self._broadcast(content_id, {"event": "failed", "task": snapshot})
         return task
 
@@ -270,6 +291,34 @@ class TaskManager:
         """Broadcast SSE event if publisher is configured."""
         if self._event_publisher:
             self._event_publisher.broadcast(content_id, event_data)
+
+    def _persist_snapshot(self, snapshot: dict[str, Any]) -> None:
+        """Write task snapshot to durable storage if configured.
+
+        Accepts an already-captured snapshot dict (built inside the lock)
+        so that persistence operates on immutable data, avoiding races
+        with concurrent mutations to the live Task entity.
+        """
+        if not self._storage:
+            return
+        import json as _json
+
+        try:
+            self._storage.save(
+                {
+                    "id": snapshot["id"],
+                    "type": snapshot["type"],
+                    "content_id": snapshot["content_id"],
+                    "status": snapshot["status"],
+                    "progress": snapshot["progress"],
+                    "error": snapshot.get("error"),
+                    "metadata_json": _json.dumps(snapshot.get("metadata") or {}),
+                    "created_at": snapshot.get("created_at"),
+                    "updated_at": snapshot.get("updated_at"),
+                }
+            )
+        except Exception:
+            logger.exception("Failed to persist task snapshot %s", snapshot.get("id"))
 
     @property
     def queue(self) -> queue.Queue[_QueueItem]:
@@ -339,6 +388,10 @@ class TaskManager:
 
         if expired_ids:
             logger.info("TaskManager cleanup: removed %d expired tasks", len(expired_ids))
+
+        # Also clean expired tasks from durable storage
+        if self._storage:
+            self._storage.delete_expired_terminal(self._config.completed_task_ttl_seconds)
 
 
 class WorkerPool:

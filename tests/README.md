@@ -53,3 +53,14 @@ pytest -n 1 -m e2e
 2. **Settings Override**: `test_settings` fixture patches `get_settings()`
 3. **Container Reset**: `reset_container` fixture clears singleton cache
 4. **Fake Ports**: In-memory implementations in `tests/fixtures/fakes.py`
+
+## Task Reliability Tests
+
+Task state persistence and SSE transport reliability:
+
+| Test File | Category | Coverage |
+|-----------|----------|----------|
+| `integration/infrastructure/repositories/test_sqlite_task_storage.py` | integration | SQLite task CRUD, startup reconciliation, TTL cleanup |
+| `unit/presentation/sse/test_events.py` | unit | SSE frame format (`id:`, `retry:`, `data:`) |
+| `unit/infrastructure/workers/test_task_queue_async.py` | unit | TaskManager persistence write-through, startup recovery |
+| `integration/presentation/api/test_task_stream.py` | integration | Stream endpoint snapshot + reconciliation-on-connect |

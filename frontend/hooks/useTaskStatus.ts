@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { API_BASE_URL } from '@/lib/api';
 import { logger } from '@/shared/infrastructure';
 import { toError } from '@/lib/utils/errorUtils';
@@ -24,8 +24,6 @@ interface UseTaskStatusReturn {
 export function useTaskStatus(contentId: string | null): UseTaskStatusReturn {
     const [tasks, setTasks] = useState<Record<string, TaskStatus>>({});
     const [isConnected, setIsConnected] = useState(false);
-    const retryCountRef = useRef(0);
-    const maxRetries = 3;
 
     // Reset state when contentId becomes null (prop-driven state reset)
     useEffect(() => {
@@ -43,73 +41,45 @@ export function useTaskStatus(contentId: string | null): UseTaskStatusReturn {
             return;
         }
 
-        let eventSource: EventSource | null = null;
-        let retryTimeout: NodeJS.Timeout | null = null;
+        // Direct connection to Flask backend, bypassing Next.js proxy
+        const url = `${API_BASE_URL}/api/task/stream/${contentId}`;
+        const eventSource = new EventSource(url);
 
-        const connect = () => {
-            if (eventSource) {
-                eventSource.close();
-            }
-
-            // Direct connection to Flask backend, bypassing Next.js proxy
-            const url = `${API_BASE_URL}/api/task/stream/${contentId}`;
-            eventSource = new EventSource(url);
-
-            eventSource.onopen = () => {
-                log.debug('SSE connected', { url });
-                setIsConnected(true);
-                retryCountRef.current = 0;
-            };
-
-            eventSource.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    const { event: eventType, task } = data;
-
-                    log.debug('SSE event received', { eventType, taskType: task?.type, status: task?.status });
-
-                    if (task) {
-                        const id = task.task_id || task.id;
-                        if (id) {
-                            setTasks(prev => ({
-                                ...prev,
-                                [id]: { ...task, task_id: id, _eventType: eventType }
-                            }));
-                        }
-                    }
-                } catch (err) {
-                    log.error('Failed to parse SSE message', toError(err));
-                }
-            };
-
-            eventSource.onerror = () => {
-                log.warn('SSE connection error', { contentId });
-                setIsConnected(false);
-                if (eventSource) {
-                    eventSource.close();
-                    eventSource = null;
-                }
-
-                if (retryCountRef.current < maxRetries) {
-                    const delay = 1000 * Math.pow(2, retryCountRef.current);
-                    log.info('Retrying SSE connection', { delay, attempt: retryCountRef.current + 1, maxRetries });
-                    retryCountRef.current += 1;
-                    retryTimeout = setTimeout(connect, delay);
-                } else {
-                    log.error('Max SSE retries reached, connection failed', new Error('SSE connection failed'), { contentId, maxRetries });
-                }
-            };
+        eventSource.onopen = () => {
+            log.debug('SSE connected', { url });
+            setIsConnected(true);
         };
 
-        connect();
+        eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                const { event: eventType, task } = data;
+
+                log.debug('SSE event received', { eventType, taskType: task?.type, status: task?.status });
+
+                if (task) {
+                    const id = task.task_id || task.id;
+                    if (id) {
+                        setTasks(prev => ({
+                            ...prev,
+                            [id]: { ...task, task_id: id, _eventType: eventType }
+                        }));
+                    }
+                }
+            } catch (err) {
+                log.error('Failed to parse SSE message', toError(err));
+            }
+        };
+
+        eventSource.onerror = () => {
+            log.warn('SSE connection error, browser will auto-reconnect', { contentId });
+            // Let native EventSource reconnect via retry: frame from server.
+            // Only update connection state for UI; don't manually close/reopen.
+            setIsConnected(false);
+        };
 
         return () => {
-            if (eventSource) {
-                eventSource.close();
-            }
-            if (retryTimeout) {
-                clearTimeout(retryTimeout);
-            }
+            eventSource.close();
         };
     }, [contentId]);
 

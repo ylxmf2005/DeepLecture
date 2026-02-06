@@ -3,59 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useNotificationSettings } from "@/stores/useGlobalSettingsStore";
-
-type TaskType =
-    | "subtitle_generation"
-    | "subtitle_enhancement"
-    | "subtitle_translation"
-    | "timeline_generation"
-    | "video_generation"
-    | "video_merge"
-    | "video_import_url"
-    | "pdf_merge"
-    | "slide_explanation";
+import { TASK_LABELS, normalizeTaskType } from "@/lib/taskTypes";
 
 const readNotificationPermission = () =>
     typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported";
-
-const TASK_LABELS: Record<TaskType, { success: string; error: string }> = {
-    subtitle_generation: {
-        success: "Subtitles generated successfully",
-        error: "Subtitle generation failed",
-    },
-    subtitle_enhancement: {
-        success: "Subtitles enhanced successfully",
-        error: "Subtitle enhancement failed",
-    },
-    subtitle_translation: {
-        success: "Translation completed",
-        error: "Translation failed",
-    },
-    timeline_generation: {
-        success: "Timeline generated successfully",
-        error: "Timeline generation failed",
-    },
-    video_generation: {
-        success: "Video generated successfully",
-        error: "Video generation failed",
-    },
-    video_merge: {
-        success: "Videos merged successfully",
-        error: "Video merge failed",
-    },
-    video_import_url: {
-        success: "Video imported successfully",
-        error: "Video import failed",
-    },
-    pdf_merge: {
-        success: "PDFs merged successfully",
-        error: "PDF merge failed",
-    },
-    slide_explanation: {
-        success: "Slide explanation ready",
-        error: "Slide explanation failed",
-    },
-};
 
 interface UseTaskNotificationReturn {
     notifyTaskComplete: (taskType: string, status: "ready" | "error", errorMessage?: string) => void;
@@ -164,7 +115,8 @@ export function useTaskNotification(): UseTaskNotificationReturn {
 
     const notifyTaskComplete = useCallback(
         (taskType: string, status: "ready" | "error", errorMessage?: string) => {
-            const labels = TASK_LABELS[taskType as TaskType];
+            const normalized = normalizeTaskType(taskType);
+            const labels = TASK_LABELS[normalized];
             if (!labels) {
                 return; // Unknown task type, skip notification
             }

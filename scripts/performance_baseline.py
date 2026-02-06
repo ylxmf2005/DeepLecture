@@ -55,24 +55,6 @@ TEST_SCENARIOS = {
             "description": "30-minute video subtitle generation",
         },
     ],
-    "subtitle_enhancement": [
-        {
-            "name": "short_subtitle_enhance",
-            "metadata": {
-                "content_id": "test_enhance_short",
-                "target_language": "zh",
-            },
-            "description": "2-minute subtitle enhancement",
-        },
-        {
-            "name": "medium_subtitle_enhance",
-            "metadata": {
-                "content_id": "test_enhance_medium",
-                "target_language": "zh",
-            },
-            "description": "10-minute subtitle enhancement",
-        },
-    ],
     "subtitle_translation": [
         {
             "name": "short_subtitle_translate",
