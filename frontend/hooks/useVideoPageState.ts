@@ -424,7 +424,9 @@ export function useVideoPageState({
         };
     }, [tasks, videoId, processingAction, targetLanguage, learnerProfile, notifyTaskComplete, voiceoverState]);
 
-    // Fallback polling when SSE not connected
+    // Fallback metadata polling ONLY when SSE is disconnected.
+    // With durable task persistence, SSE snapshots are reliable on reconnect,
+    // so polling is only needed as a last-resort safety net.
     useEffect(() => {
         if (isConnected || !processing || !processingAction) return;
 
@@ -434,7 +436,6 @@ export function useVideoPageState({
                 setContent(data);
 
                 // OCP: Use configuration mapping instead of hard-coded if/else
-                // Check all status fields mapped to this action (e.g., translate checks both translationStatus and enhancedStatus)
                 const statusFields = ACTION_TO_STATUS_FIELDS[processingAction];
                 const isComplete = statusFields?.some((field) => {
                     const status = data[field];
@@ -445,7 +446,6 @@ export function useVideoPageState({
                     setProcessing(false);
                     setProcessingAction(null);
 
-                    // Task-specific cleanup
                     if (processingAction === "timeline") {
                         setTimelineLoading(false);
                     }
