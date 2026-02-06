@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 
 TaskManager 在每次状态转换时同步写入 SQLite：
 - `submit()` → INSERT
-- `update_task_progress()` → UPDATE（节流：仅状态变更和每 N% 进度时写入）
+- `update_task_progress()` → UPDATE（仅在状态从 pending→processing 转换时写入；纯进度更新不持久化）
 - `complete_task()` / `fail_task()` → UPDATE
 
 内存 `dict` 仍是运行时热缓存，SQLite 是持久化层。

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -66,13 +66,21 @@ class SQLiteTaskStorage:
             conn.close()
 
     def save(self, task: dict[str, Any]) -> None:
-        """Upsert a task state snapshot."""
+        """Upsert a task state snapshot, preserving created_at on updates."""
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO tasks
+                INSERT INTO tasks
                     (id, type, content_id, status, progress, error, metadata_json, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    type = excluded.type,
+                    content_id = excluded.content_id,
+                    status = excluded.status,
+                    progress = excluded.progress,
+                    error = excluded.error,
+                    metadata_json = excluded.metadata_json,
+                    updated_at = excluded.updated_at
                 """,
                 (
                     task["id"],
@@ -139,7 +147,7 @@ class SQLiteTaskStorage:
         with self._connect() as conn:
             # SQLite datetime comparison with ISO format
             # We compute the cutoff time and compare as strings
-            cutoff = datetime.fromtimestamp(now.timestamp() - ttl_seconds, tz=UTC).isoformat().replace("+00:00", "Z")
+            cutoff = (now - timedelta(seconds=ttl_seconds)).isoformat().replace("+00:00", "Z")
             cursor = conn.execute(
                 """
                 DELETE FROM tasks

@@ -31,7 +31,7 @@ def mock_container():
     container.content_usecase.get_content.side_effect = Exception("no content")
 
     # Mock event_publisher.stream to yield retry frame then a keepalive
-    def fake_stream(content_id, *, timeout, send_initial, initial_events_factory, retry_ms):
+    def fake_stream(_content_id, *, initial_events_factory, retry_ms, **_kwargs):
         yield f"retry: {retry_ms}\n\n"
         # Emit initial events if factory provided
         if initial_events_factory:

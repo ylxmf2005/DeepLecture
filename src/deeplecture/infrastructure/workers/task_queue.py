@@ -194,7 +194,7 @@ class TaskManager:
             raise RuntimeError(f"Task queue is full (max {self._config.queue_max_size})") from err
 
         # Emit start event
-        self._broadcast(content_id, {"event": "started", "task": self._serialize_task(task_entity)})
+        self._broadcast(content_id, {"event": "started", "task": snapshot})
 
         return task_id
 

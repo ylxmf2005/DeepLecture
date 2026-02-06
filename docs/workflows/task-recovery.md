@@ -2,7 +2,7 @@
 
 ## 场景 1：后端重启
 
-```
+```text
 时间线：
   T0  用户发起 subtitle_generation，任务状态 = processing
   T1  后端进程被终止（SIGTERM / 崩溃）
@@ -21,7 +21,7 @@
 
 ## 场景 2：SSE 连接中断（网络抖动）
 
-```
+```text
 时间线：
   T0  SSE 连接正常，任务 processing 中
   T1  网络中断，SSE 断开
