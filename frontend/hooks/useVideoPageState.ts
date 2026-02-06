@@ -24,7 +24,6 @@ export type ProcessingAction = "generate" | "translate" | "video" | "timeline" |
 // OCP: Task types that trigger content refresh - extend this set for new task types
 const CONTENT_REFRESH_TASK_TYPES = new Set([
     "subtitle_generation",
-    "subtitle_enhancement",
     "subtitle_translation",
     "timeline_generation",
     "video_generation",
@@ -37,7 +36,6 @@ const CONTENT_REFRESH_TASK_TYPES = new Set([
 // This solves the SSE → UI refresh bug where subtitleStateKey doesn't change on regeneration
 const SUBTITLE_REFRESH_TASK_TYPES = new Set([
     "subtitle_generation",
-    "subtitle_enhancement",
     "subtitle_translation",
 ]);
 
@@ -49,16 +47,14 @@ const TASK_TO_ACTION_MAP: Record<string, ProcessingAction | ProcessingAction[]> 
     video_generation: "video",
     video_merge: "video",           // slide lecture video merge
     video_import_url: "video",      // URL import also triggers video action
-    subtitle_enhancement: "translate",
     subtitle_translation: "translate",
 };
 
 // OCP: Mapping of processingAction to content status fields for fallback polling
 // This ensures fallback polling uses the same configuration as SSE handlers
-// Note: "translate" action covers both translation and enhancement (both map to this action)
 const ACTION_TO_STATUS_FIELDS: Record<Exclude<ProcessingAction, null>, (keyof ContentItem)[]> = {
     generate: ["subtitleStatus"],
-    translate: ["translationStatus", "enhancedStatus"], // Check both - enhancement also uses "translate" action
+    translate: ["translationStatus"],
     timeline: ["timelineStatus"],
     video: ["videoStatus"],
 };
@@ -312,8 +308,6 @@ export function useVideoPageState({
 
                                 if (task.type === "subtitle_generation") {
                                     updates.subtitleStatus = "ready";
-                                } else if (task.type === "subtitle_enhancement") {
-                                    updates.enhancedStatus = "ready";
                                 } else if (task.type === "subtitle_translation") {
                                     updates.translationStatus = "ready";
                                 }
@@ -337,8 +331,6 @@ export function useVideoPageState({
                                         const preserved: Partial<ContentItem> = {};
                                         if (task.type === "subtitle_generation" && prev.subtitleStatus === "ready") {
                                             preserved.subtitleStatus = "ready";
-                                        } else if (task.type === "subtitle_enhancement" && prev.enhancedStatus === "ready") {
-                                            preserved.enhancedStatus = "ready";
                                         } else if (task.type === "subtitle_translation" && prev.translationStatus === "ready") {
                                             preserved.translationStatus = "ready";
                                         }

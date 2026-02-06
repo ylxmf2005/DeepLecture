@@ -13,10 +13,6 @@ describe('normalizeTaskType', () => {
         expect(normalizeTaskType('quiz_generation')).toBe('quiz_generation');
     });
 
-    it('normalizes legacy subtitle_enhancement to subtitle_translation', () => {
-        expect(normalizeTaskType('subtitle_enhancement')).toBe('subtitle_translation');
-    });
-
     it('returns unknown types as-is', () => {
         expect(normalizeTaskType('unknown_type')).toBe('unknown_type');
     });
@@ -42,8 +38,8 @@ describe('isContentRefreshTask', () => {
         expect(isContentRefreshTask('quiz_generation')).toBe(false);
     });
 
-    it('normalizes legacy types before checking', () => {
-        expect(isContentRefreshTask('subtitle_enhancement')).toBe(true);
+    it('returns false for unknown types', () => {
+        expect(isContentRefreshTask('unknown_type')).toBe(false);
     });
 });
 
@@ -54,10 +50,6 @@ describe('taskToProcessingAction', () => {
 
     it('maps subtitle_translation to translate', () => {
         expect(taskToProcessingAction('subtitle_translation')).toBe('translate');
-    });
-
-    it('maps legacy subtitle_enhancement to translate', () => {
-        expect(taskToProcessingAction('subtitle_enhancement')).toBe('translate');
     });
 
     it('maps video types to video', () => {

@@ -7,14 +7,9 @@
 
 export type ProcessingAction = "generate" | "translate" | "video" | "timeline" | null;
 
-/** Legacy task type aliases → canonical names. */
-const LEGACY_ALIASES: Record<string, string> = {
-    subtitle_enhancement: "subtitle_translation",
-};
-
 /** Normalize a raw task type string to its canonical form. */
 export function normalizeTaskType(raw: string): string {
-    return LEGACY_ALIASES[raw] ?? raw;
+    return raw;
 }
 
 /** Task types that trigger a content metadata refresh on completion. */

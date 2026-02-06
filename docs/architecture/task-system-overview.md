@@ -26,22 +26,20 @@ DeepLecture 使用基于 SSE (Server-Sent Events) 的异步任务系统来处理
 | | `quiz_generation` | 自动生成测验 | `frontend/lib/taskTypes.ts:101` |
 | | `cheatsheet_generation` | 生成知识速查表 | `frontend/lib/taskTypes.ts:93` |
 
-**遗留兼容性**: `subtitle_enhancement` 是 `subtitle_translation` 的别名，在前端会自动规范化 (`frontend/lib/taskTypes.ts:11-13`)。
-
 ---
 
 ## 2. 后端：任务状态机
 
 任务状态由 `TaskStatus` 枚举定义 (`domain/entities/task.py:10-20`)，包含 4 种状态：
 
-```
+```text
 PENDING → PROCESSING → READY (成功)
                     ↘ ERROR (失败)
 ```
 
 ### 状态转换规则
 
-```
+```text
                     ┌─────────────────────────────────────┐
                     │         PENDING (待处理)             │
                     │  - 任务已创建，等待 worker 执行       │
@@ -83,7 +81,7 @@ PENDING → PROCESSING → READY (成功)
 
 从 API 请求到任务完成的完整流程：
 
-```
+```text
 用户点击按钮
     │
     ▼
@@ -222,7 +220,7 @@ self._storage.delete_expired_terminal(ttl_seconds)
 
 每个 `content_id` 对应一个事件通道，支持多个订阅者 (`presentation/sse/events.py:24`):
 
-```
+```text
 EventPublisher
     │
     ├─ _subscribers: dict[content_id, list[Queue]]
@@ -240,7 +238,7 @@ EventPublisher
 
 标准 SSE 格式 (`presentation/sse/events.py:215`):
 
-```
+```text
 retry: 3000
 
 id: 1
@@ -289,7 +287,7 @@ while True:
 
 如果顺序反过来（先查询再订阅），会有竞态窗口：
 
-```
+```text
 时间线：
 T1: 客户端查询快照 → 返回空列表 []
 T2: 服务器完成任务 → 广播 "completed" 事件
@@ -300,7 +298,7 @@ T3: 客户端订阅通道 → 错过了 T2 的事件！
 
 **Subscribe-Then-Snapshot 解决方案**:
 
-```
+```text
 T1: 客户端订阅通道
 T2: 服务器完成任务 → 事件进入客户端队列 ✓
 T3: 客户端查询快照 → 返回已完成的任务 ✓
@@ -314,7 +312,7 @@ T3: 客户端查询快照 → 返回已完成的任务 ✓
 
 完整的 SSE 连接建立过程 (`presentation/sse/events.py:174`):
 
-```
+```text
 客户端 EventSource.connect()
     ▼
 服务器 stream() 方法
@@ -346,7 +344,7 @@ T3: 客户端查询快照 → 返回已完成的任务 ✓
 
 ### Hook 调用链
 
-```
+```text
 useVideoPageState (frontend/hooks/useVideoPageState.ts:173)
     │ 主状态容器：content, processing, timeline, voiceovers
     │
@@ -466,7 +464,7 @@ const SUBTITLE_REFRESH_TASK_TYPES = new Set([
 任务类型 → UI processingAction 映射：
 
 ```typescript
-const TASK_TO_ACTION_MAP: Record<string, ProcessingAction> = {
+const TASK_TO_ACTION_MAP: Record&lt;string, ProcessingAction&gt; = {
     subtitle_generation: "generate",
     subtitle_translation: "translate",
     timeline_generation: "timeline",
@@ -515,7 +513,7 @@ notifyTaskComplete(taskType, status, errorMessage) {
 
 以"生成字幕"为例，展示前后端完整交互：
 
-```
+```text
 ═══════════════════════════════════════════════════════════════════════════════
                            用户点击 "Generate Subtitles"
 ═══════════════════════════════════════════════════════════════════════════════

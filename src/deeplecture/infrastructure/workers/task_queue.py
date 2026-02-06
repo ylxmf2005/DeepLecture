@@ -303,19 +303,22 @@ class TaskManager:
             return
         import json as _json
 
-        self._storage.save(
-            {
-                "id": snapshot["id"],
-                "type": snapshot["type"],
-                "content_id": snapshot["content_id"],
-                "status": snapshot["status"],
-                "progress": snapshot["progress"],
-                "error": snapshot.get("error"),
-                "metadata_json": _json.dumps(snapshot.get("metadata") or {}),
-                "created_at": snapshot.get("created_at"),
-                "updated_at": snapshot.get("updated_at"),
-            }
-        )
+        try:
+            self._storage.save(
+                {
+                    "id": snapshot["id"],
+                    "type": snapshot["type"],
+                    "content_id": snapshot["content_id"],
+                    "status": snapshot["status"],
+                    "progress": snapshot["progress"],
+                    "error": snapshot.get("error"),
+                    "metadata_json": _json.dumps(snapshot.get("metadata") or {}),
+                    "created_at": snapshot.get("created_at"),
+                    "updated_at": snapshot.get("updated_at"),
+                }
+            )
+        except Exception:
+            logger.exception("Failed to persist task snapshot %s", snapshot.get("id"))
 
     @property
     def queue(self) -> queue.Queue[_QueueItem]:
