@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from deeplecture.domain import Task
 
 bp = Blueprint("task", __name__)
+log = logging.getLogger(__name__)
 
 
 @bp.route("/<task_id>", methods=["GET"])
@@ -132,6 +134,8 @@ def _reconcile_stale_tasks_on_connect(content_id: str, container) -> None:
     try:
         metadata = container.content_usecase.get_content(content_id)
         _reconcile_stale_processing(metadata, container)
-    except Exception:
+    except (KeyError, ValueError):
         # Content may not exist yet (e.g., during upload); skip reconciliation
         pass
+    except Exception:
+        log.debug("Reconciliation skipped for %s", content_id, exc_info=True)

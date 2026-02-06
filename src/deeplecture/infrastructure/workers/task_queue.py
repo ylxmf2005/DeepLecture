@@ -172,9 +172,10 @@ class TaskManager:
 
         with self._lock:
             self._tasks[task_id] = task_entity
+            snapshot = self._serialize_task(task_entity)
 
         # Persist to durable storage
-        self._persist_task(task_entity)
+        self._persist_snapshot(snapshot)
 
         # Create queue item
         item = _QueueItem(
@@ -234,7 +235,7 @@ class TaskManager:
 
         # Persist on status transitions (not every progress tick)
         if status_changed:
-            self._persist_task(task)
+            self._persist_snapshot(snapshot)
 
         if emit_event:
             self._broadcast(content_id, {"event": "progress", "task": snapshot})
@@ -257,7 +258,7 @@ class TaskManager:
             snapshot = self._serialize_task(task)
             content_id = task.content_id
 
-        self._persist_task(task)
+        self._persist_snapshot(snapshot)
         self._broadcast(content_id, {"event": "completed", "task": snapshot})
         return task
 
@@ -282,7 +283,7 @@ class TaskManager:
             snapshot = self._serialize_task(task)
             content_id = task.content_id
 
-        self._persist_task(task)
+        self._persist_snapshot(snapshot)
         self._broadcast(content_id, {"event": "failed", "task": snapshot})
         return task
 
@@ -291,23 +292,28 @@ class TaskManager:
         if self._event_publisher:
             self._event_publisher.broadcast(content_id, event_data)
 
-    def _persist_task(self, task: Task) -> None:
-        """Write task state to durable storage if configured."""
+    def _persist_snapshot(self, snapshot: dict[str, Any]) -> None:
+        """Write task snapshot to durable storage if configured.
+
+        Accepts an already-captured snapshot dict (built inside the lock)
+        so that persistence operates on immutable data, avoiding races
+        with concurrent mutations to the live Task entity.
+        """
         if not self._storage:
             return
         import json as _json
 
         self._storage.save(
             {
-                "id": task.id,
-                "type": task.type,
-                "content_id": task.content_id,
-                "status": task.status.value if hasattr(task.status, "value") else task.status,
-                "progress": task.progress,
-                "error": task.error,
-                "metadata_json": _json.dumps(task.metadata or {}),
-                "created_at": task.created_at,
-                "updated_at": task.updated_at,
+                "id": snapshot["id"],
+                "type": snapshot["type"],
+                "content_id": snapshot["content_id"],
+                "status": snapshot["status"],
+                "progress": snapshot["progress"],
+                "error": snapshot.get("error"),
+                "metadata_json": _json.dumps(snapshot.get("metadata") or {}),
+                "created_at": snapshot.get("created_at"),
+                "updated_at": snapshot.get("updated_at"),
             }
         )
 
