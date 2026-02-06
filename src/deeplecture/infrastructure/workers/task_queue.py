@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from deeplecture.domain import Task
+    from deeplecture.infrastructure.repositories.sqlite_task_storage import SQLiteTaskStorage
     from deeplecture.use_cases.interfaces.task import EventPublisherProtocol, TaskFn
 
 logger = logging.getLogger(__name__)
@@ -105,9 +106,11 @@ class TaskManager:
         self,
         config: TaskConfig,
         event_publisher: EventPublisherProtocol | None = None,
+        task_storage: SQLiteTaskStorage | None = None,
     ) -> None:
         self._config = config
         self._event_publisher = event_publisher
+        self._storage = task_storage
 
         # Task state storage
         self._tasks: dict[str, Task] = {}
@@ -118,6 +121,12 @@ class TaskManager:
 
         # Cleanup tracking
         self._last_cleanup = time.monotonic()
+
+        # Startup reconciliation: mark any persisted inflight tasks as error
+        if self._storage:
+            affected = self._storage.mark_inflight_as_error("Task interrupted by server restart")
+            if affected:
+                logger.info("Startup reconciliation: marked %d inflight tasks as error", affected)
 
     def submit(
         self,
@@ -163,6 +172,9 @@ class TaskManager:
 
         with self._lock:
             self._tasks[task_id] = task_entity
+
+        # Persist to durable storage
+        self._persist_task(task_entity)
 
         # Create queue item
         item = _QueueItem(
@@ -211,12 +223,18 @@ class TaskManager:
             if not task or task.is_terminal():
                 return task
 
+            old_status = task.status
             task.progress = max(0, min(100, progress))
             if task.is_pending():
                 task.status = TaskStatus.PROCESSING
             task.updated_at = self._now_iso()
             snapshot = self._serialize_task(task)
             content_id = task.content_id
+            status_changed = task.status != old_status
+
+        # Persist on status transitions (not every progress tick)
+        if status_changed:
+            self._persist_task(task)
 
         if emit_event:
             self._broadcast(content_id, {"event": "progress", "task": snapshot})
@@ -239,6 +257,7 @@ class TaskManager:
             snapshot = self._serialize_task(task)
             content_id = task.content_id
 
+        self._persist_task(task)
         self._broadcast(content_id, {"event": "completed", "task": snapshot})
         return task
 
@@ -263,6 +282,7 @@ class TaskManager:
             snapshot = self._serialize_task(task)
             content_id = task.content_id
 
+        self._persist_task(task)
         self._broadcast(content_id, {"event": "failed", "task": snapshot})
         return task
 
@@ -270,6 +290,26 @@ class TaskManager:
         """Broadcast SSE event if publisher is configured."""
         if self._event_publisher:
             self._event_publisher.broadcast(content_id, event_data)
+
+    def _persist_task(self, task: Task) -> None:
+        """Write task state to durable storage if configured."""
+        if not self._storage:
+            return
+        import json as _json
+
+        self._storage.save(
+            {
+                "id": task.id,
+                "type": task.type,
+                "content_id": task.content_id,
+                "status": task.status.value if hasattr(task.status, "value") else task.status,
+                "progress": task.progress,
+                "error": task.error,
+                "metadata_json": _json.dumps(task.metadata or {}),
+                "created_at": task.created_at,
+                "updated_at": task.updated_at,
+            }
+        )
 
     @property
     def queue(self) -> queue.Queue[_QueueItem]:
@@ -339,6 +379,10 @@ class TaskManager:
 
         if expired_ids:
             logger.info("TaskManager cleanup: removed %d expired tasks", len(expired_ids))
+
+        # Also clean expired tasks from durable storage
+        if self._storage:
+            self._storage.delete_expired_terminal(self._config.completed_task_ttl_seconds)
 
 
 class WorkerPool:

@@ -17,6 +17,7 @@ from deeplecture.infrastructure.repositories.path_resolver import (
     validate_segment,
 )
 from deeplecture.infrastructure.repositories.sqlite_metadata import SQLiteMetadataStorage
+from deeplecture.infrastructure.repositories.sqlite_task_storage import SQLiteTaskStorage
 
 __all__ = [
     "FsArtifactStorage",
@@ -32,6 +33,7 @@ __all__ = [
     "FsVoiceoverStorage",
     "PathResolver",
     "SQLiteMetadataStorage",
+    "SQLiteTaskStorage",
     "safe_join",
     "validate_segment",
 ]

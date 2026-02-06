@@ -37,6 +37,7 @@ from deeplecture.infrastructure import (
     RateLimiter,
     RetryConfig,
     SQLiteMetadataStorage,
+    SQLiteTaskStorage,
     TaskConfig,
     TaskManager,
     ThreadPoolParallelRunner,
@@ -126,6 +127,13 @@ class Container:
         if "metadata" not in self._cache:
             self._cache["metadata"] = SQLiteMetadataStorage(self._data_dir() / "metadata.db")
         return self._cache["metadata"]  # type: ignore[return-value]
+
+    @property
+    def task_storage(self) -> SQLiteTaskStorage:
+        """SQLite-based task state persistence for crash recovery."""
+        if "task_storage" not in self._cache:
+            self._cache["task_storage"] = SQLiteTaskStorage(self._data_dir() / "tasks.db")
+        return self._cache["task_storage"]  # type: ignore[return-value]
 
     @property
     def subtitle_storage(self) -> FsSubtitleStorage:
@@ -249,7 +257,7 @@ class Container:
 
     @property
     def task_manager(self) -> TaskManager:
-        """In-memory task manager with SSE event broadcasting."""
+        """Task manager with SSE broadcasting and durable persistence."""
 
         def _create() -> TaskManager:
             cfg = self._settings.tasks
@@ -263,6 +271,7 @@ class Container:
             return TaskManager(
                 config=task_config,
                 event_publisher=self.event_publisher,
+                task_storage=self.task_storage,
             )
 
         return self._get_or_create("task_manager", _create)  # type: ignore[return-value]

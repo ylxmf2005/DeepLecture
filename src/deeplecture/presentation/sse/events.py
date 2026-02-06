@@ -7,6 +7,7 @@ SSE-based real-time event broadcasting.
 from __future__ import annotations
 
 import contextlib
+import itertools
 import json
 import logging
 import queue
@@ -150,6 +151,7 @@ class EventPublisher:
         send_initial: bool = True,
         max_idle_keepalives: int = 60,
         initial_events_factory: Callable[[], Iterable[dict[str, Any]]] | None = None,
+        retry_ms: int | None = None,
     ) -> Iterator[str]:
         """
         Generate SSE stream for a content.
@@ -165,36 +167,42 @@ class EventPublisher:
                                  (prevents zombie connections)
             initial_events_factory: Optional callable that returns initial events to send
                                     AFTER subscribing (to avoid race conditions)
+            retry_ms: If set, emit a `retry:` frame at the start of the stream
 
         Yields:
             SSE formatted strings
         """
         q = self.subscribe(content_id)
         idle_count = 0
+        counter = itertools.count(1)
 
         try:
+            # Send retry frame for browser auto-reconnect
+            if retry_ms is not None:
+                yield f"retry: {retry_ms}\n\n"
+
             # Send initial connection event
             if send_initial:
-                yield self._format_sse({"event": "connected", "content_id": content_id})
+                yield self._format_sse({"event": "connected", "content_id": content_id}, event_id=next(counter))
 
             # Send initial events from factory (called AFTER subscribe to avoid race)
             if initial_events_factory is not None:
                 for event in initial_events_factory():
-                    yield self._format_sse(event)
+                    yield self._format_sse(event, event_id=next(counter))
 
             # Stream events
             while True:
                 try:
                     event = q.get(timeout=timeout)
                     idle_count = 0  # Reset on real event
-                    yield self._format_sse(event)
+                    yield self._format_sse(event, event_id=next(counter))
                 except queue.Empty:
                     idle_count += 1
                     # Prevent zombie connections after prolonged idle
                     if idle_count >= max_idle_keepalives:
                         logger.info("Closing idle SSE stream for %s after %d keepalives", content_id, idle_count)
                         break
-                    # Send keepalive
+                    # Send keepalive (no id: for comments)
                     yield ": keepalive\n\n"
 
         except GeneratorExit:
@@ -204,7 +212,7 @@ class EventPublisher:
             self.unsubscribe(content_id, q)
             logger.debug("SSE stream cleanup completed for %s", content_id)
 
-    def _format_sse(self, data: dict[str, Any]) -> str:
+    def _format_sse(self, data: dict[str, Any], *, event_id: int | None = None) -> str:
         """Format data as SSE message.
 
         Note: We intentionally omit the SSE `event:` field so that all messages
@@ -212,7 +220,8 @@ class EventPublisher:
         payload's "event" field for client-side routing.
         """
         json_data = json.dumps(data, ensure_ascii=False)
-        return f"data: {json_data}\n\n"
+        prefix = f"id: {event_id}\n" if event_id is not None else ""
+        return f"{prefix}data: {json_data}\n\n"
 
 
 # Singleton for convenience

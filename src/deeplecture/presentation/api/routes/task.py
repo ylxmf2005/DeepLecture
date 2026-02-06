@@ -61,6 +61,9 @@ def stream_task_events(content_id: str) -> FlaskResponse:
 
     container = get_container()
 
+    # Run reconciliation before snapshot to ensure stale tasks are cleaned up
+    _reconcile_stale_tasks_on_connect(content_id, container)
+
     def get_initial_events() -> list[dict]:
         """Factory called AFTER subscribe to avoid race conditions."""
         tasks = container.task_manager.get_tasks_by_content(content_id)
@@ -73,6 +76,7 @@ def stream_task_events(content_id: str) -> FlaskResponse:
                 timeout=30.0,
                 send_initial=False,
                 initial_events_factory=get_initial_events,
+                retry_ms=3000,
             )
         ),
         mimetype="text/event-stream",
@@ -114,3 +118,20 @@ def _format_datetime(dt: datetime | str | None) -> str | None:
     if isinstance(dt, datetime):
         return dt.isoformat()
     return str(dt)
+
+
+def _reconcile_stale_tasks_on_connect(content_id: str, container) -> None:
+    """Reconcile stale content metadata before SSE snapshot.
+
+    Reuses the same reconciliation logic from content routes to ensure
+    that 'processing' statuses with no backing task are corrected to 'error'
+    before the client receives the initial snapshot.
+    """
+    from deeplecture.presentation.api.routes.content import _reconcile_stale_processing
+
+    try:
+        metadata = container.content_usecase.get_content(content_id)
+        _reconcile_stale_processing(metadata, container)
+    except Exception:
+        # Content may not exist yet (e.g., during upload); skip reconciliation
+        pass
