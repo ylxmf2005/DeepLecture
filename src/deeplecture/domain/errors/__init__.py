@@ -13,6 +13,10 @@ from deeplecture.domain.errors.task import (
     TaskNotFoundError,
     TaskQueueFullError,
 )
+from deeplecture.domain.errors.timeline import (
+    TimelineError,
+    TimelineGenerationError,
+)
 from deeplecture.domain.errors.upload import (
     FileSizeLimitExceededError,
     InvalidURLError,
@@ -24,25 +28,21 @@ from deeplecture.domain.errors.upload import (
 )
 
 __all__ = [
-    # Content
     "ContentNotFoundError",
-    # Base
     "DomainError",
     "FileSizeLimitExceededError",
-    # Feature
     "InvalidFeatureStatusTransitionError",
     "InvalidURLError",
     "PDFMergeError",
-    # Subtitle
     "SubtitleError",
     "SubtitleGenerationError",
     "SubtitleNotFoundError",
-    # Task
     "TaskError",
     "TaskNotFoundError",
     "TaskQueueFullError",
+    "TimelineError",
+    "TimelineGenerationError",
     "UnsupportedFileFormatError",
-    # Upload
     "UploadError",
     "VideoDownloadError",
     "VideoMergeError",
