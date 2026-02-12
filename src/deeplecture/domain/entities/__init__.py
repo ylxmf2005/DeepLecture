@@ -1,6 +1,12 @@
 """Domain entities."""
 
 from deeplecture.domain.entities.artifact import VIDEO_FALLBACK_CHAIN, ArtifactKind
+from deeplecture.domain.entities.config import (
+    ContentConfig,
+    DictionaryInteractionMode,
+    NoteContextMode,
+    ViewMode,
+)
 from deeplecture.domain.entities.content import ContentMetadata, ContentType, FeatureName
 from deeplecture.domain.entities.feature import FeatureStatus, FeatureType
 from deeplecture.domain.entities.media import Segment
@@ -25,16 +31,20 @@ __all__ = [
     "SLOT_SKIP_THRESHOLD",
     "VIDEO_FALLBACK_CHAIN",
     "ArtifactKind",
+    "ContentConfig",
     "ContentMetadata",
     "ContentType",
+    "DictionaryInteractionMode",
     "FeatureName",
     "FeatureStatus",
     "FeatureType",
+    "NoteContextMode",
     "Segment",
     "SubtitleSegment",
     "SyncSegment",
     "Task",
     "TaskStatus",
+    "ViewMode",
     "calculate_slot_end",
     "merge_sync_segments",
     "parse_srt_text",

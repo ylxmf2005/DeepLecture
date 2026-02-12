@@ -12,6 +12,7 @@ import {
 import { getLanguageSettings, getNoteDefaults, getAppConfig } from "@/lib/api";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
+import { useVideoConfigOptional } from "@/contexts/VideoConfigContext";
 
 const log = logger.scope("GlobalSettingsStore");
 
@@ -47,6 +48,14 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
             setAutoSwitchVoiceoverOnLeave: (value) =>
                 set((state) => ({
                     playback: { ...state.playback, autoSwitchVoiceoverOnLeave: value },
+                })),
+
+            setVoiceoverAutoSwitchThresholdMs: (ms) =>
+                set((state) => ({
+                    playback: {
+                        ...state.playback,
+                        voiceoverAutoSwitchThresholdMs: Math.max(0, Math.min(ms, 10000)),
+                    },
                 })),
 
             setSummaryThresholdSeconds: (seconds) =>
@@ -317,32 +326,71 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
     )
 );
 
-export const usePlaybackSettings = () =>
-    useGlobalSettingsStore((state) => state.playback);
+// ─── Scope-Aware Selector Hooks ──────────────────────────────────────────────
+//
+// These hooks transparently return resolved (merged) values when inside a
+// VideoConfigProvider (video page), and global values otherwise (home page).
+// Existing consumers don't need to change — they automatically get the right value.
 
-export const useLanguageSettings = () =>
-    useGlobalSettingsStore((state) => state.language);
+export function usePlaybackSettings() {
+    const videoCtx = useVideoConfigOptional();
+    const global = useGlobalSettingsStore((s) => s.playback);
+    return videoCtx ? videoCtx.resolved.playback : global;
+}
 
-export const useLive2dSettings = () =>
-    useGlobalSettingsStore((state) => state.live2d);
+export function useLanguageSettings() {
+    const videoCtx = useVideoConfigOptional();
+    const global = useGlobalSettingsStore((s) => s.language);
+    return videoCtx ? videoCtx.resolved.language : global;
+}
 
-export const useNotificationSettings = () =>
-    useGlobalSettingsStore((state) => state.notifications);
+export function useLive2dSettings() {
+    const videoCtx = useVideoConfigOptional();
+    const global = useGlobalSettingsStore((s) => s.live2d);
+    return videoCtx ? videoCtx.resolved.live2d : global;
+}
 
-export const useLearnerProfile = () =>
-    useGlobalSettingsStore((state) => state.learnerProfile);
+export function useNotificationSettings() {
+    const videoCtx = useVideoConfigOptional();
+    const global = useGlobalSettingsStore((s) => s.notifications);
+    return videoCtx ? videoCtx.resolved.notifications : global;
+}
 
-export const useNoteSettings = () =>
-    useGlobalSettingsStore((state) => state.note);
+export function useLearnerProfile() {
+    const videoCtx = useVideoConfigOptional();
+    const global = useGlobalSettingsStore((s) => s.learnerProfile);
+    return videoCtx ? videoCtx.resolved.learnerProfile : global;
+}
+
+export function useNoteSettings() {
+    const videoCtx = useVideoConfigOptional();
+    const global = useGlobalSettingsStore((s) => s.note);
+    return videoCtx ? videoCtx.resolved.note : global;
+}
 
 export const useIsHydrated = () =>
     useGlobalSettingsStore((state) => state._hydrated);
 
-export const useAISettings = () =>
-    useGlobalSettingsStore((state) => state.ai);
+export function useAISettings() {
+    const videoCtx = useVideoConfigOptional();
+    const global = useGlobalSettingsStore((s) => s.ai);
+    return videoCtx ? videoCtx.resolved.ai : global;
+}
 
-export const useViewMode = () =>
-    useGlobalSettingsStore((state) => state.viewMode);
+export function useViewMode() {
+    const videoCtx = useVideoConfigOptional();
+    const global = useGlobalSettingsStore((s) => s.viewMode);
+    return videoCtx ? videoCtx.resolved.viewMode : global;
+}
 
-export const useDictionarySettings = () =>
-    useGlobalSettingsStore((state) => state.dictionary);
+export function useDictionarySettings() {
+    const videoCtx = useVideoConfigOptional();
+    const global = useGlobalSettingsStore((s) => s.dictionary);
+    return videoCtx ? videoCtx.resolved.dictionary : global;
+}
+
+export function useSubtitleDisplaySettings() {
+    const videoCtx = useVideoConfigOptional();
+    const global = useGlobalSettingsStore((s) => s.subtitleDisplay);
+    return videoCtx ? videoCtx.resolved.subtitleDisplay : global;
+}

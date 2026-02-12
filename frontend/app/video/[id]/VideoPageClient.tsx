@@ -17,14 +17,15 @@ import { useDndTabLayout } from "@/hooks/useDndTabLayout";
 import { useLive2DAudioSync } from "@/hooks/useLive2DAudioSync";
 import { Settings, Wand2, Loader2 } from "lucide-react";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
+import { VideoConfigProvider } from "@/contexts/VideoConfigContext";
 
 // Lazy load dialogs - only loaded when opened
-const SettingsDialog = dynamic(
-    () => import("@/components/dialogs/SettingsDialog").then((mod) => mod.SettingsDialog),
-    { ssr: false }
-);
 const ActionsDialog = dynamic(
     () => import("@/components/dialogs/ActionsDialog").then((mod) => mod.ActionsDialog),
+    { ssr: false }
+);
+const SettingsDialog = dynamic(
+    () => import("@/components/dialogs/SettingsDialog").then((mod) => mod.SettingsDialog),
     { ssr: false }
 );
 const Live2DCanvas = dynamic(() => import("@/components/live2d/Live2DCanvas"), { ssr: false });
@@ -76,6 +77,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
     const autoResumeOnReturn = playback.autoResumeOnReturn;
     const autoSwitchSubtitlesOnLeave = playback.autoSwitchSubtitlesOnLeave;
     const autoSwitchVoiceoverOnLeave = playback.autoSwitchVoiceoverOnLeave;
+    const voiceoverAutoSwitchThresholdMs = playback.voiceoverAutoSwitchThresholdMs;
     const summaryThresholdSeconds = playback.summaryThresholdSeconds;
     const subtitleContextWindowSeconds = playback.subtitleContextWindowSeconds;
     const subtitleRepeatCount = playback.subtitleRepeatCount;
@@ -501,70 +503,61 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         return () => document.removeEventListener("keydown", handleKeyDown);
     }, [viewMode, setViewMode]);
 
+    // Header action buttons — rendered unconditionally so they appear even during loading
+    const headerActions = (
+        <HeaderActionPortal>
+            <button
+                onClick={() => setIsActionsOpen(true)}
+                className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                title="Actions"
+                disabled={loading || !content}
+            >
+                <Wand2 className="w-5 h-5" />
+            </button>
+            <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                title="Video Configuration"
+                disabled={loading || !content}
+            >
+                <Settings className="w-5 h-5" />
+            </button>
+        </HeaderActionPortal>
+    );
+
     // Loading state
     if (loading) {
         return (
-            <div className="flex h-[50vh] items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-            </div>
+            <>
+                {headerActions}
+                <div className="flex h-[50vh] items-center justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                </div>
+            </>
         );
     }
 
     // Not found state
     if (!content) {
         return (
-            <div className="text-center py-12">
-                <h2 className="text-xl font-semibold">Content not found</h2>
-            </div>
+            <>
+                {headerActions}
+                <div className="text-center py-12">
+                    <h2 className="text-xl font-semibold">Content not found</h2>
+                </div>
+            </>
         );
     }
 
-    return (
-        <>
-        {/* Web fullscreen overlay - renders video only when in web-fullscreen mode */}
-        {viewMode === "web-fullscreen" && (
-            <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-                <ErrorBoundary
-                    component="VideoPlayerSection"
-                    fallback={(error, reset) => (
-                        <div className="flex flex-col items-center justify-center p-8 bg-muted/50 rounded-lg">
-                            <p className="text-destructive mb-4">Video player error: {error.message}</p>
-                            <button onClick={reset} className="px-4 py-2 bg-primary text-primary-foreground rounded-md">
-                                Reload Player
-                            </button>
-                        </div>
-                    )}
-                >
-                    <VideoPlayerSection
-                        ref={playerRef}
-                        content={content}
-                        videoId={videoId}
-                        selectedVoiceoverId={selectedVoiceoverId}
-                        selectedVoiceoverSyncTimeline={selectedVoiceoverSyncTimeline}
-                        playerSubtitles={playerSubtitles}
-                        playerSubtitleMode={playerSubtitleMode}
-                        setPlayerSubtitleMode={setPlayerSubtitleMode}
-                        hasTranslation={content.translationStatus === "ready"}
-                        quickToggleOriginalVoiceoverId={quickToggleOriginalVoiceoverId}
-                        quickToggleTranslatedVoiceoverId={quickToggleTranslatedVoiceoverId}
-                        onVoiceoverChange={setSelectedVoiceoverId}
-                        generatingVideo={generatingVideo}
-                        onTimeUpdate={handleTimeUpdate}
-                        onCapture={handlers.handleCapture}
-                        onAskAtTime={handlers.handleAskAtTime}
-                        onAddNoteAtTime={handlers.handleAddNoteAtTime}
-                        onPlayerReady={handlePlayerReady}
-                        onGenerateSlideLecture={handlers.handleGenerateSlideLecture}
-                        slideDeck={deck}
-                        onUploadSlide={handlers.handleUploadSlide}
-                        viewMode={viewMode}
-                        onViewModeChange={setViewMode}
-                        className="w-full h-full"
-                    />
-                </ErrorBoundary>
-            </div>
-        )}
+    const formattedCreatedDate = new Intl.DateTimeFormat("en-US", {
+        timeZone: "UTC",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+    }).format(new Date(content.createdAt));
 
+    return (
+        <VideoConfigProvider contentId={videoId}>
         <DndContext
             id={dndContextId}
             sensors={sensors}
@@ -574,34 +567,38 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
             onDragEnd={handleDragEnd}
             onDragCancel={handleDragCancel}
         >
-            <div className={`grid gap-6 h-[130vh] ${
+            <div className={`grid ${
                 viewMode === "web-fullscreen"
-                    ? "invisible" // Hide main content but keep in DOM for state preservation
-                    : hideSidebars
-                        ? "grid-cols-1"
-                        : viewMode === "widescreen"
+                    ? "fixed inset-0 z-50 h-screen w-screen bg-black p-0 gap-0 grid-cols-1"
+                    : `gap-6 h-[130vh] ${
+                        hideSidebars
                             ? "grid-cols-1"
-                            : "grid-cols-1 md:grid-cols-3"
+                            : viewMode === "widescreen"
+                                ? "grid-cols-1"
+                                : "grid-cols-1 md:grid-cols-3"
+                    }`
             }`}>
                 {/* Video Player Column - full width in widescreen mode */}
-                <div className={`flex flex-col gap-4 ${
-                    viewMode === "widescreen"
-                        ? "col-span-1"
-                        : hideSidebars
-                            ? "col-span-1"
-                            : "md:col-span-2"
-                } ${viewMode === "widescreen" ? "" : "h-full min-h-0"}`}>
+                <div className={`flex flex-col ${
+                    viewMode === "web-fullscreen"
+                        ? "h-full min-h-0 gap-0 col-span-1"
+                        : `gap-4 ${
+                            viewMode === "widescreen"
+                                ? "col-span-1"
+                                : hideSidebars
+                                    ? "col-span-1"
+                                    : "md:col-span-2"
+                        } ${viewMode === "widescreen" ? "" : "h-full min-h-0"}`
+                }`}>
                     {/* Video Title and Metadata */}
-                    <div className="flex items-baseline justify-between gap-4">
-                        <h1 className="text-xl font-semibold truncate">{content.filename}</h1>
-                        <span className="text-sm text-muted-foreground whitespace-nowrap">
-                            {new Date(content.createdAt).toLocaleDateString(undefined, {
-                                year: "numeric",
-                                month: "short",
-                                day: "numeric"
-                            })}
-                        </span>
-                    </div>
+                    {viewMode !== "web-fullscreen" && (
+                        <div className="flex items-baseline justify-between gap-4">
+                            <h1 className="text-xl font-semibold truncate">{content.filename}</h1>
+                            <span className="text-sm text-muted-foreground whitespace-nowrap">
+                                {formattedCreatedDate}
+                            </span>
+                        </div>
+                    )}
                     <ErrorBoundary
                         component="VideoPlayerSection"
                         fallback={(error, reset) => (
@@ -637,11 +634,12 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             onUploadSlide={handlers.handleUploadSlide}
                             viewMode={viewMode}
                             onViewModeChange={setViewMode}
+                            className={viewMode === "web-fullscreen" ? "w-full h-full" : undefined}
                         />
                     </ErrorBoundary>
 
                     {/* NotesPanel in normal mode (not widescreen) */}
-                    {!hideSidebars && viewMode !== "widescreen" && (
+                    {!hideSidebars && viewMode !== "widescreen" && viewMode !== "web-fullscreen" && (
                         <NotesPanel
                             videoId={videoId}
                             onEditorReady={handleNoteEditorReady}
@@ -678,7 +676,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 </div>
 
                 {/* Sidebar in normal mode (not widescreen) */}
-                {!hideSidebars && viewMode !== "widescreen" && (
+                {!hideSidebars && viewMode !== "widescreen" && viewMode !== "web-fullscreen" && (
                     <SidebarTabs
                         content={content}
                         videoId={videoId}
@@ -785,6 +783,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
                 video={content}
+                initialScope="video"
             />
 
             <ActionsDialog
@@ -826,6 +825,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 autoResumeOnReturn={autoResumeOnReturn}
                 autoSwitchSubtitlesOnLeave={autoSwitchSubtitlesOnLeave}
                 autoSwitchVoiceoverOnLeave={autoSwitchVoiceoverOnLeave}
+                voiceoverAutoSwitchThresholdMs={voiceoverAutoSwitchThresholdMs}
                 subtitleMode={playerSubtitleMode}
                 hasTranslation={content.translationStatus === "ready"}
                 onSubtitleModeChange={setPlayerSubtitleMode}
@@ -840,22 +840,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 onAddToNotes={handlers.handleAddToNotes}
             />
 
-            <HeaderActionPortal>
-                <button
-                    onClick={() => setIsActionsOpen(true)}
-                    className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-                    title="Actions"
-                >
-                    <Wand2 className="w-5 h-5" />
-                </button>
-                <button
-                    onClick={() => setIsSettingsOpen(true)}
-                    className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-                    title="Settings"
-                >
-                    <Settings className="w-5 h-5" />
-                </button>
-            </HeaderActionPortal>
+            {headerActions}
 
             {live2dEnabled && (
                 <ErrorBoundary
@@ -896,6 +881,6 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
             </DragOverlay>
         </div>
         </DndContext>
-        </>
+        </VideoConfigProvider>
     );
 }
