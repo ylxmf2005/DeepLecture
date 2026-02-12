@@ -170,10 +170,16 @@ def import_from_url() -> Response:
 
 
 def _serialize_upload_result(result: object) -> dict:
-    """Serialize UploadResult to API response format."""
-    return {
+    """Serialize UploadResult or ImportJobResult to API response format."""
+    data = {
         "content_id": result.content_id,
         "filename": result.filename,
         "content_type": result.content_type,
         "message": result.message,
     }
+    # ImportJobResult carries async job tracking fields
+    if hasattr(result, "job_id") and result.job_id is not None:
+        data["task_id"] = result.job_id
+    if hasattr(result, "status"):
+        data["status"] = str(result.status)
+    return data

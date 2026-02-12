@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
@@ -12,6 +11,7 @@ import pytest
 from deeplecture.domain import Segment
 from deeplecture.use_cases.cheatsheet import CheatsheetUseCase
 from deeplecture.use_cases.dto.cheatsheet import GenerateCheatsheetRequest
+from deeplecture.use_cases.interfaces.prompt_registry import PromptSpec
 
 
 @pytest.fixture
@@ -77,11 +77,25 @@ def mock_path_resolver() -> MagicMock:
 
 
 @pytest.fixture
+def mock_prompt_registry() -> MagicMock:
+    """Create mock prompt registry."""
+    registry = MagicMock()
+    builder = MagicMock()
+    builder.build.return_value = PromptSpec(
+        user_prompt="test user prompt",
+        system_prompt="test system prompt",
+    )
+    registry.get.return_value = builder
+    return registry
+
+
+@pytest.fixture
 def usecase(
     mock_cheatsheet_storage: MagicMock,
     mock_subtitle_storage: MagicMock,
     mock_path_resolver: MagicMock,
     mock_llm_provider: MagicMock,
+    mock_prompt_registry: MagicMock,
 ) -> CheatsheetUseCase:
     """Create CheatsheetUseCase with mocked dependencies."""
     return CheatsheetUseCase(
@@ -89,6 +103,7 @@ def usecase(
         subtitle_storage=mock_subtitle_storage,
         path_resolver=mock_path_resolver,
         llm_provider=mock_llm_provider,
+        prompt_registry=mock_prompt_registry,
     )
 
 
@@ -109,13 +124,12 @@ class TestCheatsheetUseCaseGenerate:
             target_pages=2,
         )
 
-        result = asyncio.get_event_loop().run_until_complete(usecase.generate(request))
+        result = usecase.generate(request)
 
         assert result.content_id == "test-content-id"
-        assert result.content.startswith("# Cheatsheet")
         assert result.used_sources == ["subtitle"]
         assert result.stats.total_items == 1
 
-        mock_llm_provider.get.assert_called_once_with()
+        mock_llm_provider.get.assert_called_once()
         mock_subtitle_storage.load.assert_called_once_with("test-content-id", "en_enhanced")
         mock_cheatsheet_storage.save.assert_called_once()

@@ -3,6 +3,9 @@
  */
 
 import type { DictionaryEntry, DictionaryProvider, Definition } from "./types";
+import { logger } from "@/shared/infrastructure";
+
+const log = logger.scope("DictionaryLookup");
 
 // Re-export types for convenience
 export type { DictionaryEntry, DictionaryProvider };
@@ -138,7 +141,7 @@ async function fetchFromApi(
             // Request was cancelled, expected behavior
             return null;
         }
-        console.warn("[DictionaryLookup] API fetch failed:", error);
+        log.warn("API fetch failed");
         return null;
     }
 }

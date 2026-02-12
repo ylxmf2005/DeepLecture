@@ -7,6 +7,7 @@ import { replaceAll } from "@milkdown/kit/utils";
 import { getVideoNote, saveVideoNote, uploadNoteImage } from "@/lib/api";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
+import { useTaskNotification } from "@/hooks/useTaskNotification";
 
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/frame.css";
@@ -32,10 +33,13 @@ export function MarkdownNoteEditor({ videoId, initialContent = "", onEditorReady
     const saveTimeoutRef = useRef<number | null>(null);
     const [mounted, setMounted] = useState(false);
     const { resolvedTheme } = useTheme();
+    const { notifyOperation } = useTaskNotification();
 
     // Hydration-safe mounting check - intentional pattern for SSR compatibility
     // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => { setMounted(true); }, []);
+
+    const saveErrorShownRef = useRef(false);
 
     const scheduleServerSave = useCallback((markdown: string) => {
         if (saveTimeoutRef.current !== null) {
@@ -44,10 +48,14 @@ export function MarkdownNoteEditor({ videoId, initialContent = "", onEditorReady
         saveTimeoutRef.current = window.setTimeout(() => {
             saveVideoNote(videoId, markdown).catch((error) => {
                 log.error("Failed to save note to server", toError(error), { videoId });
+                if (!saveErrorShownRef.current) {
+                    saveErrorShownRef.current = true;
+                    notifyOperation("note_save", "error", toError(error).message);
+                }
             });
             saveTimeoutRef.current = null;
         }, 1000);
-    }, [videoId]);
+    }, [videoId, notifyOperation]);
 
     const handleImageUpload = useCallback(async (file: File): Promise<string> => {
         try {
@@ -116,6 +124,8 @@ export function MarkdownNoteEditor({ videoId, initialContent = "", onEditorReady
             if (onEditorReady) {
                 onEditorReady(crepeWithHelper);
             }
+        }).catch((error) => {
+            log.error("Failed to initialize editor", toError(error), { videoId });
         });
 
         return () => {

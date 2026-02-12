@@ -139,6 +139,7 @@ export interface UseVideoPageStateReturn {
     setRefreshExplanations: (fn: (prev: number) => number) => void;
     refreshVerification: number;
     refreshCheatsheet: number;
+    refreshQuiz: number;
     subtitleRefreshVersion: number;
 
     // Ask context
@@ -198,6 +199,7 @@ export function useVideoPageState({
     const [refreshExplanations, setRefreshExplanations] = useState(0);
     const [refreshVerification, setRefreshVerification] = useState(0);
     const [refreshCheatsheet, setRefreshCheatsheet] = useState(0);
+    const [refreshQuiz, setRefreshQuiz] = useState(0);
     const [subtitleRefreshVersion, setSubtitleRefreshVersion] = useState(0);
 
     // Ask context
@@ -399,6 +401,9 @@ export function useVideoPageState({
                     } else if (task.type === "cheatsheet_generation") {
                         log.info("SSE: cheatsheet_generation completed, bumping refreshCheatsheet", { taskId, taskType: task.type, status: task.status });
                         setRefreshCheatsheet((prev) => prev + 1);
+                    } else if (task.type === "quiz_generation") {
+                        log.info("SSE: quiz_generation completed, bumping refreshQuiz", { taskId, taskType: task.type, status: task.status });
+                        setRefreshQuiz((prev) => prev + 1);
                     } else if (task.type === "note_generation") {
                         // Note generation completed via SSE - stop the generating state
                         if (!cancelled) {
@@ -558,6 +563,7 @@ export function useVideoPageState({
         setRefreshExplanations,
         refreshVerification,
         refreshCheatsheet,
+        refreshQuiz,
         subtitleRefreshVersion,
 
         // Ask context

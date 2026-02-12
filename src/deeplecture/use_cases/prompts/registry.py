@@ -297,7 +297,7 @@ class SubtitleBackgroundBuilder(BasePromptBuilder):
     def build(self, **kwargs) -> PromptSpec:
         from deeplecture.use_cases.prompts.subtitle import build_background_prompt
 
-        user_prompt, system_prompt = build_background_prompt(kwargs["transcript_text"])
+        user_prompt, system_prompt = build_background_prompt(kwargs["transcript"])
         return PromptSpec(user_prompt=user_prompt, system_prompt=system_prompt)
 
     def get_preview_text(self) -> str:
@@ -399,6 +399,69 @@ class NotePartBuilder(BasePromptBuilder):
         return "Expands a single note part into full Markdown content. " "Includes headings, examples, and LaTeX math."
 
 
+class CheatsheetExtractionBuilder(BasePromptBuilder):
+    """Builder for cheatsheet knowledge extraction prompts."""
+
+    def build(self, **kwargs) -> PromptSpec:
+        from deeplecture.use_cases.prompts.cheatsheet import build_cheatsheet_extraction_prompts
+
+        system_prompt, user_prompt = build_cheatsheet_extraction_prompts(
+            context=kwargs["context"],
+            language=kwargs["language"],
+            subject_type=kwargs.get("subject_type", "auto"),
+            user_instruction=kwargs.get("user_instruction", ""),
+        )
+        return PromptSpec(user_prompt=user_prompt, system_prompt=system_prompt)
+
+    def get_preview_text(self) -> str:
+        return (
+            "Extracts structured knowledge items from educational content. "
+            "Focuses on exam-critical formulas, definitions, and conditions."
+        )
+
+
+class CheatsheetRenderingBuilder(BasePromptBuilder):
+    """Builder for cheatsheet rendering prompts."""
+
+    def build(self, **kwargs) -> PromptSpec:
+        from deeplecture.use_cases.prompts.cheatsheet import build_cheatsheet_rendering_prompts
+
+        system_prompt, user_prompt = build_cheatsheet_rendering_prompts(
+            knowledge_items_json=kwargs["knowledge_items_json"],
+            language=kwargs["language"],
+            target_pages=kwargs.get("target_pages", 2),
+            min_criticality=kwargs.get("min_criticality", "medium"),
+        )
+        return PromptSpec(user_prompt=user_prompt, system_prompt=system_prompt)
+
+    def get_preview_text(self) -> str:
+        return (
+            "Renders knowledge items into scannable Markdown cheatsheet. "
+            "Uses tables, bullet points, and LaTeX for high information density."
+        )
+
+
+class QuizGenerationBuilder(BasePromptBuilder):
+    """Builder for quiz MCQ generation prompts."""
+
+    def build(self, **kwargs) -> PromptSpec:
+        from deeplecture.use_cases.prompts.quiz import build_quiz_generation_prompts
+
+        system_prompt, user_prompt = build_quiz_generation_prompts(
+            knowledge_items_json=kwargs["knowledge_items_json"],
+            language=kwargs["language"],
+            question_count=kwargs.get("question_count", 5),
+            user_instruction=kwargs.get("user_instruction", ""),
+        )
+        return PromptSpec(user_prompt=user_prompt, system_prompt=system_prompt)
+
+    def get_preview_text(self) -> str:
+        return (
+            "Generates multiple-choice quiz questions from knowledge items. "
+            "Uses misconception-based distractor generation strategy."
+        )
+
+
 # =============================================================================
 # REGISTRY FACTORY
 # =============================================================================
@@ -472,6 +535,25 @@ def create_default_registry() -> PromptRegistry:
     registry.register(
         "note_part",
         NotePartBuilder("default", "Default", "Part content expansion"),
+        is_default=True,
+    )
+
+    # Cheatsheet
+    registry.register(
+        "cheatsheet_extraction",
+        CheatsheetExtractionBuilder("default", "Default", "Knowledge extraction"),
+        is_default=True,
+    )
+    registry.register(
+        "cheatsheet_rendering",
+        CheatsheetRenderingBuilder("default", "Default", "Scannable Markdown rendering"),
+        is_default=True,
+    )
+
+    # Quiz
+    registry.register(
+        "quiz_generation",
+        QuizGenerationBuilder("default", "Default", "Misconception-based MCQ generation"),
         is_default=True,
     )
 

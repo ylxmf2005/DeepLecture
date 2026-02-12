@@ -18,12 +18,12 @@ from deeplecture.use_cases.shared.subtitle import (
 )
 
 if TYPE_CHECKING:
-    from deeplecture.infrastructure.repositories.fs_explanation_storage import FsExplanationStorage
     from deeplecture.use_cases.dto.explanation import GenerateExplanationRequest
     from deeplecture.use_cases.interfaces import (
         MetadataStorageProtocol,
         SubtitleStorageProtocol,
     )
+    from deeplecture.use_cases.interfaces.explanation import ExplanationStorageProtocol
     from deeplecture.use_cases.interfaces.llm_provider import LLMProviderProtocol
     from deeplecture.use_cases.interfaces.prompt_registry import PromptRegistryProtocol
 
@@ -46,7 +46,7 @@ class ExplanationUseCase:
         *,
         metadata_storage: MetadataStorageProtocol,
         subtitle_storage: SubtitleStorageProtocol,
-        explanation_storage: FsExplanationStorage,
+        explanation_storage: ExplanationStorageProtocol,
         llm_provider: LLMProviderProtocol,
         prompt_registry: PromptRegistryProtocol,
     ) -> None:

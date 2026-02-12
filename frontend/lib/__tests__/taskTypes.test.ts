@@ -4,6 +4,7 @@ import {
     isContentRefreshTask,
     taskToProcessingAction,
     TASK_LABELS,
+    getTaskNotificationLabel,
 } from '@/lib/taskTypes';
 
 describe('normalizeTaskType', () => {
@@ -95,5 +96,23 @@ describe('TASK_LABELS', () => {
             expect(TASK_LABELS[taskType].success).toBeTruthy();
             expect(TASK_LABELS[taskType].error).toBeTruthy();
         }
+    });
+
+    it('returns known labels via getTaskNotificationLabel', () => {
+        const labels = getTaskNotificationLabel('note_generation');
+        expect(labels.success).toBe('Notes generated successfully');
+        expect(labels.error).toBe('Note generation failed');
+    });
+
+    it('returns fallback labels for unknown task types', () => {
+        const labels = getTaskNotificationLabel('custom_new_task');
+        expect(labels.success).toBe('Custom New Task completed');
+        expect(labels.error).toBe('Custom New Task failed');
+    });
+
+    it('returns generic fallback labels for empty task type', () => {
+        const labels = getTaskNotificationLabel('');
+        expect(labels.success).toBe('Task completed');
+        expect(labels.error).toBe('Task failed');
     });
 });

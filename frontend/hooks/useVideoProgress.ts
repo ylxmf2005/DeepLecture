@@ -4,27 +4,14 @@ import { useRef, useCallback, useEffect } from "react";
 import type { VideoPlayerRef } from "@/components/video/VideoPlayer";
 import { useVideoStateStore, useVideoProgress as useStoredProgress } from "@/stores";
 
-const PROGRESS_SAVE_THRESHOLD_SECONDS = 5;
+const PROGRESS_SAVE_THRESHOLD_SECONDS = 1;
 export const RESUME_TOLERANCE_SECONDS = 0.5;
-export const RESUME_MAX_ATTEMPTS = 3;
 
-export interface VideoProgressState {
-    resumeTarget: number | null;
-}
-
-export interface VideoProgressActions {
-    persistProgress: (time: number) => void;
-    clearProgress: () => void;
-    maybePersistProgress: (time: number) => void;
-    getResumeTarget: () => number | null;
-    markResumeAttempt: () => number;
-    resetResumeTarget: () => void;
-}
-
-export interface UseVideoProgressReturn extends VideoProgressActions {
+export interface UseVideoProgressReturn {
     resumeTargetRef: React.RefObject<number | null>;
-    resumeAttemptsRef: React.RefObject<number>;
     lastPersistedProgressRef: React.RefObject<number>;
+    persistProgress: (time: number) => void;
+    maybePersistProgress: (time: number) => void;
 }
 
 interface UseVideoProgressParams {
@@ -37,12 +24,12 @@ export function useVideoProgress({
     playerRef,
 }: UseVideoProgressParams): UseVideoProgressReturn {
     const lastPersistedProgressRef = useRef(0);
+    const lastAutoPersistTimestampMsRef = useRef(0);
+    const lastObservedProgressRef = useRef(0);
     const resumeTargetRef = useRef<number | null>(null);
-    const resumeAttemptsRef = useRef(0);
 
     // Get store actions
     const setProgress = useVideoStateStore((s) => s.setProgress);
-    const clearProgressStore = useVideoStateStore((s) => s.clearProgress);
 
     // Get stored progress from store
     const storedProgress = useStoredProgress(videoId);
@@ -53,33 +40,29 @@ export function useVideoProgress({
         setProgress(videoId, rounded);
     }, [videoId, setProgress]);
 
-    const clearProgress = useCallback(() => {
-        if (!videoId) return;
-        clearProgressStore(videoId);
-    }, [videoId, clearProgressStore]);
-
     const maybePersistProgress = useCallback((time: number) => {
+        if (time > 0) {
+            lastObservedProgressRef.current = time;
+        }
         if (time < 1) return;
+
+        // Time-based safeguard: persist at least once per second while playing
+        // to avoid losing progress if unload/pagehide is skipped.
+        const nowMs = Date.now();
+        if (nowMs - lastAutoPersistTimestampMsRef.current >= 1000) {
+            lastAutoPersistTimestampMsRef.current = nowMs;
+            persistProgress(time);
+            lastPersistedProgressRef.current = time;
+            return;
+        }
+
         if (Math.abs(time - lastPersistedProgressRef.current) < PROGRESS_SAVE_THRESHOLD_SECONDS) {
             return;
         }
+
         lastPersistedProgressRef.current = time;
         persistProgress(time);
     }, [persistProgress]);
-
-    const getResumeTarget = useCallback(() => {
-        return resumeTargetRef.current;
-    }, []);
-
-    const markResumeAttempt = useCallback(() => {
-        resumeAttemptsRef.current += 1;
-        return resumeAttemptsRef.current;
-    }, []);
-
-    const resetResumeTarget = useCallback(() => {
-        resumeTargetRef.current = null;
-        resumeAttemptsRef.current = 0;
-    }, []);
 
     // Initialize resume target from stored progress on mount/videoId change
     useEffect(() => {
@@ -88,41 +71,45 @@ export function useVideoProgress({
         if (storedProgress !== null && storedProgress > 0) {
             resumeTargetRef.current = storedProgress;
             lastPersistedProgressRef.current = storedProgress;
-        } else {
-            resumeTargetRef.current = null;
-            lastPersistedProgressRef.current = 0;
+            lastObservedProgressRef.current = storedProgress;
+            return;
         }
-        resumeAttemptsRef.current = 0;
+
+        resumeTargetRef.current = null;
+        lastPersistedProgressRef.current = 0;
+        lastObservedProgressRef.current = 0;
     }, [videoId, storedProgress]);
 
-    // Save progress on beforeunload and cleanup
+    // Save progress on unload/navigation and cleanup.
+    // `pagehide` is more reliable than beforeunload on some browsers.
     useEffect(() => {
         if (typeof window === "undefined" || !videoId) return;
 
-        const handleBeforeUnload = () => {
-            const current = playerRef.current?.getCurrentTime() ?? lastPersistedProgressRef.current;
+        const persistOnExit = () => {
+            const playerTime = playerRef.current?.getCurrentTime();
+            const current = (typeof playerTime === "number" && Number.isFinite(playerTime) && playerTime > 0)
+                ? playerTime
+                : lastObservedProgressRef.current;
+
             if (current > 0) {
                 persistProgress(current);
             }
         };
 
-        window.addEventListener("beforeunload", handleBeforeUnload);
+        window.addEventListener("beforeunload", persistOnExit);
+        window.addEventListener("pagehide", persistOnExit);
 
         return () => {
-            window.removeEventListener("beforeunload", handleBeforeUnload);
-            handleBeforeUnload();
+            window.removeEventListener("beforeunload", persistOnExit);
+            window.removeEventListener("pagehide", persistOnExit);
+            persistOnExit();
         };
     }, [persistProgress, videoId, playerRef]);
 
     return {
         resumeTargetRef,
-        resumeAttemptsRef,
         lastPersistedProgressRef,
         persistProgress,
-        clearProgress,
         maybePersistProgress,
-        getResumeTarget,
-        markResumeAttempt,
-        resetResumeTarget,
     };
 }

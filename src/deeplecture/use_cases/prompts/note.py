@@ -27,7 +27,7 @@ def build_note_outline_prompt(
         max_parts: Optional maximum number of parts to generate
 
     Returns:
-        (user_prompt, system_prompt)
+        Tuple of (user_prompt, system_prompt). Note: user_prompt is first.
     """
     system_prompt = (
         "You are an expert course note designer for university students.\n"
@@ -137,7 +137,7 @@ def build_note_part_prompt(
         outline: Full outline (all parts) for sibling awareness
 
     Returns:
-        (user_prompt, system_prompt)
+        Tuple of (user_prompt, system_prompt). Note: user_prompt is first.
     """
     pid = int(part.id or 0)
     title = part.title or f"Part {pid}"

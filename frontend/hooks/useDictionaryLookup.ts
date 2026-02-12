@@ -10,6 +10,9 @@ import {
     type DictionaryEntry,
     type DictionaryProvider,
 } from "@/lib/dictionary/lookup";
+import { logger } from "@/shared/infrastructure";
+
+const log = logger.scope("useDictionaryLookup");
 
 // Singleton provider instance
 let provider: DictionaryProvider | null = null;
@@ -128,7 +131,7 @@ export function useDictionaryLookup(
                     }
                 } catch (err) {
                     if (!controller.signal.aborted) {
-                        console.warn("[useDictionaryLookup] Lookup failed:", err);
+                        log.warn("Lookup failed", { action: "lookup" });
                         setError("Lookup failed");
                         setEntry(null);
                         setLoading(false);

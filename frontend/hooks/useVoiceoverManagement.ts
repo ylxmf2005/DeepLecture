@@ -11,6 +11,7 @@ import {
 import { useVideoStateStore } from "@/stores/useVideoStateStore";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
+import { useTaskNotification } from "@/hooks/useTaskNotification";
 
 const log = logger.scope("VoiceoverManagement");
 
@@ -52,6 +53,7 @@ export function useVoiceoverManagement({
     videoId,
     initialVoiceovers,
 }: UseVoiceoverManagementOptions): UseVoiceoverManagementReturn {
+    const { notifyOperation } = useTaskNotification();
     // Processing state
     const [voiceoverProcessing, setVoiceoverProcessing] = useState<SubtitleSource | null>(null);
 
@@ -95,11 +97,13 @@ export function useVoiceoverManagement({
                 setSelectedVoiceoverId(null);
             }
         } catch (error) {
-            log.error("Failed to load voiceovers", toError(error), { videoId });
+            const normalizedError = toError(error);
+            log.error("Failed to load voiceovers", normalizedError, { videoId });
+            notifyOperation("voiceover_refresh", "error", normalizedError.message);
         } finally {
             setVoiceoversLoading(false);
         }
-    }, [videoId, setSelectedVoiceoverId]);
+    }, [videoId, setSelectedVoiceoverId, notifyOperation]);
 
     // Load voiceovers - skip initial fetch if server provided initial data
     useEffect(() => {

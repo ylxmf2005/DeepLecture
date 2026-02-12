@@ -30,6 +30,8 @@ export interface PlaybackSettings {
     autoPauseOnLeave: boolean;
     autoResumeOnReturn: boolean;
     autoSwitchSubtitlesOnLeave: boolean;
+    autoSwitchVoiceoverOnLeave: boolean;
+    voiceoverAutoSwitchThresholdMs: number;
     summaryThresholdSeconds: number;
     subtitleContextWindowSeconds: number;
     subtitleRepeatCount: number;
@@ -60,6 +62,43 @@ export interface AISettings {
 
 export type DictionaryInteractionMode = "hover" | "click";
 
+// ─── Per-Video Configuration (Cascading Config) ─────────────────────────────
+
+/** Deep partial: every nested field becomes optional */
+export type DeepPartial<T> = {
+    [P in keyof T]?: T[P] extends Record<string, string>
+        ? T[P]  // Keep Record<string, string> as-is (prompts)
+        : T[P] extends object
+            ? DeepPartial<T[P]>
+            : T[P];
+};
+
+/** Per-video overrides: mirrors GlobalSettings shape, all fields optional */
+export type PerVideoConfig = DeepPartial<GlobalSettings>;
+
+/** Resolved config after merge: fully populated GlobalSettings */
+export type ResolvedSettings = Readonly<GlobalSettings>;
+
+/**
+ * Flat task-config shape for backend API request bodies.
+ * Backend tasks only care about language/model/prompts — not UI prefs.
+ * Kept separate from PerVideoConfig to avoid coupling API shape to UI shape.
+ */
+export interface TaskConfigShape {
+    sourceLanguage: string;
+    targetLanguage: string;
+    llmModel: string | null;
+    ttsModel: string | null;
+    prompts: Record<string, string>;
+    learnerProfile: string;
+    noteContextMode: NoteContextMode;
+}
+
+/** Resolved task config after merge: guaranteed fully populated */
+export type ResolvedTaskConfig = Readonly<TaskConfigShape>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface DictionarySettings {
     enabled: boolean;
     interactionMode: DictionaryInteractionMode;
@@ -84,6 +123,8 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
         autoPauseOnLeave: false,
         autoResumeOnReturn: false,
         autoSwitchSubtitlesOnLeave: false,
+        autoSwitchVoiceoverOnLeave: true,
+        voiceoverAutoSwitchThresholdMs: 1500,
         summaryThresholdSeconds: 60,
         subtitleContextWindowSeconds: 30,
         subtitleRepeatCount: 1,
@@ -190,6 +231,8 @@ export interface GlobalSettingsActions {
     setAutoPauseOnLeave: (value: boolean) => void;
     setAutoResumeOnReturn: (value: boolean) => void;
     setAutoSwitchSubtitlesOnLeave: (value: boolean) => void;
+    setAutoSwitchVoiceoverOnLeave: (value: boolean) => void;
+    setVoiceoverAutoSwitchThresholdMs: (ms: number) => void;
     setSummaryThresholdSeconds: (seconds: number) => void;
     setSubtitleContextWindowSeconds: (seconds: number) => void;
     setSubtitleRepeatCount: (count: number) => void;

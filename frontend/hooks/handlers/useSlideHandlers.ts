@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { explainSlide, generateSlideLecture, uploadContent } from "@/lib/api";
+import { useTaskNotification } from "@/hooks/useTaskNotification";
 import type { ProcessingAction } from "../useVideoPageState";
 import { useTabLayoutStore, findTabPanel, type TabId } from "@/stores/tabLayoutStore";
 import { logger } from "@/shared/infrastructure";
@@ -43,6 +44,8 @@ export function useSlideHandlers({
     setRefreshExplanations,
     setDeckStore,
 }: UseSlideHandlersOptions): UseSlideHandlersReturn {
+    const { notifyTaskComplete, notifyOperation } = useTaskNotification();
+
     const activateTab = useCallback((tabId: TabId) => {
         const { panels, setActiveTab } = useTabLayoutStore.getState();
         const panel = findTabPanel(panels, tabId);
@@ -68,9 +71,19 @@ export function useSlideHandlers({
                 setRefreshExplanations((prev) => prev + 1);
             } catch (error) {
                 log.error("Failed to start explanation generation", toError(error), { videoId, imagePath, timestamp });
+                notifyOperation("slide_explain", "error", toError(error).message);
             }
         },
-        [videoId, sourceLanguage, targetLanguage, learnerProfile, subtitleContextWindowSeconds, activateTab, setRefreshExplanations]
+        [
+            videoId,
+            sourceLanguage,
+            targetLanguage,
+            learnerProfile,
+            subtitleContextWindowSeconds,
+            activateTab,
+            setRefreshExplanations,
+            notifyOperation,
+        ]
     );
 
     const handleGenerateSlideLecture = useCallback(
@@ -87,14 +100,19 @@ export function useSlideHandlers({
                 if (result.status === "ready") {
                     setProcessing(false);
                     setProcessingAction(null);
+
+                    if (!result.taskId) {
+                        notifyTaskComplete("video_generation", "ready");
+                    }
                 }
             } catch (err) {
                 log.error("Failed to generate slide lecture", toError(err), { videoId });
+                notifyTaskComplete("video_generation", "error", toError(err).message);
                 setProcessing(false);
                 setProcessingAction(null);
             }
         },
-        [videoId, sourceLanguage, targetLanguage, ttsLanguage, setProcessing, setProcessingAction]
+        [videoId, sourceLanguage, targetLanguage, ttsLanguage, setProcessing, setProcessingAction, notifyTaskComplete]
     );
 
     const handleUploadSlide = useCallback(
@@ -107,9 +125,10 @@ export function useSlideHandlers({
                 }
             } catch (error) {
                 log.error("Failed to upload slide deck", toError(error), { videoId });
+                notifyOperation("slide_upload", "error", toError(error).message);
             }
         },
-        [videoId, setDeckStore]
+        [videoId, setDeckStore, notifyOperation]
     );
 
     return { handleCapture, handleGenerateSlideLecture, handleUploadSlide };

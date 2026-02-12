@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, memo } from "react";
-import { toast } from "sonner";
 import { formatTime } from "@/lib/timeFormat";
 import { ExplanationData, getExplanationHistory, deleteExplanation, API_BASE_URL } from "@/lib/api";
 import { Loader2, Clock, ChevronDown, ChevronUp, Trash2, MessageSquare, FilePlus } from "lucide-react";
@@ -11,6 +10,7 @@ import type { AskContextItem } from "@/lib/askTypes";
 import { useConfirmDialog } from "@/contexts/ConfirmDialogContext";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
+import { useTaskNotification } from "@/hooks/useTaskNotification";
 
 const log = logger.scope("ExplanationList");
 
@@ -34,6 +34,7 @@ function ExplanationListBase({
     const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const { confirm } = useConfirmDialog();
+    const { notifyOperation } = useTaskNotification();
 
     useEffect(() => {
         let cancelled = false;
@@ -46,6 +47,7 @@ function ExplanationListBase({
                 setHistory(data.history);
             } catch (error) {
                 log.error("Failed to load explanation history", toError(error), { videoId });
+                notifyOperation("explanation_load", "error", toError(error).message);
             } finally {
                 if (!cancelled) {
                     setLoading(false);
@@ -60,7 +62,7 @@ function ExplanationListBase({
         return () => {
             cancelled = true;
         };
-    }, [videoId, refreshTrigger]);
+    }, [videoId, refreshTrigger, notifyOperation]);
 
     const toggleExpand = (index: number) => {
         setExpandedItems((prev) => {
@@ -93,9 +95,10 @@ function ExplanationListBase({
             setHistory((prev) =>
                 prev.filter((entry) => (entry.id ?? String(Math.round(entry.timestamp * 1000))) !== derivedId)
             );
+            notifyOperation("explanation_delete", "success");
         } catch (error) {
             log.error("Failed to delete explanation", toError(error), { videoId, explanationId: derivedId });
-            toast.error("Failed to delete this screenshot. Please try again.");
+            notifyOperation("explanation_delete", "error", toError(error).message);
         } finally {
             setDeletingId(null);
         }

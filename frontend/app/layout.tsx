@@ -43,7 +43,7 @@ export default function RootLayout({
               </ConfirmDialogProvider>
             </AppInitializer>
           </RootErrorBoundary>
-          <Toaster richColors position="bottom-right" />
+          <Toaster richColors position="bottom-right" visibleToasts={5} />
         </ThemeProvider>
       </body>
     </html>

@@ -23,6 +23,7 @@ dependencies = [
     "sqlalchemy>=2.0.44",
     "tomli>=2.0.0;python_version<'3.11'",
     "rq>=2.6.1",
+    "anthropic>=0.77.1",
 ]
 
 [project.optional-dependencies]

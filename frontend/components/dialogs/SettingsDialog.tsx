@@ -43,18 +43,13 @@ export function SettingsDialog({ isOpen, onClose, video }: SettingsDialogProps) 
     const [activeTab, setActiveTab] = useState<TabId>("general");
 
     useEffect(() => {
-        const handleEsc = (e: KeyboardEvent) => {
-            if (e.key === "Escape") onClose();
-        };
         if (isOpen) {
-            window.addEventListener("keydown", handleEsc);
             document.body.style.overflow = "hidden";
         }
         return () => {
-            window.removeEventListener("keydown", handleEsc);
             document.body.style.overflow = "unset";
         };
-    }, [isOpen, onClose]);
+    }, [isOpen]);
 
     if (!isOpen) return null;
 

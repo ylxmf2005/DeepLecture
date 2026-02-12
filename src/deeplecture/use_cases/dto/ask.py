@@ -144,6 +144,7 @@ class AskQuestionRequest:
     context_items: list[ContextItem] = field(default_factory=list)
     learner_profile: str = ""
     context_window_seconds: float | None = None
+    language: str | None = None  # Response language override
     # Runtime model/prompt selection (None = use defaults)
     llm_model: str | None = None
     prompts: dict[str, str] | None = None  # {func_id: impl_id}
@@ -155,6 +156,7 @@ class SummarizeContextRequest:
 
     context_items: list[ContextItem]
     learner_profile: str = ""
+    language: str | None = None  # Response language override
     # Runtime model/prompt selection (None = use defaults)
     llm_model: str | None = None
     prompts: dict[str, str] | None = None  # {func_id: impl_id}

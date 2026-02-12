@@ -15,6 +15,7 @@ export type TabId =
     | "test"
     | "report"
     | "cheatsheet"
+    | "quiz"
     | "podcast";
 
 export type PanelId = "sidebar" | "bottom";
@@ -52,12 +53,12 @@ interface TabLayoutState {
 }
 
 const DEFAULT_SIDEBAR_TABS: TabId[] = ["subtitles", "explanations", "timeline", "ask"];
-const DEFAULT_BOTTOM_TABS: TabId[] = ["verify", "notes", "flashcard", "test", "report", "cheatsheet", "podcast"];
+const DEFAULT_BOTTOM_TABS: TabId[] = ["verify", "notes", "flashcard", "quiz", "test", "report", "cheatsheet", "podcast"];
 const ALL_TABS = new Set<TabId>([...DEFAULT_SIDEBAR_TABS, ...DEFAULT_BOTTOM_TABS]);
 
 export const LAYOUT_CONSTRAINTS = {
     MAX_SIDEBAR_TABS: 4,
-    MAX_BOTTOM_TABS: 7,
+    MAX_BOTTOM_TABS: 8,
 } as const;
 
 const MAX_SIDEBAR_TABS = LAYOUT_CONSTRAINTS.MAX_SIDEBAR_TABS;
@@ -201,8 +202,9 @@ export const useTabLayoutStore = create<TabLayoutState>()(
                 const persisted = persistedState as Partial<TabLayoutState> | undefined;
                 if (!persisted?.panels) return currentState;
 
-                const persistedSidebar = persisted.panels.sidebar || [];
-                const persistedBottom = persisted.panels.bottom || [];
+                // Filter out tabs that no longer exist (removed in a code update)
+                const persistedSidebar = (persisted.panels.sidebar || []).filter(tab => ALL_TABS.has(tab));
+                const persistedBottom = (persisted.panels.bottom || []).filter(tab => ALL_TABS.has(tab));
                 const presentTabs = new Set([...persistedSidebar, ...persistedBottom]);
 
                 // Insert missing tabs at their default positions, not at the end

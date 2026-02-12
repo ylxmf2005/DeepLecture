@@ -24,6 +24,28 @@ logger = logging.getLogger(__name__)
 class YtdlpDownloader:
     """Download videos from supported platforms via yt-dlp."""
 
+    _COOKIE_UNAVAILABLE_MARKERS: ClassVar[tuple[str, ...]] = (
+        "failed to load cookies",
+        "could not find chrome cookies database",
+        "could not find local state file",
+        "failed to decrypt cookie",
+        "failed to decrypt with dpapi",
+        "cannot extract cookies from chrome",
+    )
+
+    _YOUTUBE_AUTH_REQUIRED_MARKERS: ClassVar[tuple[str, ...]] = (
+        "sign in to confirm you're not a bot",
+        "sign in to confirm you’re not a bot",
+        "age-restricted",
+        "confirm your age",
+        "private video",
+        "this video is private",
+        "members-only",
+        "channel members only",
+        "authentication required",
+        "login required",
+    )
+
     DEFAULT_ALLOWED_DOMAINS: ClassVar[list[str]] = [
         "youtube.com",
         "youtu.be",
@@ -110,33 +132,109 @@ class YtdlpDownloader:
                 "error": "yt-dlp is required for URL video import. Install it with 'uv add yt-dlp'.",
             }
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[arg-type]
-                info = ydl.extract_info(url, download=False)
-                filesize = info.get("filesize") or info.get("filesize_approx") or 0
-                if isinstance(filesize, int | float) and filesize > self._max_size_bytes:
+        is_youtube = self._is_youtube_url(url)
+
+        if is_youtube:
+            opts_with_chrome_cookie = {**ydl_opts, "cookiesfrombrowser": ("chrome",)}
+
+            try:
+                return self._download_once(yt_dlp, opts_with_chrome_cookie, url)
+            except Exception as first_exc:
+                if not self._is_cookie_unavailable_error(first_exc):
+                    logger.error("yt-dlp download failed for %s: %s", url, first_exc)
                     return {
                         "success": False,
-                        "error": (
-                            f"Video size ({filesize / 1024 / 1024:.1f}MB) exceeds "
-                            f"limit ({self._max_size_bytes / 1024 / 1024:.1f}MB)"
+                        "error": self._format_download_error(first_exc),
+                    }
+
+                logger.warning(
+                    "Chrome cookie loading failed for %s, retrying without cookies: %s",
+                    url,
+                    first_exc,
+                )
+                try:
+                    return self._download_once(yt_dlp, ydl_opts, url)
+                except Exception as second_exc:
+                    logger.error("yt-dlp download failed for %s after cookie fallback: %s", url, second_exc)
+                    return {
+                        "success": False,
+                        "error": self._format_download_error(
+                            second_exc,
+                            cookie_unavailable_before_failure=True,
                         ),
                     }
 
-                info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info)
-
-                return {
-                    "success": True,
-                    "filepath": filename,
-                    "title": info.get("title", "Unknown Title"),
-                    "duration": int(info.get("duration") or 0),
-                    "source_type": self._detect_source_type(url),
-                }
-
+        try:
+            return self._download_once(yt_dlp, ydl_opts, url)
         except Exception as exc:
             logger.error("yt-dlp download failed for %s: %s", url, exc)
-            return {"success": False, "error": str(exc)}
+            return {
+                "success": False,
+                "error": self._format_download_error(exc),
+            }
+
+    def _download_once(self, yt_dlp_module: Any, ydl_opts: dict[str, Any], url: str) -> dict[str, Any]:
+        with yt_dlp_module.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            filesize = info.get("filesize") or info.get("filesize_approx") or 0
+            if isinstance(filesize, int | float) and filesize > self._max_size_bytes:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Video size ({filesize / 1024 / 1024:.1f}MB) exceeds "
+                        f"limit ({self._max_size_bytes / 1024 / 1024:.1f}MB)"
+                    ),
+                }
+
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+
+            return {
+                "success": True,
+                "filepath": filename,
+                "title": info.get("title", "Unknown Title"),
+                "duration": int(info.get("duration") or 0),
+                "source_type": self._detect_source_type(url),
+            }
+
+    @classmethod
+    def _is_cookie_unavailable_error(cls, exc: Exception) -> bool:
+        msg = str(exc).lower()
+        return any(marker in msg for marker in cls._COOKIE_UNAVAILABLE_MARKERS)
+
+    @classmethod
+    def _is_youtube_auth_required_error(cls, error_message: str) -> bool:
+        msg = (error_message or "").lower()
+        return any(marker in msg for marker in cls._YOUTUBE_AUTH_REQUIRED_MARKERS)
+
+    @classmethod
+    def _is_youtube_url(cls, url: str) -> bool:
+        u = (url or "").lower()
+        return "youtube.com" in u or "youtu.be" in u
+
+    def _format_download_error(
+        self,
+        exc: Exception,
+        *,
+        cookie_unavailable_before_failure: bool = False,
+    ) -> str:
+        raw_error = str(exc) or "unknown error"
+
+        if cookie_unavailable_before_failure or self._is_youtube_auth_required_error(raw_error):
+            return self._build_youtube_troubleshooting_message(raw_error)
+
+        return raw_error
+
+    @staticmethod
+    def _build_youtube_troubleshooting_message(raw_error: str) -> str:
+        return (
+            "YouTube download failed. Suggested fixes: "
+            "1) Sign in to YouTube in Chrome and confirm the video can be played. "
+            "2) Close all Chrome windows completely and retry (release cookie DB lock). "
+            "3) Update yt-dlp to the latest version and retry. "
+            "4) If it still fails, export cookies.txt and verify with '--cookies cookies.txt'. "
+            f"Original error: {raw_error}"
+        )
 
     def _is_domain_allowed(self, host: str) -> bool:
         for allowed in self._allowed_domains:
@@ -148,7 +246,7 @@ class YtdlpDownloader:
     @staticmethod
     def _detect_source_type(url: str) -> str:
         u = (url or "").lower()
-        if "youtube.com" in u or "youtu.be" in u:
+        if YtdlpDownloader._is_youtube_url(u):
             return "youtube"
         if "bilibili.com" in u:
             return "bilibili"

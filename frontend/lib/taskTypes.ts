@@ -6,6 +6,10 @@
  */
 
 export type ProcessingAction = "generate" | "translate" | "video" | "timeline" | null;
+export interface TaskNotificationLabel {
+    success: string;
+    error: string;
+}
 
 /** Normalize a raw task type string to its canonical form. */
 export function normalizeTaskType(raw: string): string {
@@ -44,7 +48,7 @@ export function taskToProcessingAction(type: string): ProcessingAction {
 }
 
 /** Notification labels for all 13 backend task types. */
-export const TASK_LABELS: Record<string, { success: string; error: string }> = {
+export const TASK_LABELS: Record<string, TaskNotificationLabel> = {
     subtitle_generation: {
         success: "Subtitles generated successfully",
         error: "Subtitle generation failed",
@@ -98,3 +102,33 @@ export const TASK_LABELS: Record<string, { success: string; error: string }> = {
         error: "Quiz generation failed",
     },
 };
+
+function humanizeTaskType(taskType: string): string {
+    return taskType
+        .split("_")
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+}
+
+/** Get notification labels for a task type, with fallback for unknown/new task types. */
+export function getTaskNotificationLabel(taskType: string): TaskNotificationLabel {
+    const normalized = normalizeTaskType(taskType);
+    const known = TASK_LABELS[normalized];
+    if (known) {
+        return known;
+    }
+
+    const readable = humanizeTaskType(normalized);
+    if (!readable) {
+        return {
+            success: "Task completed",
+            error: "Task failed",
+        };
+    }
+
+    return {
+        success: `${readable} completed`,
+        error: `${readable} failed`,
+    };
+}

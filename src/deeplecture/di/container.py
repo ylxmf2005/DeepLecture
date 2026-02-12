@@ -513,6 +513,7 @@ class Container:
                 subtitle_storage=self.subtitle_storage,
                 path_resolver=self.path_resolver,
                 llm_provider=self.llm_provider,
+                prompt_registry=self.prompt_registry,
             )
         return self._cache["cheatsheet_uc"]  # type: ignore[return-value]
 
@@ -525,6 +526,7 @@ class Container:
                 subtitle_storage=self.subtitle_storage,
                 llm_provider=self.llm_provider,
                 path_resolver=self.path_resolver,
+                prompt_registry=self.prompt_registry,
             )
         return self._cache["quiz_uc"]  # type: ignore[return-value]
 
@@ -544,7 +546,7 @@ class Container:
                 metadata_storage=self.metadata_storage,
                 subtitle_storage=self.subtitle_storage,
                 config=self._settings.slides.lecture,
-                parallelism_config=self._settings.tasks.parallelism,
+                parallel_runner=self.parallel_runner,
             )
         return self._cache["slide_lecture_uc"]  # type: ignore[return-value]
 

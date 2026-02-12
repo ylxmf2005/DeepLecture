@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { toast } from "sonner";
 import { getSubtitles, ContentItem } from "@/lib/api";
 import { Subtitle, mergeSubtitles } from "@/lib/srt";
 import { useVideoStateStore, usePlayerSubtitleMode } from "@/stores";
 import { SubtitleDisplayMode } from "@/stores/types";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
+import { useTaskNotification } from "@/hooks/useTaskNotification";
 
 const log = logger.scope("SubtitleManagement");
 
@@ -49,6 +49,7 @@ export function useSubtitleManagement({
     const [subtitlesDual, setSubtitlesDual] = useState<Subtitle[]>([]);
     const [subtitlesDualReversed, setSubtitlesDualReversed] = useState<Subtitle[]>([]);
     const [subtitlesLoading, setSubtitlesLoading] = useState(false);
+    const { notifyOperation } = useTaskNotification();
 
     // Race condition protection: only the latest request should update state
     const loadRequestIdRef = useRef(0);
@@ -137,9 +138,7 @@ export function useSubtitleManagement({
 
                 const error = toError(e);
                 log.error("Failed to load subtitles", error, { videoId });
-                toast.error("Failed to load subtitles", {
-                    description: error.message || "Please try again later",
-                });
+                notifyOperation("subtitle_load", "error", error.message || "Please try again later");
             } finally {
                 // Only update loading state if this is still the current request
                 if (requestId === loadRequestIdRef.current) {
@@ -157,7 +156,16 @@ export function useSubtitleManagement({
     // Dependencies are intentionally derived through subtitleStateKey which combines:
     // videoId, hasSubtitles, hasEnhancedSubtitles, hasTranslation, subtitleRefreshVersion
     // This prevents unnecessary API calls when only unrelated content fields change
-    }, [subtitleStateKey, videoId, originalLanguage, targetLanguage, hasSubtitles, hasEnhancedSubtitles, hasTranslation]);
+    }, [
+        subtitleStateKey,
+        videoId,
+        originalLanguage,
+        targetLanguage,
+        hasSubtitles,
+        hasEnhancedSubtitles,
+        hasTranslation,
+        notifyOperation,
+    ]);
 
     const setSubtitleMode = (mode: SubtitleDisplayMode) => {
         if (!videoId) return;

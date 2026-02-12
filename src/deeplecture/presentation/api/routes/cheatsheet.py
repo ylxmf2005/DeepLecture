@@ -89,6 +89,9 @@ def generate_cheatsheet() -> Response:
     if subject_type not in valid_subjects:
         return bad_request(f"subject_type must be one of: {', '.join(valid_subjects)}")
 
+    llm_model = data.get("llm_model") or None
+    prompts = data.get("prompts") or None
+
     container = get_container()
 
     generate_request = GenerateCheatsheetRequest(
@@ -97,12 +100,14 @@ def generate_cheatsheet() -> Response:
         context_mode=context_mode,
         user_instruction=user_instruction,
         min_criticality=min_criticality,
-        target_pages=target_pages or 2,
+        target_pages=target_pages if target_pages is not None else 2,
         subject_type=subject_type,
+        llm_model=llm_model,
+        prompts=prompts,
     )
 
-    async def _run_generation(ctx: object) -> dict:
-        result = await container.cheatsheet_usecase.generate(generate_request)
+    def _run_generation(ctx: object) -> dict:
+        result = container.cheatsheet_usecase.generate(generate_request)
         return result.to_dict()
 
     task_id = container.task_manager.submit(

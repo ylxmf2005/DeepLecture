@@ -4,10 +4,7 @@ import contextlib
 import json
 import logging
 import os
-import threading
-import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
@@ -16,12 +13,11 @@ from deeplecture.use_cases.dto.slide import PageWorkPlan, SlideGenerationResult,
 from deeplecture.use_cases.shared.llm_json import parse_llm_json
 
 if TYPE_CHECKING:
-    from concurrent.futures import Future
-
-    from deeplecture.config.settings import SlideLectureConfig, TaskParallelismConfig
+    from deeplecture.config.settings import SlideLectureConfig
     from deeplecture.use_cases.dto.slide import SlideGenerationRequest
     from deeplecture.use_cases.interfaces.audio import AudioProcessorProtocol
     from deeplecture.use_cases.interfaces.llm_provider import LLMProviderProtocol
+    from deeplecture.use_cases.interfaces.parallel import ParallelRunnerProtocol
     from deeplecture.use_cases.interfaces.path import PathResolverProtocol
     from deeplecture.use_cases.interfaces.pdf import PdfRendererProtocol
     from deeplecture.use_cases.interfaces.prompt_registry import PromptRegistryProtocol
@@ -90,7 +86,7 @@ class SlideLectureUseCase:
         metadata_storage: MetadataStorageProtocol,
         subtitle_storage: SubtitleStorageProtocol,
         config: SlideLectureConfig,
-        parallelism_config: TaskParallelismConfig,
+        parallel_runner: ParallelRunnerProtocol,
     ) -> None:
         self._audio = audio_processor
         self._video = video_processor
@@ -103,7 +99,7 @@ class SlideLectureUseCase:
         self._metadata = metadata_storage
         self._subtitle_storage = subtitle_storage
         self._config = config
-        self._parallelism = parallelism_config
+        self._parallel = parallel_runner
 
     def generate(self, request: SlideGenerationRequest) -> SlideGenerationResult:
         content_id = request.content_id
@@ -129,9 +125,6 @@ class SlideLectureUseCase:
         metadata = metadata.with_status(FeatureType.VIDEO.value, FeatureStatus.PROCESSING)
         self._metadata.save(metadata)
 
-        tts_pool: ThreadPoolExecutor | None = None
-        video_pool: ThreadPoolExecutor | None = None
-
         try:
             pdf_path = self._resolve_pdf_path(content_id, content_dir)
             page_images = self._render_pdf_pages(pdf_path=pdf_path, pages_dir=pages_dir)
@@ -144,7 +137,6 @@ class SlideLectureUseCase:
                 audio_dir=audio_dir,
                 segments_dir=segments_dir,
             )
-            plan_by_page = {p.page_index: p for p in plans}
 
             llm = self._llm_provider.get(request.llm_model)
             prompts = dict(request.prompts) if request.prompts else None
@@ -154,17 +146,10 @@ class SlideLectureUseCase:
             segment_durations_by_page: dict[int, list[tuple[int, float]]] = {}
             page_durations: dict[int, float] = {}
 
-            lock = threading.Lock()
-            audio_futures: dict[int, Future[tuple[str, float, list[tuple[int, float]]]]] = {}
-            video_futures: dict[int, Future[str]] = {}
-            errors: dict[int, Exception] = {}
-
-            tts_pool = ThreadPoolExecutor(max_workers=max(1, self._parallelism.default))
-            video_pool = ThreadPoolExecutor(max_workers=max(1, self._parallelism.default))
-
             ordered = sorted(plans, key=lambda p: p.page_index)
             last_page_index = ordered[-1].page_index
 
+            # Stage 1: Sequential LLM calls (needs history from previous pages)
             for pos, plan in enumerate(ordered):
                 images = [plan.image_path]
                 if cfg.neighbor_images.strip().lower() in ("next", "prev_next") and pos + 1 < len(ordered):
@@ -207,90 +192,57 @@ class SlideLectureUseCase:
                 history.after(page)
                 pages_by_index[plan.page_index] = page
 
-                is_last = plan.page_index == last_page_index
-                audio_future = tts_pool.submit(
-                    self._render_page_audio,
+            # Stage 2: Parallel TTS rendering
+            tts_items = [
+                (pages_by_index[plan.page_index], plan, plan.page_index == last_page_index) for plan in ordered
+            ]
+
+            def _render_tts(
+                item: tuple[TranscriptPage, PageWorkPlan, bool],
+            ) -> tuple[str, float, list[tuple[int, float]]]:
+                page, plan, is_last = item
+                return self._render_page_audio(
                     page,
                     plan,
                     is_last,
                     tts_language=request.tts_language,
                     tts_model=request.tts_model,
                 )
-                with lock:
-                    audio_futures[plan.page_index] = audio_future
 
-                def _on_audio_done(
-                    fut: Future[tuple[str, float, list[tuple[int, float]]]],
-                    *,
-                    page_index: int,
-                    image_path: str,
-                    segment_path: str,
-                ) -> None:
-                    try:
-                        _, duration, _ = fut.result()
-                        assert video_pool is not None
-                        vf = video_pool.submit(self._video.build_still_segment, image_path, duration, segment_path)
-                        with lock:
-                            video_futures[page_index] = vf
-                    except Exception as e:
-                        with lock:
-                            errors[page_index] = e
-
-                audio_future.add_done_callback(
-                    lambda fut, pi=plan.page_index, ip=plan.image_path, sp=plan.segment_video_path: _on_audio_done(  # type: ignore[misc]
-                        fut,
-                        page_index=pi,
-                        image_path=ip,
-                        segment_path=sp,
-                    )
-                )
+            audio_results = self._parallel.map_ordered(
+                tts_items,
+                _render_tts,
+                group="slide_lecture_tts",
+            )
 
             page_audio: dict[int, str] = {}
-            page_segments: dict[int, str] = {}
+            for plan, (wav_path, page_dur, seg_durs) in zip(ordered, audio_results, strict=False):
+                page_audio[plan.page_index] = wav_path
+                page_durations[plan.page_index] = page_dur
+                segment_durations_by_page[plan.page_index] = seg_durs
 
-            for page_index, audio_fut in list(audio_futures.items()):
-                try:
-                    wav_path, page_dur, seg_durs = audio_fut.result()
-                    page_audio[page_index] = wav_path
-                    page_durations[page_index] = page_dur
-                    segment_durations_by_page[page_index] = seg_durs
-                except Exception as e:
-                    with lock:
-                        errors[page_index] = e
+            # Stage 3: Parallel video segment builds
+            video_items = [
+                (plan.image_path, page_durations[plan.page_index], plan.segment_video_path) for plan in ordered
+            ]
 
-            # Wait for all callbacks to populate video_futures
-            # Callbacks are triggered on audio future completion but may still be executing
-            expected_completions = len(audio_futures)
-            while True:
-                with lock:
-                    if len(video_futures) + len(errors) >= expected_completions:
-                        pending_futures = list(video_futures.values())
-                        break
-                time.sleep(0.001)
+            def _build_video(item: tuple[str, float, str]) -> str:
+                image_path, duration, segment_path = item
+                self._video.build_still_segment(image_path, duration, segment_path)
+                return segment_path
 
-            # Use concurrent.futures.wait() for efficient synchronization
-            if pending_futures:
-                wait(pending_futures)
-
-            for page_index, video_fut in list(video_futures.items()):
-                try:
-                    video_fut.result()
-                    page_segments[page_index] = plan_by_page[page_index].segment_video_path
-                except Exception as e:
-                    with lock:
-                        errors[page_index] = e
-
-            if errors:
-                failed = ", ".join(str(k) for k in sorted(errors.keys())[:3])
-                raise RuntimeError(f"Slide lecture generation failed for pages: {failed}")
+            video_results = self._parallel.map_ordered(
+                video_items,
+                _build_video,
+                group="slide_lecture_video",
+            )
 
             ordered_audio_paths = [page_audio[p.page_index] for p in ordered]
             lecture_wav = os.path.join(output_dir, f"{request.output_basename}.wav")
             self._audio.concat_wavs_to_wav(ordered_audio_paths, lecture_wav)
 
             video_only = os.path.join(output_dir, f"{request.output_basename}_video_only.mp4")
-            ordered_segment_paths = [page_segments[p.page_index] for p in ordered]
-            self._video.concat_segments(ordered_segment_paths, video_only)
+            self._video.concat_segments(video_results, video_only)
             self._video.mux_audio(video_only, lecture_wav, out_video)
 
             audio_dur = self._audio.probe_duration_seconds(lecture_wav)
@@ -337,10 +289,6 @@ class SlideLectureUseCase:
             self._metadata.save(metadata)
             raise
         finally:
-            if tts_pool is not None:
-                tts_pool.shutdown(wait=True)
-            if video_pool is not None:
-                video_pool.shutdown(wait=True)
             if cfg.cleanup_temp:
                 with contextlib.suppress(OSError):
                     self._file_storage.remove_dir(workspace_dir)

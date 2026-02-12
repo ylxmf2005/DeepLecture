@@ -95,8 +95,8 @@ def generate_quiz(content_id: str) -> Response:
         prompts=prompts,
     )
 
-    async def _run_generation(ctx: object) -> dict:
-        result = await container.quiz_usecase.generate(req)
+    def _run_generation(ctx: object) -> dict:
+        result = container.quiz_usecase.generate(req)
         return result.to_dict()
 
     task_id = container.task_manager.submit(

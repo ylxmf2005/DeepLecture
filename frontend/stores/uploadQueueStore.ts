@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { api } from "@/lib/api";
 import { logger } from "@/shared/infrastructure";
-import { toError } from "@/lib/utils/errorUtils";
+import { toError, getErrorMessage } from "@/lib/utils/errorUtils";
 import type { PdfFile, VideoFile } from "@/components/video/upload/types";
 import { isAllowedVideo } from "@/components/video/upload/constants";
 
@@ -212,7 +212,8 @@ export const useUploadQueueStore = create<UploadQueueState>()((set, get) => ({
             onSuccess();
         } catch (err) {
             log.error("Failed to import video from URL", toError(err), { url });
-            set({ error: "Failed to import video. Please check the URL and try again.", uploadingUrl: false });
+            const message = getErrorMessage(err, "Failed to import video. Please check the URL and try again.");
+            set({ error: message, uploadingUrl: false });
         }
     },
 

@@ -8,6 +8,10 @@
  * - External media element connection (video/audio)
  */
 
+import { logger } from '@/shared/infrastructure';
+
+const log = logger.scope('LAppLipSyncManager');
+
 export type LipSyncSource = 'audio' | 'microphone' | 'none';
 
 export class LAppLipSyncManager {
@@ -65,7 +69,9 @@ export class LAppLipSyncManager {
       try {
         await this._audioContext.resume();
       } catch (e) {
-        console.warn('[LipSync] AudioContext resume failed (may need user gesture):', e);
+        log.warn('AudioContext resume failed (may need user gesture)', {
+          error: e instanceof Error ? e.message : String(e),
+        });
         return false;
       }
     }
@@ -93,7 +99,9 @@ export class LAppLipSyncManager {
         .resume()
         .catch((e) => {
           // Keep handlers installed; next gesture can retry.
-          console.warn('[LipSync] AudioContext resume failed in gesture handler:', e);
+          log.warn('AudioContext resume failed in gesture handler', {
+            error: e instanceof Error ? e.message : String(e),
+          });
         })
         .finally(() => {
           if (this._audioContext?.state === 'running') {
@@ -203,7 +211,7 @@ export class LAppLipSyncManager {
 
     // If connecting to the same element, just ensure connection is active
     if (this._mediaElement === mediaElement && this._mediaSource && this._isActive) {
-      console.debug('[LipSync] Already connected to this element');
+      log.debug('Already connected to this element', { tagName: mediaElement.tagName });
       return;
     }
 
@@ -240,12 +248,14 @@ export class LAppLipSyncManager {
           newSilentGain.connect(this._audioContext.destination);
 
           usedCaptureStream = true;
-          console.debug('[LipSync] Using captureStream() for', mediaElement.tagName);
+          log.debug('Using captureStream()', { tagName: mediaElement.tagName });
         } else {
-          console.warn('[LipSync] captureStream() returned no audio tracks');
+          log.warn('captureStream() returned no audio tracks', { tagName: mediaElement.tagName });
         }
       } catch (error) {
-        console.warn('[LipSync] captureStream() failed:', error);
+        log.warn('captureStream() failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 
@@ -270,10 +280,12 @@ export class LAppLipSyncManager {
           cached.node.connect(newAnalyser);
           newAnalyser.connect(this._audioContext.destination);
           newMediaSource = cached.node;
-          console.debug('[LipSync] Reconnected cached MediaElementSource for', mediaElement.tagName);
+          log.debug('Reconnected cached MediaElementSource', { tagName: mediaElement.tagName });
         } catch (error) {
           // Connection failed - try to at least keep audio playing
-          console.error('[LipSync] Failed to reconnect cached source:', error);
+          log.error('Failed to reconnect cached source', error instanceof Error ? error : undefined, {
+            error: error instanceof Error ? error.message : String(error),
+          });
           try {
             cached.node.connect(this._audioContext.destination);
           } catch (e) {
@@ -287,7 +299,7 @@ export class LAppLipSyncManager {
         if (!contextReady) {
           // AudioContext suspended - cannot safely use createMediaElementSource()
           // Degrade gracefully: audio plays normally, no lip sync
-          console.warn('[LipSync] AudioContext suspended, lip sync unavailable (audio will play normally)');
+          log.warn('AudioContext suspended, lip sync unavailable (audio will play normally)');
           return;
         }
 
@@ -298,10 +310,12 @@ export class LAppLipSyncManager {
           mediaSource.connect(newAnalyser);
           newAnalyser.connect(this._audioContext.destination);
           newMediaSource = mediaSource;
-          console.debug('[LipSync] Created new MediaElementSource for', mediaElement.tagName);
+          log.debug('Created new MediaElementSource', { tagName: mediaElement.tagName });
         } catch (error) {
           // Failed to create source - degrade gracefully
-          console.error('[LipSync] Failed to create MediaElementSource:', error);
+          log.error('Failed to create MediaElementSource', error instanceof Error ? error : undefined, {
+            error: error instanceof Error ? error.message : String(error),
+          });
           return;
         }
       }
@@ -352,9 +366,11 @@ export class LAppLipSyncManager {
     };
     mediaElement.addEventListener('ended', this._boundEndedHandler);
 
-    console.debug('[LipSync] Connected to', mediaElement.tagName,
-      '- method:', usedCaptureStream ? 'captureStream' : 'MediaElementSource',
-      '- AudioContext:', this._audioContext.state);
+    log.debug('Connected to media element', {
+      tagName: mediaElement.tagName,
+      method: usedCaptureStream ? 'captureStream' : 'mediaElementSource',
+      audioContextState: this._audioContext.state,
+    });
   }
 
   /**
@@ -419,7 +435,9 @@ export class LAppLipSyncManager {
       this._source = 'microphone';
       this._isActive = true;
     } catch (err) {
-      console.error('[LipSync] Failed to access microphone:', err);
+      log.error('Failed to access microphone', err instanceof Error ? err : undefined, {
+        error: err instanceof Error ? err.message : String(err),
+      });
       throw err;
     }
   }
@@ -483,7 +501,7 @@ export class LAppLipSyncManager {
       } else {
         // External MediaElementSource - leave connected to keep audio playing
         // Just clear our reference so we don't try to reuse it incorrectly
-        console.debug('[LipSync] Keeping MediaElementSource connected for external element');
+        log.debug('Keeping MediaElementSource connected for external element');
         this._mediaSource = null;
       }
     }

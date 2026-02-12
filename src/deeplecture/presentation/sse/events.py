@@ -81,18 +81,11 @@ class EventPublisher:
                 return
 
             # Non-blocking put to all subscriber queues
-            dead_queues = []
             for q in subscribers:
                 try:
                     q.put_nowait(event_data)
                 except queue.Full:
-                    logger.warning("Subscriber queue full for %s", content_id)
-                    dead_queues.append(q)
-
-            # Remove dead/full queues
-            for q in dead_queues:
-                with contextlib.suppress(ValueError):
-                    subscribers.remove(q)
+                    logger.warning("Subscriber queue full for %s, event dropped", content_id)
 
     # =========================================================================
     # SUBSCRIPTION MANAGEMENT

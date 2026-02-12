@@ -44,6 +44,11 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
                     playback: { ...state.playback, autoSwitchSubtitlesOnLeave: value },
                 })),
 
+            setAutoSwitchVoiceoverOnLeave: (value) =>
+                set((state) => ({
+                    playback: { ...state.playback, autoSwitchVoiceoverOnLeave: value },
+                })),
+
             setSummaryThresholdSeconds: (seconds) =>
                 set((state) => ({
                     playback: { ...state.playback, summaryThresholdSeconds: seconds },

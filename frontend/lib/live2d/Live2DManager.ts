@@ -7,6 +7,9 @@
 import { CubismFramework, Option, LogLevel } from './live2dcubismframework';
 import { CubismMatrix44 } from './math/cubismmatrix44';
 import { CubismViewMatrix } from './math/cubismviewmatrix';
+import { logger } from '@/shared/infrastructure';
+
+const log = logger.scope('Live2DManager');
 
 // Global configuration
 export interface Live2DConfig {
@@ -67,7 +70,7 @@ export class Live2DManager {
    */
   public async initialize(config: Live2DConfig): Promise<boolean> {
     if (this._initialized) {
-      console.warn('Live2D Manager already initialized');
+      log.warn('Live2D Manager already initialized');
       return true;
     }
 
@@ -76,7 +79,7 @@ export class Live2DManager {
     // Get canvas
     this._canvas = document.getElementById(config.canvasId) as HTMLCanvasElement;
     if (!this._canvas) {
-      console.error(`Canvas with id "${config.canvasId}" not found`);
+      log.error(`Canvas with id "${config.canvasId}" not found`);
       return false;
     }
 
@@ -87,7 +90,7 @@ export class Live2DManager {
     // Initialize WebGL
     this._gl = this._canvas.getContext('webgl') || this._canvas.getContext('experimental-webgl') as WebGLRenderingContext;
     if (!this._gl) {
-      console.error('WebGL not supported');
+      log.error('WebGL not supported');
       return false;
     }
 
@@ -95,13 +98,13 @@ export class Live2DManager {
     const cubismOption = new Option();
     cubismOption.logFunction = (message: string) => {
       if (this._config?.debug) {
-        console.log(`[Live2D] ${message}`);
+        log.debug(`[Live2D] ${message}`);
       }
     };
     cubismOption.loggingLevel = this._config.debug ? LogLevel.LogLevel_Verbose : LogLevel.LogLevel_Off;
 
     if (!CubismFramework.startUp(cubismOption)) {
-      console.error('Failed to start Cubism Framework');
+      log.error('Failed to start Cubism Framework');
       return false;
     }
 
@@ -112,7 +115,7 @@ export class Live2DManager {
     this._projectionMatrix = new CubismMatrix44();
 
     this._initialized = true;
-    console.log('Live2D Manager initialized successfully');
+    log.info('Live2D Manager initialized successfully');
 
     return true;
   }

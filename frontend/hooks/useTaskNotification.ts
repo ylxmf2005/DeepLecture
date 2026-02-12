@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useNotificationSettings } from "@/stores/useGlobalSettingsStore";
-import { TASK_LABELS, normalizeTaskType } from "@/lib/taskTypes";
+import { getTaskNotificationLabel } from "@/lib/taskTypes";
+import { getOperationNotificationLabel } from "@/lib/operationLabels";
+import { buildVideoImportErrorHint } from "@/lib/videoImportErrorHints";
 
 const readNotificationPermission = () =>
     typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported";
 
 interface UseTaskNotificationReturn {
     notifyTaskComplete: (taskType: string, status: "ready" | "error", errorMessage?: string) => void;
+    notifyOperation: (operation: string, status: "success" | "error", errorMessage?: string) => void;
     requestNotificationPermission: () => Promise<boolean>;
     browserPermissionStatus: NotificationPermission | "unsupported";
 }
@@ -113,34 +116,31 @@ export function useTaskNotification(): UseTaskNotificationReturn {
         });
     }, []);
 
-    const notifyTaskComplete = useCallback(
-        (taskType: string, status: "ready" | "error", errorMessage?: string) => {
-            const normalized = normalizeTaskType(taskType);
-            const labels = TASK_LABELS[normalized];
-            if (!labels) {
-                return; // Unknown task type, skip notification
+    const emitToast = useCallback(
+        (isSuccess: boolean, message: string, errorMessage?: string) => {
+            if (!settings.toastNotificationsEnabled) {
+                return;
             }
 
-            const isSuccess = status === "ready";
-            const message = isSuccess ? labels.success : labels.error;
-
-            // 1. Toast notification (if enabled)
-            if (settings.toastNotificationsEnabled) {
-                if (isSuccess) {
-                    toast.success(message);
-                } else {
-                    toast.error(message, {
-                        description: errorMessage,
-                    });
-                }
+            if (isSuccess) {
+                toast.success(message);
+            } else {
+                toast.error(message, {
+                    description: errorMessage,
+                });
             }
+        },
+        [settings.toastNotificationsEnabled]
+    );
 
-            // 2. Flash title (if enabled and tab is in background)
+    const emitBackgroundNotification = useCallback(
+        (isSuccess: boolean, message: string) => {
+            // 1. Flash title (if enabled and tab is in background)
             if (settings.titleFlashEnabled && isSuccess) {
                 flashTitle(message);
             }
 
-            // 3. Browser notification (if enabled, permitted, and tab is hidden)
+            // 2. Browser notification (if enabled, permitted, and tab is hidden)
             if (settings.browserNotificationsEnabled) {
                 if (isSuccess) {
                     sendBrowserNotification("Task Complete", message);
@@ -149,11 +149,44 @@ export function useTaskNotification(): UseTaskNotificationReturn {
                 }
             }
         },
-        [settings, flashTitle, sendBrowserNotification]
+        [settings.titleFlashEnabled, settings.browserNotificationsEnabled, flashTitle, sendBrowserNotification]
+    );
+
+    const notifyTaskComplete = useCallback(
+        (taskType: string, status: "ready" | "error", errorMessage?: string) => {
+            const labels = getTaskNotificationLabel(taskType);
+
+            const isSuccess = status === "ready";
+            const message = isSuccess ? labels.success : labels.error;
+            const videoImportHint =
+                !isSuccess && taskType === "video_import_url"
+                    ? buildVideoImportErrorHint(errorMessage)
+                    : null;
+            const mergedErrorMessage =
+                videoImportHint && errorMessage
+                    ? `${videoImportHint}\n\nOriginal: ${errorMessage}`
+                    : videoImportHint || errorMessage;
+
+            emitToast(isSuccess, message, mergedErrorMessage);
+            emitBackgroundNotification(isSuccess, message);
+        },
+        [emitToast, emitBackgroundNotification]
+    );
+
+    const notifyOperation = useCallback(
+        (operation: string, status: "success" | "error", errorMessage?: string) => {
+            const labels = getOperationNotificationLabel(operation);
+            const isSuccess = status === "success";
+            const message = isSuccess ? labels.success : labels.error;
+
+            emitToast(isSuccess, message, errorMessage);
+        },
+        [emitToast]
     );
 
     return {
         notifyTaskComplete,
+        notifyOperation,
         requestNotificationPermission,
         browserPermissionStatus,
     };

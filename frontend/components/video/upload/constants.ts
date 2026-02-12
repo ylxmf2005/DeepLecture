@@ -1,5 +1,5 @@
-export const ALLOWED_VIDEO_EXTS = ["mp4", "webm", "mov"] as const;
-export const ALLOWED_VIDEO_MIMES = ["video/mp4", "video/webm", "video/quicktime"] as const;
+export const ALLOWED_VIDEO_EXTS = ["mp4", "webm", "mov", "avi", "mkv"] as const;
+export const ALLOWED_VIDEO_MIMES = ["video/mp4", "video/webm", "video/quicktime", "video/x-msvideo", "video/x-matroska"] as const;
 
 export const isAllowedVideo = (file: File): boolean => {
     const ext = file.name.split(".").pop()?.toLowerCase() || "";
