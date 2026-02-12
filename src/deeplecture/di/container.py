@@ -20,6 +20,7 @@ from deeplecture.infrastructure import (
     FFmpegVideoProcessor,
     FsArtifactStorage,
     FsAskStorage,
+    FsBookmarkStorage,
     FsCheatsheetStorage,
     FsExplanationStorage,
     FsFactVerificationStorage,
@@ -48,6 +49,7 @@ from deeplecture.infrastructure import (
 )
 from deeplecture.presentation.sse import EventPublisher
 from deeplecture.use_cases.ask import AskUseCase
+from deeplecture.use_cases.bookmark import BookmarkUseCase
 from deeplecture.use_cases.cheatsheet import CheatsheetUseCase
 from deeplecture.use_cases.content import ContentUseCase
 from deeplecture.use_cases.explanation import ExplanationUseCase
@@ -176,6 +178,13 @@ class Container:
         if "cheatsheet_storage" not in self._cache:
             self._cache["cheatsheet_storage"] = FsCheatsheetStorage(self.path_resolver)
         return self._cache["cheatsheet_storage"]  # type: ignore[return-value]
+
+    @property
+    def bookmark_storage(self) -> FsBookmarkStorage:
+        """Filesystem-based bookmark persistence."""
+        if "bookmark_storage" not in self._cache:
+            self._cache["bookmark_storage"] = FsBookmarkStorage(self.path_resolver)
+        return self._cache["bookmark_storage"]  # type: ignore[return-value]
 
     @property
     def quiz_storage(self) -> FsQuizStorage:
@@ -487,6 +496,16 @@ class Container:
                 config=self._settings.ask,
             )
         return self._cache["ask_uc"]  # type: ignore[return-value]
+
+    @property
+    def bookmark_usecase(self) -> BookmarkUseCase:
+        """Bookmark management use case."""
+        if "bookmark_uc" not in self._cache:
+            self._cache["bookmark_uc"] = BookmarkUseCase(
+                bookmark_storage=self.bookmark_storage,
+                metadata_storage=self.metadata_storage,
+            )
+        return self._cache["bookmark_uc"]  # type: ignore[return-value]
 
     @property
     def note_usecase(self) -> NoteUseCase:

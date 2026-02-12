@@ -2,6 +2,7 @@
 
 from deeplecture.infrastructure.repositories.fs_artifact_storage import FsArtifactStorage
 from deeplecture.infrastructure.repositories.fs_ask_storage import FsAskStorage
+from deeplecture.infrastructure.repositories.fs_bookmark_storage import FsBookmarkStorage
 from deeplecture.infrastructure.repositories.fs_cheatsheet_storage import FsCheatsheetStorage
 from deeplecture.infrastructure.repositories.fs_explanation_storage import FsExplanationStorage
 from deeplecture.infrastructure.repositories.fs_fact_verification_storage import FsFactVerificationStorage
@@ -22,6 +23,7 @@ from deeplecture.infrastructure.repositories.sqlite_task_storage import SQLiteTa
 __all__ = [
     "FsArtifactStorage",
     "FsAskStorage",
+    "FsBookmarkStorage",
     "FsCheatsheetStorage",
     "FsExplanationStorage",
     "FsFactVerificationStorage",

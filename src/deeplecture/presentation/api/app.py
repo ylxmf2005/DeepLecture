@@ -49,6 +49,7 @@ def _start_worker_pool() -> None:
 def _register_blueprints(app: Flask) -> None:
     """Register all API blueprints under /api prefix."""
     from deeplecture.presentation.api.routes import (
+        bookmark_bp,
         cheatsheet_bp,
         config_bp,
         content_bp,
@@ -69,6 +70,7 @@ def _register_blueprints(app: Flask) -> None:
         voiceover_bp,
     )
 
+    app.register_blueprint(bookmark_bp, url_prefix="/api/bookmarks")
     app.register_blueprint(config_bp, url_prefix="/api")
     app.register_blueprint(cheatsheet_bp, url_prefix="/api/cheatsheet")
     app.register_blueprint(content_bp, url_prefix="/api/content")

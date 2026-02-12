@@ -27,6 +27,7 @@ from deeplecture.infrastructure.providers import LLMProvider, TTSProvider
 from deeplecture.infrastructure.repositories import (
     FsArtifactStorage,
     FsAskStorage,
+    FsBookmarkStorage,
     FsCheatsheetStorage,
     FsExplanationStorage,
     FsFactVerificationStorage,
@@ -65,6 +66,7 @@ __all__ = [
     "FishAudioTTS",
     "FsArtifactStorage",
     "FsAskStorage",
+    "FsBookmarkStorage",
     "FsCheatsheetStorage",
     "FsExplanationStorage",
     "FsFactVerificationStorage",
