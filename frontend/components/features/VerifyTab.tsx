@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useCallback } from "react";
 import { ShieldCheck, RefreshCw, AlertCircle, FileText, Loader2 } from "lucide-react";
 import { ClaimCard } from "./ClaimCard";
-import { getFactVerificationReport, generateFactVerification, isAPIError } from "@/lib/api";
+import { getFactVerificationReport, generateFactVerification } from "@/lib/api";
 import { useLanguageSettings } from "@/stores/useGlobalSettingsStore";
 import { logger } from "@/shared/infrastructure";
+import { useSSEGenerationRetry } from "@/hooks/useSSEGenerationRetry";
 import type { FactVerificationReport } from "@/lib/verifyTypes";
 
 const log = logger.scope("VerifyTab");
@@ -18,112 +19,25 @@ interface VerifyTabProps {
 
 export function VerifyTab({ videoId, onSeek, refreshTrigger }: VerifyTabProps) {
     const { original: language } = useLanguageSettings();
-    const [report, setReport] = useState<FactVerificationReport | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [loadError, setLoadError] = useState<string | null>(null);
-    const [isGenerating, setIsGenerating] = useState(false);
 
-    // Track generating state across renders for SSE detection
-    const isGeneratingRef = useRef(isGenerating);
-    isGeneratingRef.current = isGenerating;
-
-    // Track previous refreshTrigger to detect SSE notifications
-    const prevRefreshTriggerRef = useRef(refreshTrigger);
-
-    // Load report on mount and when refreshTrigger changes (consistent with ExplanationList pattern)
-    // When refreshTrigger changes (SSE notification), it means task completed - we MUST reset isGenerating
-    useEffect(() => {
-        let cancelled = false;
-        let retryCount = 0;
-        const maxRetries = 3;
-        const retryDelayMs = 1000;
-
-        // Determine if this is an SSE-triggered reload (refreshTrigger changed while generating)
-        const wasGenerating = isGeneratingRef.current;
-        const triggerChanged = prevRefreshTriggerRef.current !== refreshTrigger;
-        const isSSETriggered = triggerChanged && wasGenerating;
-        prevRefreshTriggerRef.current = refreshTrigger;
-
-        const loadReport = async () => {
-            try {
-                setLoading(true);
-                log.debug("Loading verification report", { videoId, language, isSSETriggered, retryCount });
-                const existing = await getFactVerificationReport(videoId, language);
-                if (cancelled) return;
-                if (existing) {
-                    setReport(existing);
-                    setLoadError(null);
-                    // Report loaded successfully - if we were generating, task is now complete
-                    setIsGenerating(false);
-                    log.info("Verification report loaded", { videoId, language });
-                } else if (isSSETriggered && retryCount < maxRetries) {
-                    // SSE told us task completed but report not found yet - retry with delay
-                    // This handles race condition where SSE arrives before file is readable
-                    retryCount++;
-                    log.debug("Report not found after SSE, retrying...", { videoId, language, retryCount });
-                    setTimeout(() => {
-                        if (!cancelled) loadReport();
-                    }, retryDelayMs);
-                    return; // Don't set loading=false yet
-                } else if (isSSETriggered) {
-                    // Retries exhausted - SSE said done but no report, likely error
-                    log.warn("Report not found after retries, resetting state", { videoId, language });
-                    setIsGenerating(false);
-                    setLoadError("Verification completed but report not found. Please try again.");
-                }
-            } catch (err) {
-                if (cancelled) return;
-                if (isAPIError(err) && err.status === 404) {
-                    log.debug("No existing verification report (404)", { videoId, language });
-                    // If SSE triggered and got 404, retry or reset
-                    if (isSSETriggered && retryCount < maxRetries) {
-                        retryCount++;
-                        log.debug("404 after SSE, retrying...", { videoId, language, retryCount });
-                        setTimeout(() => {
-                            if (!cancelled) loadReport();
-                        }, retryDelayMs);
-                        return;
-                    } else if (isSSETriggered) {
-                        // Retries exhausted
-                        log.warn("404 after retries, resetting state", { videoId, language });
-                        setIsGenerating(false);
-                        setLoadError("Verification completed but report not found. Please try again.");
-                    }
-                } else {
-                    log.error("Failed to load verification report", err instanceof Error ? err : undefined);
-                    setLoadError("Failed to load report.");
-                    setIsGenerating(false);
-                }
-            } finally {
-                if (!cancelled) {
-                    setLoading(false);
-                }
-            }
-        };
-
-        if (videoId) {
-            loadReport();
-        }
-
-        return () => {
-            cancelled = true;
-        };
-    }, [videoId, language, refreshTrigger]);
-
-    const handleGenerate = useCallback(async () => {
-        setIsGenerating(true);
-        setLoadError(null);
-
-        try {
-            await generateFactVerification({ contentId: videoId, language });
-            // Task submitted, SSE will notify parent → parent bumps refreshTrigger → we re-fetch
-            // Keep isGenerating=true until report loads successfully in useEffect
-        } catch (err) {
-            log.error("Failed to start verification", err instanceof Error ? err : undefined);
-            setLoadError("Failed to start verification. Please try again.");
-            setIsGenerating(false);
-        }
+    const fetchContent = useCallback(async (): Promise<FactVerificationReport | null> => {
+        return await getFactVerificationReport(videoId, language);
     }, [videoId, language]);
+
+    const submitGeneration = useCallback(async () => {
+        return await generateFactVerification({ contentId: videoId, language });
+    }, [videoId, language]);
+
+    const { data: report, loading, loadError, isGenerating, clearError, handleGenerate } =
+        useSSEGenerationRetry<FactVerificationReport>({
+            contentId: videoId,
+            refreshTrigger,
+            fetchContent,
+            submitGeneration,
+            log,
+            extraDeps: [language],
+            taskType: "fact_verification",
+        });
 
     // Determine current state
     const hasReport = report !== null;
@@ -166,7 +80,7 @@ export function VerifyTab({ videoId, onSeek, refreshTrigger }: VerifyTabProps) {
                 <p className="text-foreground font-medium">Error</p>
                 <p className="text-sm text-muted-foreground max-w-xs">{loadError}</p>
                 <button
-                    onClick={() => setLoadError(null)}
+                    onClick={clearError}
                     className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
                 >
                     Dismiss

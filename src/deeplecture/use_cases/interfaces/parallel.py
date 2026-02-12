@@ -15,6 +15,8 @@ ParallelGroup = Literal[
     "timeline_units",
     "note_parts",
     "voiceover_tts",
+    "slide_lecture_tts",
+    "slide_lecture_video",
 ]
 
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import type { VideoPlayerRef } from "@/components/video/VideoPlayer";
 import type { TimelineEntry } from "@/lib/api";
 
@@ -10,6 +10,49 @@ import type { TimelineEntry } from "@/lib/api";
  * floating-point rounding.
  */
 export const SMART_SKIP_EPS = 0.25;
+
+/**
+ * Binary search to check whether `time` falls within any kept entry.
+ * Entries MUST be sorted by `start` ascending.
+ */
+function isInKeptEntry(time: number, entries: TimelineEntry[]): boolean {
+    let lo = 0;
+    let hi = entries.length - 1;
+
+    while (lo <= hi) {
+        const mid = (lo + hi) >>> 1;
+        const entry = entries[mid];
+
+        if (time < entry.start - SMART_SKIP_EPS) {
+            hi = mid - 1;
+        } else if (time >= entry.end) {
+            lo = mid + 1;
+        } else {
+            // entry.start - EPS <= time < entry.end
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Binary search for the first entry whose start is > threshold.
+ * Entries MUST be sorted by `start` ascending.
+ */
+function findNextEntry(threshold: number, entries: TimelineEntry[]): TimelineEntry | undefined {
+    let lo = 0;
+    let hi = entries.length;
+
+    while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (entries[mid].start > threshold) {
+            hi = mid;
+        } else {
+            lo = mid + 1;
+        }
+    }
+    return lo < entries.length ? entries[lo] : undefined;
+}
 
 export interface UseSmartSkipOptions {
     playerRef: React.RefObject<VideoPlayerRef | null>;
@@ -46,9 +89,16 @@ export function useSmartSkip({
 }: UseSmartSkipOptions): UseSmartSkipReturn {
     const lastSkipTargetRef = useRef<number | null>(null);
 
+    // Ensure entries are sorted by start time for binary search.
+    const sortedEntries = useMemo(() => {
+        const copy = [...timelineEntries];
+        copy.sort((a, b) => a.start - b.start);
+        return copy;
+    }, [timelineEntries]);
+
     const handleSmartSkipCheck = useCallback(
         (time: number): boolean => {
-            if (!skipRamblingEnabled || timelineEntries.length === 0) {
+            if (!skipRamblingEnabled || sortedEntries.length === 0) {
                 return false; // No skip, allow normal UI update
             }
 
@@ -59,11 +109,7 @@ export function useSmartSkip({
                 // Only clear the target once we've actually entered a kept
                 // timeline entry, allowing for a small epsilon around the start
                 // time to account for keyframe-based seeking.
-                const inKeptAfterSkip = timelineEntries.some(
-                    (entry) =>
-                        time >= entry.start - SMART_SKIP_EPS &&
-                        time < entry.end
-                );
+                const inKeptAfterSkip = isInKeptEntry(time, sortedEntries);
 
                 if (!inKeptAfterSkip) {
                     // Still skipping, update time but signal skip in progress
@@ -74,18 +120,10 @@ export function useSmartSkip({
                 lastSkipTargetRef.current = null;
             }
 
-            const inKept = timelineEntries.some(
-                (entry) =>
-                    time >= entry.start - SMART_SKIP_EPS &&
-                    time < entry.end
-            );
+            const inKept = isInKeptEntry(time, sortedEntries);
 
             if (!inKept) {
-                const nextEntry = timelineEntries.find(
-                    (entry) =>
-                        entry.start >
-                        time + SMART_SKIP_EPS
-                );
+                const nextEntry = findNextEntry(time + SMART_SKIP_EPS, sortedEntries);
                 if (nextEntry) {
                     lastSkipTargetRef.current = nextEntry.start;
                     playerRef.current?.seekTo(nextEntry.start);
@@ -95,7 +133,7 @@ export function useSmartSkip({
 
             return false; // No skip, allow normal UI update
         },
-        [skipRamblingEnabled, timelineEntries, setCurrentTime, playerRef]
+        [skipRamblingEnabled, sortedEntries, setCurrentTime, playerRef]
     );
 
     const handleSeek = useCallback(

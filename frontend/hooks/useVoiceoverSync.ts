@@ -155,9 +155,30 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
     const pendingStartSyncCleanupRef = useRef<(() => void) | null>(null);
     // Store pre-sync video state to restore when exiting voiceover mode
     const preSyncVideoStateRef = useRef<{ muted: boolean; volume: number } | null>(null);
+    // Whether media was playing when tab became hidden.
+    // Used to preserve playback intent when hidden-tab policies pause <video>.
+    const wasPlayingOnHideRef = useRef(false);
 
     const [isActive, setIsActive] = useState(false);
     const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
+
+    // Track whether media was playing when tab became hidden, regardless of
+    // whether a voiceover <audio> element is currently mounted.
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        const handleVisibilityCapture = () => {
+            if (document.hidden) {
+                wasPlayingOnHideRef.current = !video.paused && !video.ended;
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityCapture);
+        return () => {
+            document.removeEventListener("visibilitychange", handleVisibilityCapture);
+        };
+    }, []);
 
     /**
      * Core sync tick - runs every tickIntervalMs when sync is active
@@ -272,9 +293,6 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
             };
         }
 
-        // Always keep video muted in sync mode; audio will play the voiceover
-        video.muted = true;
-
         // Apply user playback rate to audio immediately
         audio.playbackRate = clamp(userRateRef.current, 0.25, 4.0);
 
@@ -301,10 +319,25 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
                 setCurrentSegmentIndex(0);
             }
 
-            // If video was playing, start audio too
-            if (!video.paused) {
-                audio.play().catch(() => {
-                    // Autoplay blocked: rollback to prevent "silent video" state
+            // If media was playing, start audio too.
+            // In hidden tabs, browsers can auto-pause <video>, so we also rely on
+            // captured pre-hide playback intent.
+            const shouldContinuePlayback = !video.paused || (document.hidden && wasPlayingOnHideRef.current);
+            if (shouldContinuePlayback) {
+                audio.play().then(() => {
+                    // Mute video only after voiceover audio actually starts.
+                    // If audio startup is blocked in hidden tab, keeping video unmuted
+                    // avoids browser "muted hidden video" auto-pause behavior.
+                    video.muted = true;
+                }).catch(() => {
+                    // In hidden tabs, play() can be blocked by autoplay policy.
+                    // Keep sync active and retry when tab becomes visible.
+                    if (document.hidden) {
+                        log.warn("Audio play blocked in hidden tab - will retry on visible");
+                        return;
+                    }
+
+                    // Foreground failure: rollback to prevent "silent video" state
                     log.warn("Audio play blocked on startSync - rolling back");
                     stopTickLoop();
                     isActiveRef.current = false;
@@ -318,7 +351,12 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
                         preSyncVideoStateRef.current = null;
                     }
                     video.playbackRate = userRateRef.current;
-                    video.pause();
+                    // Keep normal video playback when sync startup fails.
+                    if (shouldContinuePlayback && video.paused) {
+                        video.play().catch(() => {
+                            // ignore: user can manually resume
+                        });
+                    }
                 });
             }
 
@@ -497,6 +535,9 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
         if (isActiveRef.current) {
             // Sync mode: audio leads
             try {
+                if (video) {
+                    video.muted = true;
+                }
                 if (audio) await audio.play();
                 if (video) {
                     // Sync video position before playing
@@ -592,10 +633,20 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
 
         const handleVideoPlay = () => {
             if (isActiveRef.current && audio.paused) {
+                video.muted = true;
                 audio.play().then(() => {
                     startTickLoop();
                 }).catch(() => {
-                    video.pause();
+                    if (!document.hidden) {
+                        const preSyncState = preSyncVideoStateRef.current;
+                        if (preSyncState) {
+                            video.muted = preSyncState.muted;
+                            video.volume = preSyncState.volume;
+                        } else {
+                            video.muted = false;
+                        }
+                        stopTickLoop();
+                    }
                 });
             } else if (isActiveRef.current && !audio.paused) {
                 startTickLoop();
@@ -643,16 +694,38 @@ export function useVoiceoverSync(options: UseVoiceoverSyncOptions = {}): UseVoic
         // Handle visibility change - restore playback when tab becomes visible
         // Chrome auto-pauses muted videos when tab is hidden, we need to resume
         const handleVisibilityChange = () => {
-            if (!document.hidden && isActiveRef.current) {
+            if (document.hidden) return;
+
+            if (isActiveRef.current) {
+                // If audio failed to start while hidden, retry on return.
+                if (wasPlayingOnHideRef.current && audio.paused) {
+                    video.muted = true;
+                    audio.play().catch(() => {
+                        // Fallback: if audio is still blocked, restore normal video playback
+                        // so tab switching never leaves the player stuck in paused state.
+                        const preSyncState = preSyncVideoStateRef.current;
+                        if (preSyncState) {
+                            video.muted = preSyncState.muted;
+                            video.volume = preSyncState.volume;
+                        } else {
+                            video.muted = false;
+                        }
+                        video.play().catch(() => {
+                            // ignore: user can manually resume
+                        });
+                    });
+                }
+
                 // Tab became visible, check if we need to restore playback
-                // Audio continues playing in background, but video was paused by browser
+                // Audio may continue in background while video was auto-paused by browser.
                 if (!audio.paused && video.paused) {
                     video.play().catch(() => {
-                        // If video play fails, pause audio to keep sync
-                        audio.pause();
+                        // Ignore; keep audio state and let user manually resume video.
                     });
                 }
             }
+
+            wasPlayingOnHideRef.current = false;
         };
 
         document.addEventListener("visibilitychange", handleVisibilityChange);

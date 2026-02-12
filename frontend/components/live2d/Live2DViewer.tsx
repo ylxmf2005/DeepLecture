@@ -244,7 +244,7 @@ const Live2DViewer = forwardRef<Live2DViewerHandle, Live2DViewerProps>(({
           LAppPal.updateTime();
 
           const cubismOption = new Option();
-          cubismOption.logFunction = (msg: string) => console.log(`[Live2D] ${msg}`);
+          cubismOption.logFunction = (msg: string) => log.debug(`[Live2D] ${msg}`);
           cubismOption.loggingLevel = LogLevel.LogLevel_Verbose;
 
           if (!CubismFramework.startUp(cubismOption)) {
@@ -260,7 +260,7 @@ const Live2DViewer = forwardRef<Live2DViewerHandle, Live2DViewerProps>(({
               const { CubismMotionSync, MotionSyncOption } = await import('@/lib/live2d/motionsync/live2dcubismmotionsync');
 
               const motionSyncOption = new MotionSyncOption();
-              motionSyncOption.logFunction = (msg: string) => console.log(`[MotionSync] ${msg}`);
+              motionSyncOption.logFunction = (msg: string) => log.debug(`[MotionSync] ${msg}`);
               motionSyncOption.loggingLevel = LogLevel.LogLevel_Verbose;
 
               if (CubismMotionSync.startUp(motionSyncOption)) {

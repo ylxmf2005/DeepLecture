@@ -10,7 +10,7 @@ import { useVoiceoverSync } from "@/hooks/useVoiceoverSync";
 import { VideoControls } from "./VideoControls";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
-import { toast } from "sonner";
+import { useTaskNotification } from "@/hooks/useTaskNotification";
 
 const log = logger.scope("VideoPlayer");
 
@@ -88,6 +88,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
         const [duration, setDuration] = useState(0);
         const [isPlaying, setIsPlaying] = useState(false);
         const [showLanguageMenu, setShowLanguageMenu] = useState(false);
+        const { notifyOperation } = useTaskNotification();
         const containerRef = useRef<HTMLDivElement>(null);
         const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -163,7 +164,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
             if (!onVoiceoverChange) return;
 
             if (quickToggleTranslatedVoiceoverId == null) {
-                toast.info("Set up quick toggle presets in the Actions dialog first");
+                notifyOperation("voiceover_quick_toggle_preset", "error");
                 return;
             }
 
@@ -171,7 +172,13 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
             const isOnOriginal = voiceoverId === (quickToggleOriginalVoiceoverId ?? null);
             const newId = isOnOriginal ? quickToggleTranslatedVoiceoverId : (quickToggleOriginalVoiceoverId ?? null);
             onVoiceoverChange(newId);
-        }, [onVoiceoverChange, voiceoverId, quickToggleOriginalVoiceoverId, quickToggleTranslatedVoiceoverId]);
+        }, [
+            notifyOperation,
+            onVoiceoverChange,
+            voiceoverId,
+            quickToggleOriginalVoiceoverId,
+            quickToggleTranslatedVoiceoverId,
+        ]);
 
         // Keyboard shortcuts
         const handleKeyDown = useCallback((e: KeyboardEvent) => {

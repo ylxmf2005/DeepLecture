@@ -14,6 +14,7 @@ import {
 import { useConfirmDialog } from "@/contexts/ConfirmDialogContext";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
+import { useTaskNotification } from "@/hooks/useTaskNotification";
 
 const log = logger.scope("AskTab");
 
@@ -46,6 +47,7 @@ export function AskTab({
     const [loading, setLoading] = useState(false);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const { confirm } = useConfirmDialog();
+    const { notifyOperation } = useTaskNotification();
 
     const scrollToBottom = () => {
         const container = messagesContainerRef.current;
@@ -97,6 +99,7 @@ export function AskTab({
                 setMessages(full.conversation.messages);
             } catch (error) {
                 log.error("Failed to initialize Ask conversations", toError(error), { videoId });
+                notifyOperation("conversation_load", "error", toError(error).message);
             } finally {
                 if (!cancelled) {
                     setLoadingConversations(false);
@@ -111,7 +114,7 @@ export function AskTab({
         return () => {
             cancelled = true;
         };
-    }, [videoId]);
+    }, [videoId, notifyOperation]);
 
     const handleSelectConversation = async (conversation: AskConversationSummary) => {
         if (conversation.id === activeConversationId) {
@@ -127,6 +130,7 @@ export function AskTab({
             setMessages(full.conversation.messages);
         } catch (error) {
             log.error("Failed to load conversation", toError(error), { videoId, conversationId: conversation.id });
+            notifyOperation("conversation_load", "error", toError(error).message);
         } finally {
             setLoading(false);
             setShowHistory(false);
@@ -152,6 +156,7 @@ export function AskTab({
             setShowHistory(false);
         } catch (error) {
             log.error("Failed to create conversation", toError(error), { videoId });
+            notifyOperation("conversation_create", "error", toError(error).message);
         } finally {
             setLoadingConversations(false);
         }
@@ -171,6 +176,7 @@ export function AskTab({
         try {
             await deleteAskConversation(videoId, conversation.id);
             setConversations((prev) => prev.filter((c) => c.id !== conversation.id));
+            notifyOperation("conversation_delete", "success");
 
             if (conversation.id === activeConversationId) {
                 // If the active one was deleted, switch to the next available or clear.
@@ -185,6 +191,7 @@ export function AskTab({
             }
         } catch (error) {
             log.error("Failed to delete conversation", toError(error), { videoId, conversationId: conversation.id });
+            notifyOperation("conversation_delete", "error", toError(error).message);
         }
     };
 
@@ -224,6 +231,7 @@ export function AskTab({
             ]);
         } catch (error) {
             log.error("Failed to send message", toError(error), { videoId, conversationId: activeConversationId });
+            notifyOperation("conversation_message", "error", toError(error).message);
             setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I encountered an error while processing your request." }]);
         } finally {
             setLoading(false);

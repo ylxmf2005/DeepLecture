@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import { ScrollText, RefreshCw, AlertCircle, Loader2, Pencil, Save, X, Sparkles } from "lucide-react";
-import { getVideoCheatsheet, saveVideoCheatsheet, generateVideoCheatsheet, isAPIError } from "@/lib/api";
+import { getVideoCheatsheet, saveVideoCheatsheet, generateVideoCheatsheet } from "@/lib/api";
 import { useLanguageSettings } from "@/stores/useGlobalSettingsStore";
 import { MarkdownRenderer } from "@/components/editor/MarkdownRenderer";
 import { logger } from "@/shared/infrastructure";
+import { toError } from "@/lib/utils/errorUtils";
+import { useSSEGenerationRetry } from "@/hooks/useSSEGenerationRetry";
 
 const log = logger.scope("CheatsheetTab");
 
@@ -16,113 +18,48 @@ interface CheatsheetTabProps {
     onAddToNotes?: (markdown: string) => void;
 }
 
+interface CheatsheetData {
+    content: string;
+    updatedAt: string | null;
+}
+
 export function CheatsheetTab({ videoId, onSeek, refreshTrigger, onAddToNotes }: CheatsheetTabProps) {
     const { translated: language } = useLanguageSettings();
-    const [content, setContent] = useState<string>("");
-    const [updatedAt, setUpdatedAt] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [loadError, setLoadError] = useState<string | null>(null);
-    const [isGenerating, setIsGenerating] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editContent, setEditContent] = useState("");
     const [isSaving, setIsSaving] = useState(false);
 
-    // Track generating state across renders for SSE detection
-    const isGeneratingRef = useRef(isGenerating);
-    isGeneratingRef.current = isGenerating;
-
-    // Track previous refreshTrigger to detect SSE notifications
-    const prevRefreshTriggerRef = useRef(refreshTrigger);
-
-    // Load cheatsheet on mount and when refreshTrigger changes
-    useEffect(() => {
-        let cancelled = false;
-        let retryCount = 0;
-        const maxRetries = 3;
-        const retryDelayMs = 1000;
-
-        const wasGenerating = isGeneratingRef.current;
-        const triggerChanged = prevRefreshTriggerRef.current !== refreshTrigger;
-        const isSSETriggered = triggerChanged && wasGenerating;
-        prevRefreshTriggerRef.current = refreshTrigger;
-
-        const loadCheatsheet = async () => {
-            try {
-                setLoading(true);
-                log.debug("Loading cheatsheet", { videoId, isSSETriggered, retryCount });
-                const result = await getVideoCheatsheet(videoId);
-                if (cancelled) return;
-
-                if (result.content) {
-                    setContent(result.content);
-                    setUpdatedAt(result.updatedAt);
-                    setLoadError(null);
-                    setIsGenerating(false);
-                    log.info("Cheatsheet loaded", { videoId });
-                } else if (isSSETriggered && retryCount < maxRetries) {
-                    retryCount++;
-                    log.debug("Cheatsheet not found after SSE, retrying...", { videoId, retryCount });
-                    setTimeout(() => {
-                        if (!cancelled) loadCheatsheet();
-                    }, retryDelayMs);
-                    return;
-                } else if (isSSETriggered) {
-                    log.warn("Cheatsheet not found after retries", { videoId });
-                    setIsGenerating(false);
-                    setLoadError("Generation completed but content not found. Please try again.");
-                }
-            } catch (err) {
-                if (cancelled) return;
-                if (isAPIError(err) && err.status === 404) {
-                    if (isSSETriggered && retryCount < maxRetries) {
-                        retryCount++;
-                        setTimeout(() => {
-                            if (!cancelled) loadCheatsheet();
-                        }, retryDelayMs);
-                        return;
-                    }
-                    log.debug("No existing cheatsheet (404)", { videoId });
-                } else {
-                    log.error("Failed to load cheatsheet", err instanceof Error ? err : undefined);
-                    setLoadError("Failed to load cheatsheet.");
-                    setIsGenerating(false);
-                }
-            } finally {
-                if (!cancelled) {
-                    setLoading(false);
-                }
-            }
-        };
-
-        if (videoId) {
-            loadCheatsheet();
+    const fetchContent = useCallback(async (): Promise<CheatsheetData | null> => {
+        const result = await getVideoCheatsheet(videoId);
+        if (result.content) {
+            return { content: result.content, updatedAt: result.updatedAt };
         }
+        return null;
+    }, [videoId]);
 
-        return () => {
-            cancelled = true;
-        };
-    }, [videoId, refreshTrigger]);
-
-    const handleGenerate = useCallback(async () => {
-        setIsGenerating(true);
-        setLoadError(null);
-
-        try {
-            await generateVideoCheatsheet({
-                contentId: videoId,
-                language: language || "en",
-                contextMode: "auto",
-                minCriticality: "medium",
-                targetPages: 2,
-                subjectType: "auto",
-            });
-            // Task submitted, SSE will notify completion
-        } catch (err) {
-            log.error("Failed to start cheatsheet generation", err instanceof Error ? err : undefined);
-            setLoadError("Failed to start generation. Please try again.");
-            setIsGenerating(false);
-        }
+    const submitGeneration = useCallback(async () => {
+        return await generateVideoCheatsheet({
+            contentId: videoId,
+            language: language || "en",
+            contextMode: "auto",
+            minCriticality: "medium",
+            targetPages: 2,
+            subjectType: "auto",
+        });
     }, [videoId, language]);
+
+    const { data, loading, loadError, isGenerating, clearError, handleGenerate } =
+        useSSEGenerationRetry<CheatsheetData>({
+            contentId: videoId,
+            refreshTrigger,
+            fetchContent,
+            submitGeneration,
+            log,
+            taskType: "cheatsheet_generation",
+        });
+
+    const content = data?.content ?? "";
+    const updatedAt = data?.updatedAt ?? null;
 
     const handleEdit = useCallback(() => {
         setEditContent(content);
@@ -137,15 +74,12 @@ export function CheatsheetTab({ videoId, onSeek, refreshTrigger, onAddToNotes }:
     const handleSave = useCallback(async () => {
         setIsSaving(true);
         try {
-            const result = await saveVideoCheatsheet(videoId, editContent);
-            setContent(result.content);
-            setUpdatedAt(result.updatedAt);
+            await saveVideoCheatsheet(videoId, editContent);
             setIsEditing(false);
             setEditContent("");
             log.info("Cheatsheet saved", { videoId });
         } catch (err) {
-            log.error("Failed to save cheatsheet", err instanceof Error ? err : undefined);
-            setLoadError("Failed to save. Please try again.");
+            log.error("Failed to save cheatsheet", toError(err));
         } finally {
             setIsSaving(false);
         }
@@ -197,7 +131,7 @@ export function CheatsheetTab({ videoId, onSeek, refreshTrigger, onAddToNotes }:
                 <p className="text-foreground font-medium">Error</p>
                 <p className="text-sm text-muted-foreground max-w-xs">{loadError}</p>
                 <button
-                    onClick={() => setLoadError(null)}
+                    onClick={clearError}
                     className="text-sm text-amber-600 dark:text-amber-400 hover:underline"
                 >
                     Dismiss

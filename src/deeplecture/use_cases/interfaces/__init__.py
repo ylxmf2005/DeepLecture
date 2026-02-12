@@ -13,6 +13,9 @@ from deeplecture.use_cases.interfaces.cheatsheet import CheatsheetStorageProtoco
 # Events
 from deeplecture.use_cases.interfaces.events import EventPublisherProtocol
 
+# Explanation
+from deeplecture.use_cases.interfaces.explanation import ExplanationStorageProtocol
+
 # Fact Verification
 from deeplecture.use_cases.interfaces.fact_verification import (
     ClaudeCodeProtocol,
@@ -77,6 +80,7 @@ __all__ = [
     "CheatsheetStorageProtocol",
     "ClaudeCodeProtocol",
     "EventPublisherProtocol",
+    "ExplanationStorageProtocol",
     "FactVerificationStorageProtocol",
     "FileStorageProtocol",
     "LLMModelInfo",

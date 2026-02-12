@@ -125,15 +125,17 @@ def build_summarize_context_user_prompt(context_block: str) -> str:
     )
 
 
-def get_response_language() -> str:
+def get_response_language(language: str | None = None) -> str:
     """
-    Get response language based on configuration.
+    Get response language.
 
-    For now, defaults to Simplified Chinese.
-    In the future, this could read from environment or config.
+    Args:
+        language: Explicit language override. If not provided, defaults to
+                  "Simplified Chinese".
 
     Returns:
         Language string
     """
-    # TODO: Read from config or environment
+    if language and language.strip():
+        return language.strip()
     return "Simplified Chinese"

@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
+from deeplecture.domain import Segment
 from deeplecture.use_cases.dto.quiz import (
     GenerateQuizRequest,
     QuizItem,
     QuizStats,
 )
+from deeplecture.use_cases.interfaces.prompt_registry import PromptSpec
 from deeplecture.use_cases.quiz import QuizUseCase, validate_quiz_item
 
 # =============================================================================
@@ -190,19 +192,24 @@ def mock_quiz_storage() -> MagicMock:
 def mock_subtitle_storage() -> MagicMock:
     """Create mock subtitle storage."""
     storage = MagicMock()
-    storage.load.return_value = (
-        [
-            {"start": 0.0, "end": 5.0, "text": "Introduction to relativity."},
-            {"start": 5.0, "end": 10.0, "text": "E equals mc squared."},
-        ],
-        datetime.now(timezone.utc),
-    )
+    segments = [
+        Segment(start=0.0, end=5.0, text="Introduction to relativity."),
+        Segment(start=5.0, end=10.0, text="E equals mc squared."),
+    ]
+
+    def load_side_effect(content_id: str, language: str) -> list[Segment] | None:
+        if content_id == "test-content-id" and language == "en_enhanced":
+            return segments
+        return None
+
+    storage.load.side_effect = load_side_effect
+    storage.list_languages.return_value = ["en_enhanced", "en"]
     return storage
 
 
 @pytest.fixture
 def mock_llm() -> MagicMock:
-    """Create mock LLM provider."""
+    """Create mock LLM instance."""
     llm = MagicMock()
     # Mock for knowledge extraction (first call)
     extraction_response = json.dumps(
@@ -228,8 +235,16 @@ def mock_llm() -> MagicMock:
             }
         ]
     )
-    llm.complete = AsyncMock(side_effect=[extraction_response, quiz_response])
+    llm.complete.side_effect = [extraction_response, quiz_response]
     return llm
+
+
+@pytest.fixture
+def mock_llm_provider(mock_llm: MagicMock) -> MagicMock:
+    """Create mock LLM provider."""
+    provider = MagicMock()
+    provider.get.return_value = mock_llm
+    return provider
 
 
 @pytest.fixture
@@ -239,18 +254,33 @@ def mock_path_resolver() -> MagicMock:
 
 
 @pytest.fixture
+def mock_prompt_registry() -> MagicMock:
+    """Create mock prompt registry."""
+    registry = MagicMock()
+    builder = MagicMock()
+    builder.build.return_value = PromptSpec(
+        user_prompt="test user prompt",
+        system_prompt="test system prompt",
+    )
+    registry.get.return_value = builder
+    return registry
+
+
+@pytest.fixture
 def quiz_usecase(
     mock_quiz_storage: MagicMock,
     mock_subtitle_storage: MagicMock,
-    mock_llm: MagicMock,
+    mock_llm_provider: MagicMock,
     mock_path_resolver: MagicMock,
+    mock_prompt_registry: MagicMock,
 ) -> QuizUseCase:
     """Create QuizUseCase with mocked dependencies."""
     return QuizUseCase(
         quiz_storage=mock_quiz_storage,
         subtitle_storage=mock_subtitle_storage,
-        llm_provider=mock_llm,
+        llm_provider=mock_llm_provider,
         path_resolver=mock_path_resolver,
+        prompt_registry=mock_prompt_registry,
     )
 
 
@@ -313,15 +343,13 @@ class TestQuizUseCaseGenerate:
         mock_quiz_storage: MagicMock,
     ) -> None:
         """generate() should create quiz from subtitles."""
-        import asyncio
-
         request = GenerateQuizRequest(
             content_id="test-content-id",
             language="en",
             question_count=5,
         )
 
-        result = asyncio.get_event_loop().run_until_complete(quiz_usecase.generate(request))
+        result = quiz_usecase.generate(request)
 
         assert result.content_id == "test-content-id"
         assert len(result.items) >= 1
@@ -334,8 +362,6 @@ class TestQuizUseCaseGenerate:
         mock_llm: MagicMock,
     ) -> None:
         """generate() should filter out invalid quiz items."""
-        import asyncio
-
         # Return mix of valid and invalid items
         extraction_response = json.dumps(
             [{"category": "formula", "content": "Test", "criticality": "high", "tags": []}]
@@ -362,7 +388,7 @@ class TestQuizUseCaseGenerate:
                 },
             ]
         )
-        mock_llm.complete = AsyncMock(side_effect=[extraction_response, quiz_response])
+        mock_llm.complete.side_effect = [extraction_response, quiz_response]
 
         request = GenerateQuizRequest(
             content_id="test-content-id",
@@ -370,7 +396,7 @@ class TestQuizUseCaseGenerate:
             question_count=3,
         )
 
-        result = asyncio.get_event_loop().run_until_complete(quiz_usecase.generate(request))
+        result = quiz_usecase.generate(request)
 
         # Only the valid item should remain
         assert len(result.items) == 1
@@ -383,9 +409,7 @@ class TestQuizUseCaseGenerate:
         mock_subtitle_storage: MagicMock,
     ) -> None:
         """generate() should raise when no content available."""
-        import asyncio
-
-        mock_subtitle_storage.load.return_value = None
+        mock_subtitle_storage.list_languages.return_value = []
 
         request = GenerateQuizRequest(
             content_id="empty-content-id",
@@ -393,7 +417,7 @@ class TestQuizUseCaseGenerate:
         )
 
         with pytest.raises(ValueError, match="No content available"):
-            asyncio.get_event_loop().run_until_complete(quiz_usecase.generate(request))
+            quiz_usecase.generate(request)
 
 
 class TestQuizStats:

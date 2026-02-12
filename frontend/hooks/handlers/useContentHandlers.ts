@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback } from "react";
-import { toast } from "sonner";
 import { captureSlide } from "@/lib/api";
 import type { AskContextItem } from "@/lib/askTypes";
 import type { Subtitle } from "@/lib/srt";
@@ -10,6 +9,7 @@ import { findSubtitleAtTime } from "@/lib/subtitleSearch";
 import type { CrepeEditor } from "@/components/editor/MarkdownNoteEditor";
 import { useTabLayoutStore, findTabPanel, type TabId } from "@/stores/tabLayoutStore";
 import { logger } from "@/shared/infrastructure";
+import { useTaskNotification } from "@/hooks/useTaskNotification";
 
 const log = logger.scope("ContentHandlers");
 
@@ -42,6 +42,7 @@ export function useContentHandlers({
     noteEditorRef,
     setAskContext,
 }: UseContentHandlersOptions): UseContentHandlersReturn {
+    const { notifyOperation } = useTaskNotification();
     const activateTab = useCallback((tabId: TabId) => {
         const { panels, setActiveTab } = useTabLayoutStore.getState();
         const panel = findTabPanel(panels, tabId);
@@ -106,10 +107,10 @@ export function useContentHandlers({
                 const currentStored = localStorage.getItem(storageKey) ?? "";
                 const storedPrefix = currentStored.trim().length > 0 ? "\n\n" : "";
                 localStorage.setItem(storageKey, `${currentStored}${storedPrefix}${newContent}\n\n`);
-                toast.info("Note saved to local storage. Refresh to see in editor.");
+                notifyOperation("note_local_fallback", "success");
             }
         },
-        [noteEditorRef, videoId]
+        [noteEditorRef, notifyOperation, videoId]
     );
 
     const handleAskAtTime = useCallback(

@@ -1,11 +1,11 @@
 "use client";
 
 import { useRef, useCallback, useEffect } from "react";
-import { toast } from "sonner";
 import { getVideoNote, generateVideoNote } from "@/lib/api";
 import { useNoteSettings } from "@/stores/useGlobalSettingsStore";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
+import { useTaskNotification } from "@/hooks/useTaskNotification";
 import type { CrepeEditor } from "@/components/editor/MarkdownNoteEditor";
 
 const log = logger.scope("NoteGeneration");
@@ -46,6 +46,7 @@ export function useNoteGeneration({
 }: UseNoteGenerationParams): UseNoteGenerationReturn {
     const noteEditorRef = useRef<CrepeEditor | null>(null);
     const noteSettings = useNoteSettings();
+    const { notifyTaskComplete, notifyOperation } = useTaskNotification();
     // Track if we triggered the generation (vs page load with existing task)
     const didTriggerGenerationRef = useRef(false);
     // Track previous generatingNote state to detect completion
@@ -68,29 +69,29 @@ export function useNoteGeneration({
                 const editor = noteEditorRef.current;
                 if (!editor) {
                     log.warn("Editor not ready when note generation completed", { videoId });
+                    notifyTaskComplete("note_generation", "error", "Notes editor is not ready");
                     return;
                 }
 
                 try {
                     const note = await getVideoNote(videoId);
                     editor.setMarkdown(note.content || "");
-                    toast.success("Note generated successfully");
                 } catch (error) {
                     log.error("Failed to load note after generation", toError(error), { videoId });
-                    toast.error("Failed to load generated note");
+                    notifyOperation("note_load", "error", toError(error).message);
                 }
             };
 
             loadNote();
         }
-    }, [generatingNote, videoId]);
+    }, [generatingNote, notifyOperation, notifyTaskComplete, videoId]);
 
     const handleGenerateNote = useCallback(async () => {
         if (!videoId || generatingNote) return;
 
         const editor = noteEditorRef.current;
         if (!editor) {
-            toast.error("Notes editor is not ready yet.");
+            notifyOperation("note_editor_unavailable", "error");
             return;
         }
 
@@ -114,6 +115,7 @@ export function useNoteGeneration({
             if (start.status === "ready" || !start.taskId) {
                 const note = await getVideoNote(videoId);
                 editor.setMarkdown(note.content || "");
+                notifyTaskComplete("note_generation", "ready");
                 setGeneratingNote(false);
                 didTriggerGenerationRef.current = false;
                 return;
@@ -124,11 +126,21 @@ export function useNoteGeneration({
             log.info("Note generation task submitted", { videoId, taskId: start.taskId });
         } catch (error) {
             log.error("Failed to start note generation", toError(error), { videoId });
-            toast.error("Failed to start note generation");
+            notifyTaskComplete("note_generation", "error", toError(error).message);
             setGeneratingNote(false);
             didTriggerGenerationRef.current = false;
         }
-    }, [videoId, targetLanguage, learnerProfile, generatingNote, setGeneratingNote, confirm, noteSettings.contextMode]);
+    }, [
+        videoId,
+        targetLanguage,
+        learnerProfile,
+        generatingNote,
+        setGeneratingNote,
+        confirm,
+        noteSettings.contextMode,
+        notifyOperation,
+        notifyTaskComplete,
+    ]);
 
     return {
         noteEditorRef,

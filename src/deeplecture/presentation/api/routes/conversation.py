@@ -111,6 +111,7 @@ def ask_question(conversation_id: str) -> Response:
     raw_context = data.get("context", [])
     learner_profile = data.get("learner_profile", "")
     context_window = data.get("subtitle_context_window_seconds")
+    language = data.get("language") or None
 
     # Model and prompt selection (optional, None = use defaults)
     llm_model = data.get("llm_model") or None
@@ -133,6 +134,7 @@ def ask_question(conversation_id: str) -> Response:
         context_items=context_items,
         learner_profile=learner_profile,
         context_window_seconds=context_window,
+        language=language,
         llm_model=llm_model,
         prompts=prompts,
     )
@@ -151,6 +153,7 @@ def summarize_context() -> Response:
 
     raw_context = data.get("context", [])
     learner_profile = data.get("learner_profile", "")
+    language = data.get("language") or None
 
     # Model and prompt selection (optional, None = use defaults)
     llm_model = data.get("llm_model") or None
@@ -169,6 +172,7 @@ def summarize_context() -> Response:
     req = SummarizeContextRequest(
         context_items=context_items,
         learner_profile=learner_profile,
+        language=language,
         llm_model=llm_model,
         prompts=prompts,
     )

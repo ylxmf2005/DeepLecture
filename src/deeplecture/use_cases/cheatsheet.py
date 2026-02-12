@@ -7,7 +7,6 @@ Two-stage LLM pipeline for creating high-density exam cheatsheets:
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -17,21 +16,22 @@ from deeplecture.use_cases.dto.cheatsheet import (
     GeneratedCheatsheetResult,
     KnowledgeItem,
 )
-from deeplecture.use_cases.prompts.cheatsheet import (
-    build_cheatsheet_extraction_prompts,
-    build_cheatsheet_rendering_prompts,
+from deeplecture.use_cases.shared.llm_json import parse_llm_json
+from deeplecture.use_cases.shared.prompt_safety import sanitize_question
+from deeplecture.use_cases.shared.subtitle import (
+    load_first_available_subtitle_segments,
+    prioritize_subtitle_languages,
 )
 
 if TYPE_CHECKING:
     from deeplecture.use_cases.dto.cheatsheet import GenerateCheatsheetRequest
-
-if TYPE_CHECKING:
     from deeplecture.use_cases.interfaces import (
         LLMProtocol,
         LLMProviderProtocol,
         PathResolverProtocol,
     )
     from deeplecture.use_cases.interfaces.cheatsheet import CheatsheetStorageProtocol
+    from deeplecture.use_cases.interfaces.prompt_registry import PromptRegistryProtocol
     from deeplecture.use_cases.interfaces.subtitle import SubtitleStorageProtocol
 
 logger = logging.getLogger(__name__)
@@ -57,6 +57,7 @@ class CheatsheetUseCase:
         subtitle_storage: SubtitleStorageProtocol,
         path_resolver: PathResolverProtocol,
         llm_provider: LLMProviderProtocol,
+        prompt_registry: PromptRegistryProtocol,
     ) -> None:
         """Initialize CheatsheetUseCase.
 
@@ -65,11 +66,13 @@ class CheatsheetUseCase:
             subtitle_storage: Storage for subtitle files (context source)
             path_resolver: Path resolution service
             llm_provider: LLM provider for generation
+            prompt_registry: Prompt registry for prompt selection
         """
         self._cheatsheets = cheatsheet_storage
         self._subtitles = subtitle_storage
         self._paths = path_resolver
-        self._llm = llm_provider
+        self._llm_provider = llm_provider
+        self._prompt_registry = prompt_registry
 
     def get(self, content_id: str) -> CheatsheetResult:
         """Get existing cheatsheet.
@@ -108,7 +111,7 @@ class CheatsheetUseCase:
             updated_at=updated_at,
         )
 
-    async def generate(
+    def generate(
         self,
         request: GenerateCheatsheetRequest,
     ) -> GeneratedCheatsheetResult:
@@ -126,31 +129,38 @@ class CheatsheetUseCase:
         Raises:
             ValueError: If no content sources available
         """
-        # Load context (subtitles for now, can extend to slides)
-        llm = self._llm.get(request.llm_model)
-        context, used_sources = await self._load_context(request)
+        # Get LLM from provider
+        llm = self._llm_provider.get(request.llm_model)
+
+        # Load context (subtitles)
+        context, used_sources = self._load_context(request)
         if not context.strip():
             raise ValueError(f"No content available for {request.content_id}")
 
+        # Sanitize user instruction
+        instruction = sanitize_question(request.user_instruction)
+
         # Stage 1: Extract knowledge items
-        items = await self._extract_knowledge_items(
-            llm=llm,
+        items = self._extract_knowledge_items(
             context=context,
             language=request.language,
             subject_type=request.subject_type,
-            user_instruction=request.user_instruction,
+            user_instruction=instruction,
+            llm=llm,
+            prompts=request.prompts,
         )
 
         # Filter by criticality
         filtered_items = self._filter_by_criticality(items, request.min_criticality)
 
         # Stage 2: Render to Markdown
-        cheatsheet_content = await self._render_cheatsheet(
-            llm=llm,
+        cheatsheet_content = self._render_cheatsheet(
             items=filtered_items,
             language=request.language,
             target_pages=request.target_pages,
             min_criticality=request.min_criticality,
+            llm=llm,
+            prompts=request.prompts,
         )
 
         # Save and return
@@ -167,7 +177,7 @@ class CheatsheetUseCase:
             stats=stats,
         )
 
-    async def _load_context(
+    def _load_context(
         self,
         request: GenerateCheatsheetRequest,
     ) -> tuple[str, list[str]]:
@@ -184,26 +194,40 @@ class CheatsheetUseCase:
 
         # Try subtitle
         if request.context_mode in ("auto", "subtitle", "both"):
-            subtitle_result = self._subtitles.load(request.content_id)
-            if subtitle_result:
-                segments, _ = subtitle_result
-                if segments:
-                    text = "\n".join(seg.get("text", "") for seg in segments if seg.get("text"))
-                    if text.strip():
-                        context_parts.append(text)
-                        used_sources.append("subtitle")
-
-        # TODO: Add slide text extraction when available
+            subtitle_text = self._load_subtitle_context(request.content_id)
+            if subtitle_text:
+                context_parts.append(subtitle_text)
+                used_sources.append("subtitle")
 
         return "\n\n".join(context_parts), used_sources
 
-    async def _extract_knowledge_items(
+    def _load_subtitle_context(self, content_id: str) -> str:
+        """Load subtitle text from best available source."""
+        candidate_languages = prioritize_subtitle_languages(
+            self._subtitles.list_languages(content_id),
+        )
+
+        loaded = load_first_available_subtitle_segments(
+            self._subtitles,
+            content_id=content_id,
+            candidate_languages=candidate_languages,
+        )
+        if loaded:
+            _lang_used, segments = loaded
+            lines = [seg.text.replace("\n", " ").strip() for seg in segments if seg.text.strip()]
+            if lines:
+                return "\n".join(lines)
+
+        return ""
+
+    def _extract_knowledge_items(
         self,
-        llm: LLMProtocol,
         context: str,
         language: str,
         subject_type: str,
         user_instruction: str,
+        llm: LLMProtocol,
+        prompts: dict[str, str] | None,
     ) -> list[KnowledgeItem]:
         """Stage 1: Extract structured knowledge items from content.
 
@@ -211,39 +235,29 @@ class CheatsheetUseCase:
             context: Source content text
             language: Output language
             subject_type: Subject type hint
-            user_instruction: Additional user guidance
+            user_instruction: Additional user guidance (sanitized)
+            llm: LLM instance to use
+            prompts: Prompt selection mapping
 
         Returns:
             List of extracted KnowledgeItems
         """
-        system_prompt, user_prompt = build_cheatsheet_extraction_prompts(
+        impl_id = prompts.get("cheatsheet_extraction") if prompts else None
+        prompt_builder = self._prompt_registry.get("cheatsheet_extraction", impl_id)
+        spec = prompt_builder.build(
             context=context,
             language=language,
             subject_type=subject_type,
             user_instruction=user_instruction,
         )
 
-        response = await llm.complete(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
+        response = llm.complete(
+            spec.user_prompt,
+            system_prompt=spec.system_prompt,
         )
 
         # Parse JSON response
-        try:
-            items_data = json.loads(response)
-            if not isinstance(items_data, list):
-                items_data = [items_data]
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse extraction response as JSON, using fallback")
-            # Fallback: treat entire response as single item
-            items_data = [
-                {
-                    "category": "note",
-                    "content": response,
-                    "criticality": "medium",
-                    "tags": [],
-                }
-            ]
+        items_data = parse_llm_json(response, default_type=list, context="cheatsheet extraction")
 
         return [
             KnowledgeItem(
@@ -253,7 +267,7 @@ class CheatsheetUseCase:
                 tags=item.get("tags", []),
             )
             for item in items_data
-            if item.get("content")
+            if isinstance(item, dict) and item.get("content")
         ]
 
     def _filter_by_criticality(
@@ -275,13 +289,14 @@ class CheatsheetUseCase:
 
         return [item for item in items if levels.get(item.criticality, 2) >= min_level]
 
-    async def _render_cheatsheet(
+    def _render_cheatsheet(
         self,
-        llm: LLMProtocol,
         items: list[KnowledgeItem],
         language: str,
         target_pages: int,
         min_criticality: str,
+        llm: LLMProtocol,
+        prompts: dict[str, str] | None,
     ) -> str:
         """Stage 2: Render knowledge items into scannable Markdown.
 
@@ -290,26 +305,32 @@ class CheatsheetUseCase:
             language: Output language
             target_pages: Target length in pages
             min_criticality: Criticality filter used
+            llm: LLM instance to use
+            prompts: Prompt selection mapping
 
         Returns:
             Rendered Markdown cheatsheet
         """
+        import json
+
         items_json = json.dumps(
             [item.to_dict() for item in items],
             ensure_ascii=False,
             indent=2,
         )
 
-        system_prompt, user_prompt = build_cheatsheet_rendering_prompts(
+        impl_id = prompts.get("cheatsheet_rendering") if prompts else None
+        prompt_builder = self._prompt_registry.get("cheatsheet_rendering", impl_id)
+        spec = prompt_builder.build(
             knowledge_items_json=items_json,
             language=language,
             target_pages=target_pages,
             min_criticality=min_criticality,
         )
 
-        return await llm.complete(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
+        return llm.complete(
+            spec.user_prompt,
+            system_prompt=spec.system_prompt,
         )
 
     def _build_stats(self, items: list[KnowledgeItem]) -> CheatsheetStats:

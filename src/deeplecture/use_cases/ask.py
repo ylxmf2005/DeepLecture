@@ -227,7 +227,7 @@ class AskUseCase:
         llm = self._llm_provider.get(request.llm_model)
 
         # Build prompts with wrapped user content using registry
-        language = get_response_language()
+        language = get_response_language(request.language)
 
         impl_id = request.prompts.get("ask_video") if request.prompts else None
         prompt_builder = self._prompt_registry.get("ask_video", impl_id)
@@ -291,7 +291,7 @@ class AskUseCase:
         llm = self._llm_provider.get(request.llm_model)
 
         # Build prompts using registry
-        language = get_response_language()
+        language = get_response_language(request.language)
 
         impl_id = request.prompts.get("ask_summarize_context") if request.prompts else None
         prompt_builder = self._prompt_registry.get("ask_summarize_context", impl_id)

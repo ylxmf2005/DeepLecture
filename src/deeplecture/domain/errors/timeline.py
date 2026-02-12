@@ -1,4 +1,4 @@
-"""Timeline domain errors."""
+"""Timeline-related errors."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from deeplecture.domain.errors.base import DomainError
 
 
 class TimelineError(DomainError):
-    """Base class for timeline errors."""
+    """Base class for timeline-related errors."""
 
 
 class TimelineGenerationError(TimelineError):

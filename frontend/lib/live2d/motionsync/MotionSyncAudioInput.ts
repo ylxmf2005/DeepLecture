@@ -6,6 +6,10 @@
  * Based on Live2D Cubism SDK sample code
  */
 
+import { logger } from '@/shared/infrastructure';
+
+const log = logger.scope('MotionSyncAudioInput');
+
 /**
  * Circular buffer for storing audio samples
  */
@@ -130,7 +134,7 @@ export class MotionSyncAudioInput {
       const audioInputs = devices.filter(device => device.kind === 'audioinput');
 
       if (audioInputs.length === 0) {
-        console.error('[MotionSyncAudioInput] No audio input devices found');
+        log.error('No audio input devices found');
         return false;
       }
 
@@ -148,7 +152,7 @@ export class MotionSyncAudioInput {
       const tracks = this._stream.getAudioTracks();
 
       if (tracks.length === 0) {
-        console.error('[MotionSyncAudioInput] No audio tracks in stream');
+        log.error('No audio tracks in stream');
         return false;
       }
 
@@ -186,10 +190,12 @@ export class MotionSyncAudioInput {
       this._isInitialized = true;
       this._isCapturing = true;
 
-      console.log(`[MotionSyncAudioInput] Initialized with sample rate: ${this._sampleRate}`);
+      log.info(`Initialized with sample rate: ${this._sampleRate}`);
       return true;
     } catch (error) {
-      console.error('[MotionSyncAudioInput] Initialization failed:', error);
+      log.error('Initialization failed', error instanceof Error ? error : undefined, {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return false;
     }
   }

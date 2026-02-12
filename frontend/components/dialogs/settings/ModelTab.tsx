@@ -1,33 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Cpu, Volume2, Loader2, RotateCcw } from "lucide-react";
-import { useShallow } from "zustand/react/shallow";
 import { getAppConfig, ModelOption } from "@/lib/api";
-import { useGlobalSettingsStore } from "@/stores/useGlobalSettingsStore";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
 import { SettingsSection, SettingsCard } from "./SettingsSection";
+import { ScopeAwareField } from "./ScopeAwareField";
 import type { SettingsTabProps } from "./types";
 
 const log = logger.scope("ModelTab");
 
-export function ModelTab(_props: SettingsTabProps) {
+export function ModelTab({ scope, settings }: SettingsTabProps) {
+    const isVideoScope = scope === "video";
+    const { values, isOverridden, clearField } = settings;
+    const { ai } = values;
+
     const [llmModels, setLlmModels] = useState<ModelOption[]>([]);
     const [defaultLlmModel, setDefaultLlmModel] = useState<string>("");
     const [ttsModels, setTtsModels] = useState<ModelOption[]>([]);
     const [defaultTtsModel, setDefaultTtsModel] = useState<string>("");
-    const [taskKeys, setTaskKeys] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
-
-    const { ai, setAILlmModel, setAITtsModel } = useGlobalSettingsStore(
-        useShallow((state) => ({
-            ai: state.ai,
-            setAILlmModel: state.setAILlmModel,
-            setAITtsModel: state.setAITtsModel,
-        }))
-    );
 
     useEffect(() => {
         const fetchConfig = async () => {
@@ -38,7 +32,6 @@ export function ModelTab(_props: SettingsTabProps) {
                 setDefaultLlmModel(config.llm.defaultModel);
                 setTtsModels(config.tts.models);
                 setDefaultTtsModel(config.tts.defaultModel);
-                setTaskKeys(config.taskKeys ?? []);
             } catch (error) {
                 log.error("Failed to fetch app config", toError(error));
             } finally {
@@ -48,23 +41,18 @@ export function ModelTab(_props: SettingsTabProps) {
         fetchConfig();
     }, []);
 
-    const llmOptions = useMemo(
-        () =>
-            llmModels.map((m) => ({
-                value: m.id,
-                label: `${m.name} (${m.provider})${m.id === defaultLlmModel ? " - Default" : ""}`,
-            })),
-        [llmModels, defaultLlmModel]
-    );
+    const getEffectiveLlmModel = () => ai.llmModel || defaultLlmModel;
+    const getEffectiveTtsModel = () => ai.ttsModel || defaultTtsModel;
 
-    const ttsOptions = useMemo(
-        () =>
-            ttsModels.map((m) => ({
-                value: m.id,
-                label: `${m.name} (${m.provider})${m.id === defaultTtsModel ? " - Default" : ""}`,
-            })),
-        [ttsModels, defaultTtsModel]
-    );
+    const llmOptions = llmModels.map((m) => ({
+        value: m.id,
+        label: `${m.name} (${m.provider})${m.id === defaultLlmModel ? " - Default" : ""}`,
+    }));
+
+    const ttsOptions = ttsModels.map((m) => ({
+        value: m.id,
+        label: `${m.name} (${m.provider})${m.id === defaultTtsModel ? " - Default" : ""}`,
+    }));
 
     if (loading) {
         return (
@@ -77,67 +65,71 @@ export function ModelTab(_props: SettingsTabProps) {
 
     return (
         <>
+            {/* LLM Model Selection */}
             <SettingsSection icon={Cpu} title="LLM Model" accentColor="indigo">
                 <SettingsCard>
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Model for AI Tasks</label>
-                            {ai.llmModel && (
-                                <button
-                                    onClick={() => setAILlmModel(null)}
-                                    className="text-xs text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-                                >
-                                    <RotateCcw className="w-3 h-3" />
-                                    Reset
-                                </button>
-                            )}
+                    <ScopeAwareField path="ai.llmModel" isOverridden={isOverridden} onReset={clearField} isVideoScope={isVideoScope}>
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                    Model for AI Tasks
+                                </label>
+                                {ai.llmModel && !isVideoScope && (
+                                    <button
+                                        onClick={() => settings.setAILlmModel(null)}
+                                        className="text-xs text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                                    >
+                                        <RotateCcw className="w-3 h-3" />
+                                        Reset
+                                    </button>
+                                )}
+                            </div>
+                            <CustomSelect
+                                value={getEffectiveLlmModel()}
+                                onChange={(v) => settings.setAILlmModel(v === defaultLlmModel ? null : v)}
+                                options={llmOptions}
+                                accent="indigo"
+                            />
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Used for Q&A, explanations, notes, and timeline generation.
+                            </p>
                         </div>
-                        <CustomSelect
-                            value={ai.llmModel || defaultLlmModel}
-                            onChange={(v) => setAILlmModel(v === defaultLlmModel ? null : v)}
-                            options={llmOptions}
-                            accent="indigo"
-                        />
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Used for Q&A, explanations, notes, timeline and related tasks.</p>
-                    </div>
+                    </ScopeAwareField>
                 </SettingsCard>
             </SettingsSection>
 
+            {/* TTS Model Selection */}
             <SettingsSection icon={Volume2} title="TTS Model" accentColor="rose">
                 <SettingsCard>
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Voice for Audio</label>
-                            {ai.ttsModel && (
-                                <button
-                                    onClick={() => setAITtsModel(null)}
-                                    className="text-xs text-rose-600 hover:text-rose-700 flex items-center gap-1"
-                                >
-                                    <RotateCcw className="w-3 h-3" />
-                                    Reset
-                                </button>
-                            )}
+                    <ScopeAwareField path="ai.ttsModel" isOverridden={isOverridden} onReset={clearField} isVideoScope={isVideoScope}>
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                    Voice for Audio
+                                </label>
+                                {ai.ttsModel && !isVideoScope && (
+                                    <button
+                                        onClick={() => settings.setAITtsModel(null)}
+                                        className="text-xs text-rose-600 hover:text-rose-700 flex items-center gap-1"
+                                    >
+                                        <RotateCcw className="w-3 h-3" />
+                                        Reset
+                                    </button>
+                                )}
+                            </div>
+                            <CustomSelect
+                                value={getEffectiveTtsModel()}
+                                onChange={(v) => settings.setAITtsModel(v === defaultTtsModel ? null : v)}
+                                options={ttsOptions}
+                                accent="rose"
+                            />
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Used for voiceover and slide lecture audio.
+                            </p>
                         </div>
-                        <CustomSelect
-                            value={ai.ttsModel || defaultTtsModel}
-                            onChange={(v) => setAITtsModel(v === defaultTtsModel ? null : v)}
-                            options={ttsOptions}
-                            accent="rose"
-                        />
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Used for voiceover and slide lecture audio tasks.</p>
-                    </div>
+                    </ScopeAwareField>
                 </SettingsCard>
             </SettingsSection>
-
-            {taskKeys.length > 0 && (
-                <SettingsSection icon={Cpu} title="Task Model Mapping" accentColor="violet">
-                    <SettingsCard>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                            Backend task-level defaults are active for: {taskKeys.join(", ")}.
-                        </div>
-                    </SettingsCard>
-                </SettingsSection>
-            )}
         </>
     );
 }

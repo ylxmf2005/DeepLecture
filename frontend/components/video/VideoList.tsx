@@ -11,6 +11,7 @@ const RenameDialog = dynamic(
     () => import("@/components/dialogs/RenameDialog").then((mod) => mod.RenameDialog),
     { ssr: false }
 );
+import { useTaskNotification } from "@/hooks/useTaskNotification";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
 
@@ -30,6 +31,7 @@ export function VideoList({ refreshTrigger }: VideoListProps) {
     const [renameItem, setRenameItem] = useState<ContentItem | null>(null);
 
     const { confirm } = useConfirmDialog();
+    const { notifyOperation } = useTaskNotification();
 
     useEffect(() => {
         const fetchContent = async () => {
@@ -67,9 +69,11 @@ export function VideoList({ refreshTrigger }: VideoListProps) {
             setDeletingId(contentId);
             await deleteContent(contentId);
             setItems(prevItems => prevItems.filter(item => item.id !== contentId));
+            notifyOperation("content_delete", "success");
         } catch (err) {
             log.error("Failed to delete content", toError(err), { contentId });
             setError("Failed to delete content.");
+            notifyOperation("content_delete", "error", toError(err).message);
         } finally {
             setDeletingId(null);
         }
@@ -90,9 +94,10 @@ export function VideoList({ refreshTrigger }: VideoListProps) {
                 item.id === renameItem.id ? { ...item, filename: result.filename } : item
             ));
             setRenameItem(null);
+            notifyOperation("content_rename", "success");
         } catch (err) {
             log.error("Failed to rename content", toError(err), { contentId: renameItem.id, newName });
-            // Optional: show toast error
+            notifyOperation("content_rename", "error", toError(err).message);
         }
     };
 

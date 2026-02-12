@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { generateTimeline, getTimeline, type TimelineEntry, isAPIError } from "@/lib/api";
+import { useTaskNotification } from "@/hooks/useTaskNotification";
 import type { ProcessingAction } from "../useVideoPageState";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
@@ -41,6 +42,8 @@ export function useTimelineHandlers({
     setTimelineLoading,
     setTimelineEntries,
 }: UseTimelineHandlersOptions): UseTimelineHandlersReturn {
+    const { notifyTaskComplete } = useTaskNotification();
+
     const handleGenerateTimeline = useCallback(async () => {
         if (!hasSubtitles) return;
 
@@ -74,11 +77,23 @@ export function useTimelineHandlers({
             // Keep processing=true, SSE will clear it when task completes
         } catch (error) {
             log.error("Failed to generate timeline", toError(error), { videoId, originalLanguage, targetLanguage });
+            notifyTaskComplete("timeline_generation", "error", toError(error).message);
             setProcessing(false);
             setProcessingAction(null);
             setTimelineLoading(false);
         }
-    }, [videoId, originalLanguage, targetLanguage, learnerProfile, hasSubtitles, setProcessing, setProcessingAction, setTimelineLoading, setTimelineEntries]);
+    }, [
+        videoId,
+        originalLanguage,
+        targetLanguage,
+        learnerProfile,
+        hasSubtitles,
+        setProcessing,
+        setProcessingAction,
+        setTimelineLoading,
+        setTimelineEntries,
+        notifyTaskComplete,
+    ]);
 
     return { handleGenerateTimeline };
 }

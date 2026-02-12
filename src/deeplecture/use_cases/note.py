@@ -377,12 +377,14 @@ class NoteUseCase:
         data = parse_llm_json(raw, context="note outline")
 
         if not isinstance(data, dict):
-            logger.warning("Outline parse returned non-dict type %s (preview: %.200s)", type(data).__name__, raw)
+            logger.warning("Outline parse returned non-dict type %s", type(data).__name__)
+            logger.debug("Full LLM response for failed outline parse: %s", raw)
             return []
 
         raw_parts = data.get("parts")
         if not isinstance(raw_parts, list):
-            logger.warning("Outline JSON missing 'parts' list (preview: %.200s)", raw)
+            logger.warning("Outline JSON missing 'parts' list")
+            logger.debug("Full LLM response for failed outline parse: %s", raw)
             return []
 
         parts = []

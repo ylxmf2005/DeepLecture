@@ -76,6 +76,10 @@ export { getGlobalConfig, putGlobalConfig, deleteGlobalConfig } from "./globalCo
 // Task APIs
 export { getTaskStatus, getTasksForContent, createTaskEventSource, getJobStatus } from "./task";
 
+// Quiz APIs
+export { getQuiz, generateQuiz } from "./quiz";
+export type { QuizItem, QuizResponse, GenerateQuizResponse, GenerateQuizParams, QuizContextMode, QuizCriticality, QuizSubjectType } from "./quiz";
+
 // Fact Verification APIs
 export { getFactVerificationReport, generateFactVerification } from "./factVerification";
 export type { GenerateFactVerificationParams, GenerateFactVerificationResponse } from "./factVerification";

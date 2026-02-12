@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { generateSubtitles, enhanceAndTranslate } from "@/lib/api";
+import { useTaskNotification } from "@/hooks/useTaskNotification";
 import type { ProcessingAction } from "../useVideoPageState";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
@@ -35,6 +36,8 @@ export function useSubtitleHandlers({
     setProcessing,
     setProcessingAction,
 }: UseSubtitleHandlersOptions): UseSubtitleHandlersReturn {
+    const { notifyTaskComplete } = useTaskNotification();
+
     const handleGenerateSubtitles = useCallback(async () => {
         try {
             setProcessing(true);
@@ -44,13 +47,18 @@ export function useSubtitleHandlers({
             if (result.status === "ready") {
                 setProcessing(false);
                 setProcessingAction(null);
+
+                if (!result.taskId) {
+                    notifyTaskComplete("subtitle_generation", "ready");
+                }
             }
         } catch (error) {
             log.error("Failed to generate subtitles", toError(error), { videoId, originalLanguage });
+            notifyTaskComplete("subtitle_generation", "error", toError(error).message);
             setProcessing(false);
             setProcessingAction(null);
         }
-    }, [videoId, originalLanguage, setProcessing, setProcessingAction]);
+    }, [videoId, originalLanguage, setProcessing, setProcessingAction, notifyTaskComplete]);
 
     const handleTranslateSubtitles = useCallback(async () => {
         if (!hasSubtitles && !hasEnhancedSubtitles) return;
@@ -62,13 +70,27 @@ export function useSubtitleHandlers({
             if (result.status === "ready") {
                 setProcessing(false);
                 setProcessingAction(null);
+
+                if (!result.taskId) {
+                    notifyTaskComplete("subtitle_translation", "ready");
+                }
             }
         } catch (error) {
             log.error("Failed to translate subtitles", toError(error), { videoId, translatedLanguage });
+            notifyTaskComplete("subtitle_translation", "error", toError(error).message);
             setProcessing(false);
             setProcessingAction(null);
         }
-    }, [videoId, originalLanguage, translatedLanguage, hasSubtitles, hasEnhancedSubtitles, setProcessing, setProcessingAction]);
+    }, [
+        videoId,
+        originalLanguage,
+        translatedLanguage,
+        hasSubtitles,
+        hasEnhancedSubtitles,
+        setProcessing,
+        setProcessingAction,
+        notifyTaskComplete,
+    ]);
 
     return { handleGenerateSubtitles, handleTranslateSubtitles };
 }

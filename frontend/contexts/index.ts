@@ -1,2 +1,3 @@
 export { VideoPlayerProvider, useVideoPlayer, useVideoPlayerOptional } from "./VideoPlayerContext";
-export { ErrorProvider, useErrors, useErrorsOptional } from "./ErrorContext";
+export { VideoConfigProvider, useVideoConfig, useVideoConfigOptional } from "./VideoConfigContext";
+export type { VideoConfigContextValue } from "./VideoConfigContext";

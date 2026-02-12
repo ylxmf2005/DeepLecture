@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { FileText, Loader2, RotateCcw } from "lucide-react";
-import { useShallow } from "zustand/react/shallow";
 import { getAppConfig, PromptFunctionConfig } from "@/lib/api";
-import { useGlobalSettingsStore } from "@/stores/useGlobalSettingsStore";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
 import { SettingsSection, SettingsCard } from "./SettingsSection";
+import { ScopeAwareField } from "./ScopeAwareField";
 import type { SettingsTabProps } from "./types";
 
 const log = logger.scope("PromptTab");
@@ -27,17 +26,13 @@ const PROMPT_LABELS: Record<string, { label: string; desc: string }> = {
     slide_lecture: { label: "Slide Lecture", desc: "Generate lecture from slides" },
 };
 
-export function PromptTab(_props: SettingsTabProps) {
+export function PromptTab({ scope, settings }: SettingsTabProps) {
+    const isVideoScope = scope === "video";
+    const { values, isOverridden, clearField } = settings;
+    const { ai } = values;
+
     const [loading, setLoading] = useState(true);
     const [promptConfigs, setPromptConfigs] = useState<Record<string, PromptFunctionConfig>>({});
-
-    const { ai, setAIPrompt, resetAIPrompt } = useGlobalSettingsStore(
-        useShallow((state) => ({
-            ai: state.ai,
-            setAIPrompt: state.setAIPrompt,
-            resetAIPrompt: state.resetAIPrompt,
-        }))
-    );
 
     useEffect(() => {
         const fetchConfig = async () => {
@@ -85,39 +80,41 @@ export function PromptTab(_props: SettingsTabProps) {
                         }));
 
                         return (
-                            <div key={funcId} className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                                            {meta.label}
-                                        </span>
-                                        {meta.desc && (
-                                            <p className="text-[10px] text-gray-400">{meta.desc}</p>
+                            <ScopeAwareField key={funcId} path="ai.prompts" isOverridden={isOverridden} onReset={clearField} isVideoScope={isVideoScope}>
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                                                {meta.label}
+                                            </span>
+                                            {meta.desc && (
+                                                <p className="text-[10px] text-gray-400">{meta.desc}</p>
+                                            )}
+                                        </div>
+                                        {isCustom && (
+                                            <button
+                                                onClick={() => settings.resetAIPrompt(funcId)}
+                                                className="text-[10px] text-orange-600 hover:text-orange-700 flex items-center gap-1"
+                                            >
+                                                <RotateCcw className="w-2.5 h-2.5" />
+                                                Reset
+                                            </button>
                                         )}
                                     </div>
-                                    {isCustom && (
-                                        <button
-                                            onClick={() => resetAIPrompt(funcId)}
-                                            className="text-[10px] text-orange-600 hover:text-orange-700 flex items-center gap-1"
-                                        >
-                                            <RotateCcw className="w-2.5 h-2.5" />
-                                            Reset
-                                        </button>
-                                    )}
+                                    <CustomSelect
+                                        value={effectiveValue}
+                                        onChange={(v) => {
+                                            if (v === config.defaultImplId) {
+                                                settings.resetAIPrompt(funcId);
+                                            } else {
+                                                settings.setAIPrompt(funcId, v);
+                                            }
+                                        }}
+                                        options={options}
+                                        accent="orange"
+                                    />
                                 </div>
-                                <CustomSelect
-                                    value={effectiveValue}
-                                    onChange={(v) => {
-                                        if (v === config.defaultImplId) {
-                                            resetAIPrompt(funcId);
-                                        } else {
-                                            setAIPrompt(funcId, v);
-                                        }
-                                    }}
-                                    options={options}
-                                    accent="orange"
-                                />
-                            </div>
+                            </ScopeAwareField>
                         );
                     })}
                 </div>

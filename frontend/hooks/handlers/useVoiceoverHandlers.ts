@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback } from "react";
-import { toast } from "sonner";
 import { generateVoiceover, listVoiceovers, deleteVoiceover, updateVoiceover, type SubtitleSource, type VoiceoverEntry } from "@/lib/api";
+import { useTaskNotification } from "@/hooks/useTaskNotification";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
 
@@ -38,11 +38,13 @@ export function useVoiceoverHandlers({
     setVoiceovers,
     setSelectedVoiceoverId,
 }: UseVoiceoverHandlersOptions): UseVoiceoverHandlersReturn {
+    const { notifyTaskComplete, notifyOperation } = useTaskNotification();
+
     const handleGenerateVoiceover = useCallback(
         async (source: SubtitleSource) => {
             const name = voiceoverName.trim();
             if (!name) {
-                toast.warning("Please enter a name for this voiceover first.");
+                notifyOperation("voiceover_name_required", "error");
                 return;
             }
 
@@ -50,15 +52,30 @@ export function useVoiceoverHandlers({
 
             try {
                 setVoiceoverProcessing(source);
-                await generateVoiceover(videoId, source, name, ttsLanguage);
+                const response = await generateVoiceover(videoId, source, name, ttsLanguage);
                 const data = await listVoiceovers(videoId);
                 setVoiceovers(data.voiceovers);
+
+                if (!response.taskId) {
+                    notifyTaskComplete("voiceover_generation", "ready");
+                    setVoiceoverProcessing(null);
+                }
             } catch (error) {
                 log.error("Failed to generate voiceover", toError(error), { videoId, voiceoverName });
+                notifyTaskComplete("voiceover_generation", "error", toError(error).message);
                 setVoiceoverProcessing(null);
             }
         },
-        [videoId, voiceoverName, originalLanguage, translatedLanguage, setVoiceoverProcessing, setVoiceovers]
+        [
+            videoId,
+            voiceoverName,
+            originalLanguage,
+            translatedLanguage,
+            setVoiceoverProcessing,
+            setVoiceovers,
+            notifyOperation,
+            notifyTaskComplete,
+        ]
     );
 
     const handleDeleteVoiceover = useCallback(
@@ -72,9 +89,10 @@ export function useVoiceoverHandlers({
                 }
             } catch (error) {
                 log.error("Failed to delete voiceover", toError(error), { videoId, voiceoverId });
+                notifyOperation("voiceover_delete", "error", toError(error).message);
             }
         },
-        [videoId, selectedVoiceoverId, setSelectedVoiceoverId, setVoiceovers]
+        [videoId, selectedVoiceoverId, setSelectedVoiceoverId, setVoiceovers, notifyOperation]
     );
 
     const handleUpdateVoiceover = useCallback(
@@ -86,14 +104,14 @@ export function useVoiceoverHandlers({
                 if (voiceoverId === selectedVoiceoverId) {
                     setSelectedVoiceoverId(name);
                 }
-                toast.success("Voiceover renamed");
+                notifyOperation("voiceover_rename", "success");
             } catch (error) {
                 log.error("Failed to update voiceover", toError(error), { videoId, voiceoverId, name });
-                toast.error("Failed to rename voiceover");
+                notifyOperation("voiceover_rename", "error", toError(error).message);
                 throw error;
             }
         },
-        [videoId, selectedVoiceoverId, setSelectedVoiceoverId, setVoiceovers]
+        [videoId, selectedVoiceoverId, setSelectedVoiceoverId, setVoiceovers, notifyOperation]
     );
 
     return { handleGenerateVoiceover, handleDeleteVoiceover, handleUpdateVoiceover };

@@ -17,8 +17,12 @@ from deeplecture.use_cases.dto.quiz import (
     QuizResult,
     QuizStats,
 )
-from deeplecture.use_cases.prompts.cheatsheet import build_cheatsheet_extraction_prompts
-from deeplecture.use_cases.prompts.quiz import build_quiz_generation_prompts
+from deeplecture.use_cases.shared.llm_json import parse_llm_json
+from deeplecture.use_cases.shared.prompt_safety import sanitize_question
+from deeplecture.use_cases.shared.subtitle import (
+    load_first_available_subtitle_segments,
+    prioritize_subtitle_languages,
+)
 
 if TYPE_CHECKING:
     from deeplecture.use_cases.dto.cheatsheet import KnowledgeItem
@@ -30,6 +34,7 @@ if TYPE_CHECKING:
         QuizStorageProtocol,
         SubtitleStorageProtocol,
     )
+    from deeplecture.use_cases.interfaces.prompt_registry import PromptRegistryProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -43,25 +48,25 @@ def validate_quiz_item(item: dict[str, Any]) -> tuple[bool, str]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    # 1. Check options count
-    options = item.get("options", [])
-    if len(options) != 4:
-        return False, "options must have exactly 4 items"
-
-    # 2. Check answer_index range
-    answer_index = item.get("answer_index")
-    if not isinstance(answer_index, int) or not 0 <= answer_index <= 3:
-        return False, "answer_index must be 0-3"
-
-    # 3. Check for duplicate options
-    if len(set(options)) != len(options):
-        return False, "duplicate options detected"
-
-    # 4. Check required fields (use 'in' to handle 0 and empty strings correctly)
+    # 1. Check required field presence first (better error messages)
     required = ["stem", "options", "answer_index", "explanation"]
     for field in required:
         if field not in item or (field != "answer_index" and not item[field]):
             return False, f"missing required field: {field}"
+
+    # 2. Check options count
+    options = item.get("options", [])
+    if len(options) != 4:
+        return False, "options must have exactly 4 items"
+
+    # 3. Check answer_index range
+    answer_index = item.get("answer_index")
+    if not isinstance(answer_index, int) or not 0 <= answer_index <= 3:
+        return False, "answer_index must be 0-3"
+
+    # 4. Check for duplicate options
+    if len(set(options)) != len(options):
+        return False, "duplicate options detected"
 
     return True, ""
 
@@ -86,6 +91,7 @@ class QuizUseCase:
         subtitle_storage: SubtitleStorageProtocol,
         llm_provider: LLMProviderProtocol,
         path_resolver: PathResolverProtocol,
+        prompt_registry: PromptRegistryProtocol,
     ) -> None:
         """Initialize QuizUseCase.
 
@@ -94,11 +100,13 @@ class QuizUseCase:
             subtitle_storage: Storage for subtitle files (context source)
             llm_provider: LLM provider for generation
             path_resolver: Path resolution service
+            prompt_registry: Prompt registry for prompt selection
         """
         self._quizzes = quiz_storage
         self._subtitles = subtitle_storage
-        self._llm = llm_provider
+        self._llm_provider = llm_provider
         self._paths = path_resolver
+        self._prompt_registry = prompt_registry
 
     def get(self, content_id: str, language: str | None = None) -> QuizResult:
         """Get existing quiz.
@@ -146,7 +154,7 @@ class QuizUseCase:
             updated_at=updated_at,
         )
 
-    async def generate(
+    def generate(
         self,
         request: GenerateQuizRequest,
     ) -> GeneratedQuizResult:
@@ -164,31 +172,38 @@ class QuizUseCase:
         Raises:
             ValueError: If no content sources available
         """
+        # Get LLM from provider
+        llm = self._llm_provider.get(request.llm_model)
+
         # Load context (subtitles for now, can extend to slides)
-        llm = self._llm.get(request.llm_model)
-        context, used_sources = await self._load_context(request)
+        context, used_sources = self._load_context(request)
         if not context.strip():
             raise ValueError(f"No content available for {request.content_id}")
 
+        # Sanitize user instruction
+        instruction = sanitize_question(request.user_instruction)
+
         # Stage 1: Extract knowledge items (reuses cheatsheet extraction)
-        knowledge_items = await self._extract_knowledge_items(
-            llm=llm,
+        knowledge_items = self._extract_knowledge_items(
             context=context,
             language=request.language,
             subject_type=request.subject_type,
-            user_instruction=request.user_instruction,
+            user_instruction=instruction,
+            llm=llm,
+            prompts=request.prompts,
         )
 
         # Filter by criticality
         filtered_items = self._filter_by_criticality(knowledge_items, request.min_criticality)
 
         # Stage 2: Generate quiz from knowledge items
-        raw_quiz_items = await self._generate_quiz(
-            llm=llm,
+        raw_quiz_items = self._generate_quiz(
             items=filtered_items,
             language=request.language,
             question_count=request.question_count,
-            user_instruction=request.user_instruction,
+            user_instruction=instruction,
+            llm=llm,
+            prompts=request.prompts,
         )
 
         # Validate and filter quiz items
@@ -211,7 +226,7 @@ class QuizUseCase:
             stats=stats,
         )
 
-    async def _load_context(
+    def _load_context(
         self,
         request: GenerateQuizRequest,
     ) -> tuple[str, list[str]]:
@@ -228,26 +243,40 @@ class QuizUseCase:
 
         # Try subtitle
         if request.context_mode in ("auto", "subtitle", "both"):
-            subtitle_result = self._subtitles.load(request.content_id)
-            if subtitle_result:
-                segments, _ = subtitle_result
-                if segments:
-                    text = "\n".join(seg.get("text", "") for seg in segments if seg.get("text"))
-                    if text.strip():
-                        context_parts.append(text)
-                        used_sources.append("subtitle")
-
-        # TODO: Add slide text extraction when available
+            subtitle_text = self._load_subtitle_context(request.content_id)
+            if subtitle_text:
+                context_parts.append(subtitle_text)
+                used_sources.append("subtitle")
 
         return "\n\n".join(context_parts), used_sources
 
-    async def _extract_knowledge_items(
+    def _load_subtitle_context(self, content_id: str) -> str:
+        """Load subtitle text from best available source."""
+        candidate_languages = prioritize_subtitle_languages(
+            self._subtitles.list_languages(content_id),
+        )
+
+        loaded = load_first_available_subtitle_segments(
+            self._subtitles,
+            content_id=content_id,
+            candidate_languages=candidate_languages,
+        )
+        if loaded:
+            _lang_used, segments = loaded
+            lines = [seg.text.replace("\n", " ").strip() for seg in segments if seg.text.strip()]
+            if lines:
+                return "\n".join(lines)
+
+        return ""
+
+    def _extract_knowledge_items(
         self,
-        llm: LLMProtocol,
         context: str,
         language: str,
         subject_type: str,
         user_instruction: str,
+        llm: LLMProtocol,
+        prompts: dict[str, str] | None,
     ) -> list[KnowledgeItem]:
         """Stage 1: Extract structured knowledge items from content.
 
@@ -257,40 +286,31 @@ class QuizUseCase:
             context: Source content text
             language: Output language
             subject_type: Subject type hint
-            user_instruction: Additional user guidance
+            user_instruction: Additional user guidance (sanitized)
+            llm: LLM instance to use
+            prompts: Prompt selection mapping
 
         Returns:
             List of extracted KnowledgeItems
         """
         from deeplecture.use_cases.dto.cheatsheet import KnowledgeItem
 
-        system_prompt, user_prompt = build_cheatsheet_extraction_prompts(
+        impl_id = prompts.get("cheatsheet_extraction") if prompts else None
+        prompt_builder = self._prompt_registry.get("cheatsheet_extraction", impl_id)
+        spec = prompt_builder.build(
             context=context,
             language=language,
             subject_type=subject_type,
             user_instruction=user_instruction,
         )
 
-        response = await llm.complete(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
+        response = llm.complete(
+            spec.user_prompt,
+            system_prompt=spec.system_prompt,
         )
 
         # Parse JSON response
-        try:
-            items_data = json.loads(response)
-            if not isinstance(items_data, list):
-                items_data = [items_data]
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse extraction response as JSON, using fallback")
-            items_data = [
-                {
-                    "category": "note",
-                    "content": response,
-                    "criticality": "medium",
-                    "tags": [],
-                }
-            ]
+        items_data = parse_llm_json(response, default_type=list, context="knowledge extraction")
 
         return [
             KnowledgeItem(
@@ -300,7 +320,7 @@ class QuizUseCase:
                 tags=item.get("tags", []),
             )
             for item in items_data
-            if item.get("content")
+            if isinstance(item, dict) and item.get("content")
         ]
 
     def _filter_by_criticality(
@@ -322,13 +342,14 @@ class QuizUseCase:
 
         return [item for item in items if levels.get(item.criticality, 2) >= min_level]
 
-    async def _generate_quiz(
+    def _generate_quiz(
         self,
-        llm: LLMProtocol,
         items: list[KnowledgeItem],
         language: str,
         question_count: int,
         user_instruction: str,
+        llm: LLMProtocol,
+        prompts: dict[str, str] | None,
     ) -> list[dict[str, Any]]:
         """Stage 2: Generate quiz questions from knowledge items.
 
@@ -336,7 +357,9 @@ class QuizUseCase:
             items: Filtered knowledge items
             language: Output language
             question_count: Number of questions to generate
-            user_instruction: Additional user guidance
+            user_instruction: Additional user guidance (sanitized)
+            llm: LLM instance to use
+            prompts: Prompt selection mapping
 
         Returns:
             List of raw quiz item dictionaries
@@ -347,27 +370,25 @@ class QuizUseCase:
             indent=2,
         )
 
-        system_prompt, user_prompt = build_quiz_generation_prompts(
+        impl_id = prompts.get("quiz_generation") if prompts else None
+        prompt_builder = self._prompt_registry.get("quiz_generation", impl_id)
+        spec = prompt_builder.build(
             knowledge_items_json=items_json,
             language=language,
             question_count=question_count,
             user_instruction=user_instruction,
         )
 
-        response = await llm.complete(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
+        response = llm.complete(
+            spec.user_prompt,
+            system_prompt=spec.system_prompt,
         )
 
         # Parse JSON response
-        try:
-            quiz_data = json.loads(response)
-            if not isinstance(quiz_data, list):
-                quiz_data = [quiz_data]
-            return quiz_data
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse quiz response as JSON")
+        quiz_data = parse_llm_json(response, default_type=list, context="quiz generation")
+        if not isinstance(quiz_data, list):
             return []
+        return quiz_data
 
     def _validate_and_filter(
         self,

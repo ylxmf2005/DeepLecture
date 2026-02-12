@@ -85,7 +85,17 @@ export function ClaimCard({ claim, onSeek }: ClaimCardProps) {
 
                     <div className="flex items-center gap-2">
                          {/* Confidence Score */}
-                         <div className="text-xs text-muted-foreground" title="Confidence Score">
+                         <div
+                            className={cn(
+                                "text-xs font-medium px-1.5 py-0.5 rounded",
+                                claim.confidence >= 0.8
+                                    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                                    : claim.confidence >= 0.5
+                                      ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
+                                      : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                            )}
+                            title="Confidence Score"
+                         >
                             {Math.round(claim.confidence * 100)}%
                         </div>
 

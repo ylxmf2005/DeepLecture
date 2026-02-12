@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import type { ContentItem, Live2DModel, ModelOption } from "@/lib/api";
+import type { ScopedSettings, SettingsScope } from "./useSettingsScope";
 
 export type TabId = "general" | "notifications" | "player" | "functions" | "model" | "live2d" | "prompt";
 
@@ -14,6 +15,8 @@ export interface SettingsSectionProps {
     title: string;
     accentColor: string;
     children: React.ReactNode;
+    /** Optional hint displayed below the section title (e.g. "default for all videos") */
+    hint?: string;
 }
 
 export interface ToggleSwitchProps {
@@ -24,7 +27,9 @@ export interface ToggleSwitchProps {
 }
 
 export interface SettingsTabProps {
-    video: ContentItem;
+    video?: ContentItem;
+    scope: SettingsScope;
+    settings: ScopedSettings;
 }
 
 export interface ModelTabData {

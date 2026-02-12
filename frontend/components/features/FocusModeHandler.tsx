@@ -37,12 +37,12 @@ const MissedContentDialog = dynamic(
 interface FocusModeHandlerProps {
     playerRef: React.RefObject<VideoPlayerRef | null>;
     subtitles: Subtitle[];
-    currentTime: number;
     learnerProfile?: string;
     // Settings
     autoPauseOnLeave: boolean;
     autoResumeOnReturn: boolean;
     autoSwitchSubtitlesOnLeave: boolean;
+    autoSwitchVoiceoverOnLeave: boolean;
     subtitleMode: SubtitleDisplayMode;
     hasTranslation: boolean;
     onSubtitleModeChange: (mode: SubtitleDisplayMode) => void;
@@ -62,11 +62,11 @@ interface FocusModeHandlerProps {
 export function FocusModeHandler({
     playerRef,
     subtitles,
-    currentTime,
     learnerProfile,
     autoPauseOnLeave,
     autoResumeOnReturn,
     autoSwitchSubtitlesOnLeave,
+    autoSwitchVoiceoverOnLeave,
     subtitleMode,
     hasTranslation,
     onSubtitleModeChange,
@@ -124,7 +124,16 @@ export function FocusModeHandler({
         if (document.hidden) {
             const isPlaying = playerRef.current?.isPlaying() || false;
             wasPlayingRef.current = isPlaying;
-            leaveTimeRef.current = currentTime;
+            leaveTimeRef.current = playerRef.current?.getCurrentTime() ?? 0;
+
+            const pendingVoiceoverAutoSwitch = autoSwitchVoiceoverOnLeave
+                ? getAutoSwitchVoiceoverOnHide({
+                    enabled: autoSwitchVoiceoverOnLeave,
+                    selectedVoiceoverId,
+                    originalVoiceoverId: quickToggleOriginalVoiceoverId,
+                    translatedVoiceoverId: quickToggleTranslatedVoiceoverId,
+                })
+                : undefined;
 
             // Clear any existing debounce timer
             if (hideDebounceRef.current) {
@@ -132,7 +141,15 @@ export function FocusModeHandler({
                 hideDebounceRef.current = null;
             }
 
-            // Handle auto-switch subtitles with debounce (1.5s delay to avoid brief tab switches)
+            // Voiceover auto-switch should happen immediately on hide.
+            // Timers in background tabs can be heavily throttled/suspended,
+            // which makes debounced switching unreliable.
+            if (pendingVoiceoverAutoSwitch !== undefined) {
+                voiceoverAutoSwitchStateRef.current = updateStateOnVoiceoverAutoSwitch(selectedVoiceoverId);
+                onVoiceoverChange(pendingVoiceoverAutoSwitch);
+            }
+
+            // Keep subtitle auto-switch debounced to avoid false triggers from brief tab switches
             if (autoSwitchSubtitlesOnLeave) {
                 hideDebounceRef.current = setTimeout(() => {
                     const newMode = getAutoSwitchModeOnHide({
@@ -145,23 +162,13 @@ export function FocusModeHandler({
                         autoSwitchStateRef.current = updateStateOnAutoSwitch(subtitleMode);
                         onSubtitleModeChange(newMode);
                     }
-
-                    // Auto-switch voiceover (piggybacks on same debounce)
-                    const newVoiceover = getAutoSwitchVoiceoverOnHide({
-                        enabled: true,
-                        selectedVoiceoverId,
-                        originalVoiceoverId: quickToggleOriginalVoiceoverId,
-                        translatedVoiceoverId: quickToggleTranslatedVoiceoverId,
-                    });
-
-                    if (newVoiceover !== undefined) {
-                        voiceoverAutoSwitchStateRef.current = updateStateOnVoiceoverAutoSwitch(selectedVoiceoverId);
-                        onVoiceoverChange(newVoiceover);
-                    }
                 }, AUTO_SWITCH_DEBOUNCE_MS);
             }
 
-            if (isPlaying && autoPauseOnLeave) {
+            // If voiceover auto-switch is available, keep playback running so
+            // background translated audio can continue. Auto-pause and
+            // voiceover auto-switch are contradictory behaviors.
+            if (isPlaying && autoPauseOnLeave && pendingVoiceoverAutoSwitch === undefined) {
                 playerRef.current?.pause();
             }
         } else {
@@ -184,10 +191,11 @@ export function FocusModeHandler({
                     onSubtitleModeChange(restoreMode);
                 }
                 autoSwitchStateRef.current = resetAutoSwitchState();
+            }
 
-                // Restore voiceover
+            if (autoSwitchVoiceoverOnLeave) {
                 const restoreVoiceover = getAutoSwitchVoiceoverOnShow({
-                    enabled: true,
+                    enabled: autoSwitchVoiceoverOnLeave,
                     selectedVoiceoverId,
                     originalVoiceoverId: quickToggleOriginalVoiceoverId,
                     translatedVoiceoverId: quickToggleTranslatedVoiceoverId,
@@ -202,7 +210,7 @@ export function FocusModeHandler({
 
             const leaveTimestamp = leaveTimeRef.current;
 
-            if (autoPauseOnLeave) {
+            if (autoPauseOnLeave && !autoSwitchVoiceoverOnLeave) {
                 if (wasPlayingRef.current && autoResumeOnReturn) {
                     playerRef.current?.play();
                 }
@@ -210,7 +218,7 @@ export function FocusModeHandler({
                 return;
             }
 
-            const currentVideoTime = playerRef.current?.getCurrentTime() || currentTime;
+            const currentVideoTime = playerRef.current?.getCurrentTime() ?? 0;
 
             if (leaveTimestamp !== null && wasPlayingRef.current) {
                 const missedSeconds = computeMissedSeconds(leaveTimestamp, currentVideoTime);
@@ -233,6 +241,7 @@ export function FocusModeHandler({
         autoPauseOnLeave,
         autoResumeOnReturn,
         autoSwitchSubtitlesOnLeave,
+        autoSwitchVoiceoverOnLeave,
         subtitleMode,
         hasTranslation,
         onSubtitleModeChange,
@@ -241,7 +250,6 @@ export function FocusModeHandler({
         quickToggleTranslatedVoiceoverId,
         onVoiceoverChange,
         summaryThresholdSeconds,
-        currentTime,
         playerRef,
         computeMissedSeconds,
     ]);

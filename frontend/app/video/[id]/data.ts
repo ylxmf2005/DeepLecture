@@ -5,8 +5,11 @@
 
 import type { ContentItem, VoiceoverEntry } from "@/lib/api";
 import { unwrapApiResponse } from "@/lib/api/transform";
+import { logger } from "@/shared/infrastructure";
+import { toError } from "@/lib/utils/errorUtils";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:11393";
+const log = logger.scope("VideoDataServer");
 
 /**
  * Fetch content metadata from backend (server-side)
@@ -27,7 +30,7 @@ export async function getContentMetadataServer(contentId: string): Promise<Conte
         const raw = await response.json();
         return unwrapApiResponse<ContentItem>(raw);
     } catch (error) {
-        console.error("[Server] Failed to fetch content metadata:", error);
+        log.error("Failed to fetch content metadata", toError(error), { contentId });
         return null;
     }
 }
@@ -52,7 +55,7 @@ export async function listVoiceoversServer(videoId: string): Promise<VoiceoverEn
         const data = unwrapApiResponse<{ voiceovers: VoiceoverEntry[] }>(raw);
         return data.voiceovers || [];
     } catch (error) {
-        console.error("[Server] Failed to fetch voiceovers:", error);
+        log.error("Failed to fetch voiceovers", toError(error), { videoId });
         return [];
     }
 }

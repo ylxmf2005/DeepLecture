@@ -14,21 +14,22 @@ import { useSubtitleRepeat } from "@/hooks/useSubtitleRepeat";
 import { useVideoPageHandlers } from "@/hooks/useVideoPageHandlers";
 import { useSubtitleManagement } from "@/hooks/useSubtitleManagement";
 import { SubtitleDisplayMode } from "@/stores/types";
-import { useVideoProgress, RESUME_TOLERANCE_SECONDS, RESUME_MAX_ATTEMPTS } from "@/hooks/useVideoProgress";
+import { useVideoProgress, RESUME_TOLERANCE_SECONDS } from "@/hooks/useVideoProgress";
 import { useThrottledTimeUpdate } from "@/hooks/useThrottledTimeUpdate";
 import { useNoteGeneration } from "@/hooks/useNoteGeneration";
 import { useDndTabLayout } from "@/hooks/useDndTabLayout";
 import { useLive2DAudioSync } from "@/hooks/useLive2DAudioSync";
 import { Settings, Wand2, Loader2 } from "lucide-react";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
+import { VideoConfigProvider } from "@/contexts/VideoConfigContext";
 
 // Lazy load dialogs - only loaded when opened
-const SettingsDialog = dynamic(
-    () => import("@/components/dialogs/SettingsDialog").then((mod) => mod.SettingsDialog),
-    { ssr: false }
-);
 const ActionsDialog = dynamic(
     () => import("@/components/dialogs/ActionsDialog").then((mod) => mod.ActionsDialog),
+    { ssr: false }
+);
+const SettingsDialog = dynamic(
+    () => import("@/components/dialogs/SettingsDialog").then((mod) => mod.SettingsDialog),
     { ssr: false }
 );
 const Live2DCanvas = dynamic(() => import("@/components/live2d/Live2DCanvas"), { ssr: false });
@@ -50,6 +51,8 @@ import {
 } from "@/stores";
 import { useVideoPageSettings } from "@/hooks/useVideoPageSettings";
 import { TAB_CONFIG } from "@/components/dnd/DraggableTabBar";
+import { getResumeCandidate } from "@/lib/videoResume";
+import { applyResumeSeek } from "@/lib/videoResumeSeek";
 
 export { type ProcessingAction } from "@/hooks/useVideoPageState";
 
@@ -77,6 +80,8 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
     const autoPauseOnLeave = playback.autoPauseOnLeave;
     const autoResumeOnReturn = playback.autoResumeOnReturn;
     const autoSwitchSubtitlesOnLeave = playback.autoSwitchSubtitlesOnLeave;
+    const autoSwitchVoiceoverOnLeave = playback.autoSwitchVoiceoverOnLeave;
+    const voiceoverAutoSwitchThresholdMs = playback.voiceoverAutoSwitchThresholdMs;
     const summaryThresholdSeconds = playback.summaryThresholdSeconds;
     const subtitleContextWindowSeconds = playback.subtitleContextWindowSeconds;
     const subtitleRepeatCount = playback.subtitleRepeatCount;
@@ -119,6 +124,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         setRefreshExplanations,
         refreshVerification,
         refreshCheatsheet,
+        refreshQuiz,
         subtitleRefreshVersion,
         askContext,
         setAskContext,
@@ -128,7 +134,6 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         setIsActionsOpen,
         generatingNote,
         setGeneratingNote,
-        tasks,
     } = pageState;
 
     // Store hooks
@@ -137,6 +142,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
     const setSubtitleModeSidebarStore = useVideoStateStore((store) => store.setSubtitleModeSidebar);
     const setDeckStore = useVideoStateStore((store) => store.setDeck);
     const setSmartSkipEnabledStore = useVideoStateStore((store) => store.setSmartSkipEnabled);
+    const persistedProgress = useVideoStateStore((store) => store.videos[videoId]?.progressSeconds ?? null);
     const quickToggleOriginalVoiceoverId = useQuickToggleOriginalVoiceoverId(videoId);
     const quickToggleTranslatedVoiceoverId = useQuickToggleTranslatedVoiceoverId(videoId);
     const setQuickToggleOriginalVoiceoverIdStore = useVideoStateStore((store) => store.setQuickToggleOriginalVoiceoverId);
@@ -183,6 +189,10 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
 
     // Refs
     const playerRef = useRef<VideoPlayerRef>(null);
+    const hydrationResumeHandledForVideoRef = useRef<string | null>(null);
+    const readyVideoElementRef = useRef<HTMLVideoElement | null>(null);
+    const persistedProgressRef = useRef<number | null>(null);
+    const resumeTickTimerRef = useRef<number | null>(null);
 
     // Live2D audio sync (extracted hook)
     const { live2dRef, connectLive2DAudio, onLive2DLoad } = useLive2DAudioSync({
@@ -206,11 +216,31 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
     // Video progress persistence
     const {
         resumeTargetRef,
-        resumeAttemptsRef,
         lastPersistedProgressRef,
         maybePersistProgress,
-        clearProgress,
     } = useVideoProgress({ videoId, playerRef });
+
+    useEffect(() => {
+        persistedProgressRef.current = persistedProgress;
+    }, [persistedProgress]);
+
+    useEffect(() => {
+        hydrationResumeHandledForVideoRef.current = null;
+        readyVideoElementRef.current = null;
+        if (resumeTickTimerRef.current !== null) {
+            window.clearInterval(resumeTickTimerRef.current);
+            resumeTickTimerRef.current = null;
+        }
+    }, [videoId]);
+
+    useEffect(() => {
+        return () => {
+            if (resumeTickTimerRef.current !== null) {
+                window.clearInterval(resumeTickTimerRef.current);
+                resumeTickTimerRef.current = null;
+            }
+        };
+    }, []);
 
     // Smart Skip hook
     const { handleSmartSkipCheck, handleSeek } = useSmartSkip({
@@ -343,15 +373,15 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         prevLearnerProfileRef.current = learnerProfile;
     }, [learnerProfile, videoId, setSmartSkipEnabledStore]);
 
-    // Player ready handler
-    const handlePlayerReady = useCallback(
-        (videoElement: HTMLVideoElement) => {
-            // Connect Live2D audio sync (handled by extracted hook)
-            connectLive2DAudio(videoElement);
+    const attemptResumeFromSavedProgress = useCallback(
+        (videoElement: HTMLVideoElement): boolean => {
+            if (hydrationResumeHandledForVideoRef.current === videoId) return true;
 
-            if (resumeTargetRef.current === null || resumeTargetRef.current <= 0) return;
-
-            resumeAttemptsRef.current = 0;
+            const candidate = getResumeCandidate({
+                resumeTarget: resumeTargetRef.current,
+                persistedProgress: persistedProgressRef.current,
+            });
+            if (candidate === null || candidate <= 0) return false;
 
             const clampTarget = (target: number) => {
                 const duration = videoElement.duration;
@@ -360,42 +390,126 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 return Math.min(Math.max(target, 0), maxPlayable);
             };
 
-            const trySeek = () => {
-                const target = resumeTargetRef.current;
-                if (target === null) return;
-                const safeTarget = clampTarget(target);
+            const safeTarget = clampTarget(candidate);
+            resumeTargetRef.current = safeTarget;
 
-                try {
-                    videoElement.currentTime = safeTarget;
-                } catch (error) {
-                    log.warn("Failed to apply saved progress", { error: error instanceof Error ? error.message : String(error) });
-                }
+            if (videoElement.readyState < 1) return false;
 
-                window.setTimeout(() => {
-                    const delta = Math.abs(videoElement.currentTime - safeTarget);
-                    if (delta <= RESUME_TOLERANCE_SECONDS) {
-                        resumeTargetRef.current = null;
-                        resumeAttemptsRef.current = 0;
-                        lastPersistedProgressRef.current = videoElement.currentTime;
-                        setCurrentTime(videoElement.currentTime);
-                    } else if (resumeAttemptsRef.current < RESUME_MAX_ATTEMPTS) {
-                        resumeAttemptsRef.current += 1;
-                        trySeek();
-                    } else {
-                        resumeTargetRef.current = null;
-                        resumeAttemptsRef.current = 0;
-                        clearProgress();
-                        lastPersistedProgressRef.current = 0;
-                        videoElement.currentTime = 0;
-                        setCurrentTime(0);
-                    }
-                }, 250);
-            };
+            try {
+                // Use player API first (sync-aware), then helper guarantees a direct video fallback.
+                applyResumeSeek(safeTarget, playerRef.current, videoElement);
+            } catch (error) {
+                log.warn("Failed to apply saved progress", { error: error instanceof Error ? error.message : String(error) });
+                return false;
+            }
 
-            trySeek();
+            const observedTime = playerRef.current?.getCurrentTime() ?? videoElement.currentTime;
+            const delta = Math.abs(observedTime - safeTarget);
+            if (delta > RESUME_TOLERANCE_SECONDS) return false;
+
+            hydrationResumeHandledForVideoRef.current = videoId;
+            resumeTargetRef.current = null;
+            lastPersistedProgressRef.current = observedTime;
+            setCurrentTime(observedTime);
+            return true;
         },
-        [clearProgress, lastPersistedProgressRef, resumeAttemptsRef, resumeTargetRef, setCurrentTime, connectLive2DAudio]
+        [videoId, lastPersistedProgressRef, resumeTargetRef, setCurrentTime]
     );
+
+    // Player ready handler
+    const handlePlayerReady = useCallback(
+        (videoElement: HTMLVideoElement) => {
+            readyVideoElementRef.current = videoElement;
+
+            // Connect Live2D audio sync (handled by extracted hook)
+            connectLive2DAudio(videoElement);
+
+            attemptResumeFromSavedProgress(videoElement);
+        },
+        [connectLive2DAudio, attemptResumeFromSavedProgress]
+    );
+
+    const isVideoReadyForResume = !loading && !!content;
+
+    // Keep trying resume for a short window once page/player is ready.
+    // This removes dependency on manual actions (for example voiceover switching).
+    useEffect(() => {
+        if (!isVideoReadyForResume) return;
+        if (hydrationResumeHandledForVideoRef.current === videoId) return;
+
+        const candidate = getResumeCandidate({
+            resumeTarget: resumeTargetRef.current,
+            persistedProgress,
+        });
+        if (candidate === null) return;
+
+        let elapsedMs = 0;
+        const MAX_MS = 20000;
+        const INTERVAL_MS = 200;
+
+        const clearTickTimer = () => {
+            if (resumeTickTimerRef.current !== null) {
+                window.clearInterval(resumeTickTimerRef.current);
+                resumeTickTimerRef.current = null;
+            }
+        };
+
+        const tick = () => {
+            const videoElement = readyVideoElementRef.current ?? playerRef.current?.getVideoElement();
+            if (!videoElement) return;
+            attemptResumeFromSavedProgress(videoElement);
+        };
+
+        tick();
+
+        clearTickTimer();
+        resumeTickTimerRef.current = window.setInterval(() => {
+            if (hydrationResumeHandledForVideoRef.current === videoId) {
+                clearTickTimer();
+                return;
+            }
+
+            elapsedMs += INTERVAL_MS;
+            if (elapsedMs >= MAX_MS) {
+                clearTickTimer();
+                return;
+            }
+
+            tick();
+        }, INTERVAL_MS);
+
+        const videoElement = readyVideoElementRef.current ?? playerRef.current?.getVideoElement();
+        if (!videoElement) {
+            return () => {
+                clearTickTimer();
+            };
+        }
+
+        const handleMediaReady = () => {
+            tick();
+        };
+
+        videoElement.addEventListener("loadedmetadata", handleMediaReady);
+        videoElement.addEventListener("loadeddata", handleMediaReady);
+        videoElement.addEventListener("canplay", handleMediaReady);
+        videoElement.addEventListener("seeked", handleMediaReady);
+
+        return () => {
+            clearTickTimer();
+            videoElement.removeEventListener("loadedmetadata", handleMediaReady);
+            videoElement.removeEventListener("loadeddata", handleMediaReady);
+            videoElement.removeEventListener("canplay", handleMediaReady);
+            videoElement.removeEventListener("seeked", handleMediaReady);
+        };
+    }, [
+        isVideoReadyForResume,
+        videoId,
+        persistedProgress,
+        selectedVoiceoverId,
+        selectedVoiceoverSyncTimeline,
+        attemptResumeFromSavedProgress,
+        resumeTargetRef,
+    ]);
 
     // Handle ESC key to exit web-fullscreen mode
     useEffect(() => {
@@ -411,21 +525,49 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         return () => document.removeEventListener("keydown", handleKeyDown);
     }, [viewMode, setViewMode]);
 
+    // Header action buttons — rendered unconditionally so they appear even during loading
+    const headerActions = (
+        <HeaderActionPortal>
+            <button
+                onClick={() => setIsActionsOpen(true)}
+                className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                title="Actions"
+                disabled={loading || !content}
+            >
+                <Wand2 className="w-5 h-5" />
+            </button>
+            <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                title="Video Configuration"
+                disabled={loading || !content}
+            >
+                <Settings className="w-5 h-5" />
+            </button>
+        </HeaderActionPortal>
+    );
+
     // Loading state
     if (loading) {
         return (
-            <div className="flex h-[50vh] items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-            </div>
+            <>
+                {headerActions}
+                <div className="flex h-[50vh] items-center justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                </div>
+            </>
         );
     }
 
     // Not found state
     if (!content) {
         return (
-            <div className="text-center py-12">
-                <h2 className="text-xl font-semibold">Content not found</h2>
-            </div>
+            <>
+                {headerActions}
+                <div className="text-center py-12">
+                    <h2 className="text-xl font-semibold">Content not found</h2>
+                </div>
+            </>
         );
     }
 
@@ -477,6 +619,15 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
             </div>
         )}
 
+    const formattedCreatedDate = new Intl.DateTimeFormat("en-US", {
+        timeZone: "UTC",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+    }).format(new Date(content.createdAt));
+
+    return (
+        <VideoConfigProvider contentId={videoId}>
         <DndContext
             id={dndContextId}
             sensors={sensors}
@@ -486,34 +637,38 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
             onDragEnd={handleDragEnd}
             onDragCancel={handleDragCancel}
         >
-            <div className={`grid gap-6 h-[130vh] ${
+            <div className={`grid ${
                 viewMode === "web-fullscreen"
-                    ? "invisible" // Hide main content but keep in DOM for state preservation
-                    : hideSidebars
-                        ? "grid-cols-1"
-                        : viewMode === "widescreen"
+                    ? "fixed inset-0 z-50 h-screen w-screen bg-black p-0 gap-0 grid-cols-1"
+                    : `gap-6 h-[130vh] ${
+                        hideSidebars
                             ? "grid-cols-1"
-                            : "grid-cols-1 md:grid-cols-3"
+                            : viewMode === "widescreen"
+                                ? "grid-cols-1"
+                                : "grid-cols-1 md:grid-cols-3"
+                    }`
             }`}>
                 {/* Video Player Column - full width in widescreen mode */}
-                <div className={`flex flex-col gap-4 ${
-                    viewMode === "widescreen"
-                        ? "col-span-1"
-                        : hideSidebars
-                            ? "col-span-1"
-                            : "md:col-span-2"
-                } ${viewMode === "widescreen" ? "" : "h-full min-h-0"}`}>
+                <div className={`flex flex-col ${
+                    viewMode === "web-fullscreen"
+                        ? "h-full min-h-0 gap-0 col-span-1"
+                        : `gap-4 ${
+                            viewMode === "widescreen"
+                                ? "col-span-1"
+                                : hideSidebars
+                                    ? "col-span-1"
+                                    : "md:col-span-2"
+                        } ${viewMode === "widescreen" ? "" : "h-full min-h-0"}`
+                }`}>
                     {/* Video Title and Metadata */}
-                    <div className="flex items-baseline justify-between gap-4">
-                        <h1 className="text-xl font-semibold truncate">{content.filename}</h1>
-                        <span className="text-sm text-muted-foreground whitespace-nowrap">
-                            {new Date(content.createdAt).toLocaleDateString(undefined, {
-                                year: "numeric",
-                                month: "short",
-                                day: "numeric"
-                            })}
-                        </span>
-                    </div>
+                    {viewMode !== "web-fullscreen" && (
+                        <div className="flex items-baseline justify-between gap-4">
+                            <h1 className="text-xl font-semibold truncate">{content.filename}</h1>
+                            <span className="text-sm text-muted-foreground whitespace-nowrap">
+                                {formattedCreatedDate}
+                            </span>
+                        </div>
+                    )}
                     <ErrorBoundary
                         component="VideoPlayerSection"
                         fallback={(error, reset) => (
@@ -551,11 +706,12 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             onViewModeChange={setViewMode}
                             bookmarkTimestamps={bookmarkTimestamps}
                             onAddBookmark={handleAddBookmark}
+                            className={viewMode === "web-fullscreen" ? "w-full h-full" : undefined}
                         />
                     </ErrorBoundary>
 
                     {/* NotesPanel in normal mode (not widescreen) */}
-                    {!hideSidebars && viewMode !== "widescreen" && (
+                    {!hideSidebars && viewMode !== "widescreen" && viewMode !== "web-fullscreen" && (
                         <NotesPanel
                             videoId={videoId}
                             onEditorReady={handleNoteEditorReady}
@@ -578,6 +734,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             refreshVerification={refreshVerification}
                             refreshCheatsheet={refreshCheatsheet}
                             refreshBookmarks={refreshBookmarks}
+                            refreshQuiz={refreshQuiz}
                             askContext={askContext}
                             learnerProfile={learnerProfile}
                             subtitleContextWindowSeconds={subtitleContextWindowSeconds}
@@ -593,7 +750,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 </div>
 
                 {/* Sidebar in normal mode (not widescreen) */}
-                {!hideSidebars && viewMode !== "widescreen" && (
+                {!hideSidebars && viewMode !== "widescreen" && viewMode !== "web-fullscreen" && (
                     <SidebarTabs
                         content={content}
                         videoId={videoId}
@@ -615,6 +772,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                         refreshVerification={refreshVerification}
                         refreshCheatsheet={refreshCheatsheet}
                         refreshBookmarks={refreshBookmarks}
+                        refreshQuiz={refreshQuiz}
                         askContext={askContext}
                         learnerProfile={learnerProfile}
                         subtitleContextWindowSeconds={subtitleContextWindowSeconds}
@@ -653,6 +811,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             refreshVerification={refreshVerification}
                             refreshCheatsheet={refreshCheatsheet}
                             refreshBookmarks={refreshBookmarks}
+                            refreshQuiz={refreshQuiz}
                             askContext={askContext}
                             learnerProfile={learnerProfile}
                             subtitleContextWindowSeconds={subtitleContextWindowSeconds}
@@ -685,6 +844,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             refreshVerification={refreshVerification}
                             refreshCheatsheet={refreshCheatsheet}
                             refreshBookmarks={refreshBookmarks}
+                            refreshQuiz={refreshQuiz}
                             askContext={askContext}
                             learnerProfile={learnerProfile}
                             subtitleContextWindowSeconds={subtitleContextWindowSeconds}
@@ -703,6 +863,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
                 video={content}
+                initialScope="video"
             />
 
             <ActionsDialog
@@ -739,11 +900,12 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
             <FocusModeHandler
                 playerRef={playerRef}
                 subtitles={playerSubtitles}
-                currentTime={currentTime}
                 learnerProfile={learnerProfile}
                 autoPauseOnLeave={autoPauseOnLeave}
                 autoResumeOnReturn={autoResumeOnReturn}
                 autoSwitchSubtitlesOnLeave={autoSwitchSubtitlesOnLeave}
+                autoSwitchVoiceoverOnLeave={autoSwitchVoiceoverOnLeave}
+                voiceoverAutoSwitchThresholdMs={voiceoverAutoSwitchThresholdMs}
                 subtitleMode={playerSubtitleMode}
                 hasTranslation={content.translationStatus === "ready"}
                 onSubtitleModeChange={setPlayerSubtitleMode}
@@ -758,22 +920,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 onAddToNotes={handlers.handleAddToNotes}
             />
 
-            <HeaderActionPortal>
-                <button
-                    onClick={() => setIsActionsOpen(true)}
-                    className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-                    title="Actions"
-                >
-                    <Wand2 className="w-5 h-5" />
-                </button>
-                <button
-                    onClick={() => setIsSettingsOpen(true)}
-                    className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-                    title="Settings"
-                >
-                    <Settings className="w-5 h-5" />
-                </button>
-            </HeaderActionPortal>
+            {headerActions}
 
             {live2dEnabled && (
                 <ErrorBoundary
@@ -814,6 +961,6 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
             </DragOverlay>
         </div>
         </DndContext>
-        </>
+        </VideoConfigProvider>
     );
 }

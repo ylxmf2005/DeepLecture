@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from deeplecture.domain import FeatureStatus, FeatureType
-from deeplecture.domain.errors import ContentNotFoundError, SubtitleGenerationError
+from deeplecture.domain.errors import ContentNotFoundError, TimelineGenerationError
 from deeplecture.use_cases.dto.timeline import (
     KnowledgeUnit,
     SubtitleSegment,
@@ -90,7 +90,7 @@ class TimelineUseCase:
 
         Raises:
             ContentNotFoundError: If content or subtitles not found
-            SubtitleGenerationError: If generation fails
+            TimelineGenerationError: If generation fails
         """
         metadata = self._metadata.get(request.content_id)
         if metadata is None:
@@ -117,7 +117,7 @@ class TimelineUseCase:
             # Load and parse subtitles using subtitle_language (source)
             segments = self._load_subtitle_segments(request.content_id, subtitle_language)
             if not segments:
-                raise SubtitleGenerationError("No subtitle segments found")
+                raise TimelineGenerationError("No subtitle segments found")
 
             # Stage 1: Segment into knowledge units (LLM uses output_language)
             knowledge_units = self._segment_knowledge_units(
@@ -189,7 +189,7 @@ class TimelineUseCase:
             metadata = metadata.with_status(FeatureType.TIMELINE.value, FeatureStatus.ERROR)
             self._metadata.save(metadata)
             logger.error("Timeline generation failed: %s", e)
-            raise SubtitleGenerationError(str(e)) from e
+            raise TimelineGenerationError(str(e)) from e
 
     def get_timeline(self, content_id: str, language: str | None = None) -> TimelineResult | None:
         """Get existing timeline."""
@@ -228,7 +228,7 @@ class TimelineUseCase:
             base_language=language,
         )
         if not loaded:
-            raise SubtitleGenerationError(f"Subtitles not found: {language}")
+            raise TimelineGenerationError(f"Subtitles not found: {language}")
         _lang_used, subtitle_segments = loaded
 
         # Convert domain Segment to timeline SubtitleSegment

@@ -8,7 +8,6 @@ from flask import Blueprint, request
 
 from deeplecture.di import get_container
 from deeplecture.presentation.api.shared import accepted, bad_request, handle_errors, rate_limit, success
-from deeplecture.presentation.api.shared.model_resolution import resolve_models_for_task
 from deeplecture.presentation.api.shared.validation import (
     validate_content_id,
     validate_language,
@@ -91,15 +90,9 @@ def generate_cheatsheet() -> Response:
         return bad_request(f"subject_type must be one of: {', '.join(valid_subjects)}")
 
     llm_model = data.get("llm_model") or None
+    prompts = data.get("prompts") or None
 
     container = get_container()
-    llm_model, _ = resolve_models_for_task(
-        container=container,
-        content_id=content_id,
-        task_key="cheatsheet_generation",
-        llm_model=llm_model,
-        tts_model=None,
-    )
 
     generate_request = GenerateCheatsheetRequest(
         content_id=content_id,
@@ -107,13 +100,14 @@ def generate_cheatsheet() -> Response:
         context_mode=context_mode,
         user_instruction=user_instruction,
         min_criticality=min_criticality,
-        target_pages=target_pages or 2,
+        target_pages=target_pages if target_pages is not None else 2,
         subject_type=subject_type,
         llm_model=llm_model,
+        prompts=prompts,
     )
 
-    async def _run_generation(ctx: object) -> dict:
-        result = await container.cheatsheet_usecase.generate(generate_request)
+    def _run_generation(ctx: object) -> dict:
+        result = container.cheatsheet_usecase.generate(generate_request)
         return result.to_dict()
 
     task_id = container.task_manager.submit(

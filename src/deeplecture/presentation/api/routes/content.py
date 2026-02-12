@@ -74,7 +74,12 @@ def delete_content(content_id: str) -> Response:
 
 
 def _reconcile_stale_processing(metadata: object, container) -> None:
-    """If status is 'processing' but task doesn't exist, update to 'error'."""
+    """If status is 'processing' but task doesn't exist, update to 'error'.
+
+    Covers all features that track job_id in ContentMetadata.
+    Other features (note, voiceover, quiz, cheatsheet, explanation) don't
+    have job_id fields in the entity and are handled by their own mechanisms.
+    """
     features = [
         ("video", "video_status", "video_job_id"),
         ("subtitle", "subtitle_status", "subtitle_job_id"),
