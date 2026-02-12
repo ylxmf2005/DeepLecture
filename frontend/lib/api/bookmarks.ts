@@ -16,7 +16,6 @@ export interface BookmarkItem {
 export interface BookmarkListResponse {
     contentId: string;
     bookmarks: BookmarkItem[];
-    count: number;
 }
 
 export const listBookmarks = async (contentId: string): Promise<BookmarkListResponse> => {

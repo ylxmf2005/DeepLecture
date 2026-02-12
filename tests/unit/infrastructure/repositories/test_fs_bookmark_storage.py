@@ -118,25 +118,3 @@ class TestFsBookmarkStorageSave:
         file_path = tmp_path / "video-123" / "bookmarks" / "bookmarks.json"
         loaded = json.loads(file_path.read_text())
         assert loaded == []
-
-
-# =============================================================================
-# Exists Tests
-# =============================================================================
-
-
-class TestFsBookmarkStorageExists:
-    """Tests for exists()."""
-
-    @pytest.mark.unit
-    def test_exists_false_when_no_file(self, tmp_path: Path) -> None:
-        """exists() returns False when no bookmarks file."""
-        storage = _make_storage(tmp_path)
-        assert storage.exists("video-123") is False
-
-    @pytest.mark.unit
-    def test_exists_true_after_save(self, tmp_path: Path) -> None:
-        """exists() returns True after saving bookmarks."""
-        storage = _make_storage(tmp_path)
-        storage.save_all("video-123", [{"id": "x"}])
-        assert storage.exists("video-123") is True

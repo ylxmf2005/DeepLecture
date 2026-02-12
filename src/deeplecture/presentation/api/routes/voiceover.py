@@ -20,6 +20,7 @@ from deeplecture.presentation.api.shared import (
     rate_limit,
     success,
 )
+from deeplecture.presentation.api.shared.model_resolution import resolve_models_for_task
 from deeplecture.presentation.api.shared.validation import validate_content_id, validate_filename, validate_language
 from deeplecture.use_cases.dto.voiceover import GenerateVoiceoverRequest
 
@@ -68,6 +69,13 @@ def generate_voiceover(content_id: str) -> Response:
     tts_model = data.get("tts_model") or None
 
     container = get_container()
+    _, tts_model = resolve_models_for_task(
+        container=container,
+        content_id=content_id,
+        task_key="voiceover_generation",
+        llm_model=None,
+        tts_model=tts_model,
+    )
 
     video_path = container.artifact_storage.get_path(content_id, "video", fallback_kinds=["source"])
     if video_path is None:

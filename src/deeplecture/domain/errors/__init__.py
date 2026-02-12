@@ -1,6 +1,7 @@
 """Domain errors - organized by module."""
 
 from deeplecture.domain.errors.base import DomainError
+from deeplecture.domain.errors.bookmark import BookmarkNotFoundError
 from deeplecture.domain.errors.content import ContentNotFoundError
 from deeplecture.domain.errors.feature import InvalidFeatureStatusTransitionError
 from deeplecture.domain.errors.subtitle import (
@@ -28,6 +29,7 @@ from deeplecture.domain.errors.upload import (
 )
 
 __all__ = [
+    "BookmarkNotFoundError",
     "ContentNotFoundError",
     "DomainError",
     "FileSizeLimitExceededError",

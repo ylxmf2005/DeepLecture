@@ -8,6 +8,7 @@ from flask import Blueprint, request
 
 from deeplecture.di import get_container
 from deeplecture.presentation.api.shared import accepted, bad_request, handle_errors, rate_limit, success
+from deeplecture.presentation.api.shared.model_resolution import resolve_models_for_task
 from deeplecture.presentation.api.shared.validation import (
     validate_content_id,
     validate_language,
@@ -89,7 +90,16 @@ def generate_cheatsheet() -> Response:
     if subject_type not in valid_subjects:
         return bad_request(f"subject_type must be one of: {', '.join(valid_subjects)}")
 
+    llm_model = data.get("llm_model") or None
+
     container = get_container()
+    llm_model, _ = resolve_models_for_task(
+        container=container,
+        content_id=content_id,
+        task_key="cheatsheet_generation",
+        llm_model=llm_model,
+        tts_model=None,
+    )
 
     generate_request = GenerateCheatsheetRequest(
         content_id=content_id,
@@ -99,6 +109,7 @@ def generate_cheatsheet() -> Response:
         min_criticality=min_criticality,
         target_pages=target_pages or 2,
         subject_type=subject_type,
+        llm_model=llm_model,
     )
 
     async def _run_generation(ctx: object) -> dict:

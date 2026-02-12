@@ -9,6 +9,7 @@ from flask import Blueprint, request
 
 from deeplecture.di import get_container
 from deeplecture.presentation.api.shared import handle_errors, not_found, rate_limit, success
+from deeplecture.presentation.api.shared.model_resolution import resolve_models_for_task
 from deeplecture.presentation.api.shared.validation import (
     validate_content_id,
     validate_message,
@@ -118,6 +119,13 @@ def ask_question(conversation_id: str) -> Response:
     context_items = _parse_context_items(raw_context)
 
     container = get_container()
+    llm_model, _ = resolve_models_for_task(
+        container=container,
+        content_id=content_id,
+        task_key="ask_video",
+        llm_model=llm_model,
+        tts_model=None,
+    )
     req = AskQuestionRequest(
         content_id=content_id,
         conversation_id=conversation_id,
@@ -151,6 +159,13 @@ def summarize_context() -> Response:
     context_items = _parse_context_items(raw_context)
 
     container = get_container()
+    llm_model, _ = resolve_models_for_task(
+        container=container,
+        content_id=None,
+        task_key="ask_video",
+        llm_model=llm_model,
+        tts_model=None,
+    )
     req = SummarizeContextRequest(
         context_items=context_items,
         learner_profile=learner_profile,

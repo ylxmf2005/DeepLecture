@@ -373,12 +373,15 @@ export interface AppConfigResponse {
     llm: {
         models: ModelOption[];
         defaultModel: string;
+        taskModelDefaults?: Record<string, string>;
     };
     tts: {
         models: ModelOption[];
         defaultModel: string;
+        taskModelDefaults?: Record<string, string>;
     };
     prompts: Record<string, PromptFunctionConfig>;
+    taskKeys?: string[];
 }
 
 // =============================================================================

@@ -112,6 +112,7 @@ export interface TabContentProps extends SubtitleProps, ProcessingProps, Timelin
     refreshExplanations: number;
     refreshVerification: number;
     refreshCheatsheet: number;
+    refreshBookmarks: number;
 }
 
 // Shared placeholder for "no video yet" state
@@ -235,6 +236,7 @@ export function renderTabContent(tabId: TabId, props: TabContentProps): React.Re
         refreshExplanations,
         refreshVerification,
         refreshCheatsheet,
+        refreshBookmarks,
         askContext,
         learnerProfile,
         subtitleContextWindowSeconds,
@@ -384,6 +386,7 @@ export function renderTabContent(tabId: TabId, props: TabContentProps): React.Re
                     onSeek={onSeek}
                     subtitles={subtitlesSource}
                     onBookmarksChange={onBookmarksChange}
+                    refreshTrigger={refreshBookmarks}
                 />
             );
 

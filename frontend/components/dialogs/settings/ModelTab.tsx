@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Cpu, Volume2, Loader2, RotateCcw } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { getAppConfig, ModelOption } from "@/lib/api";
@@ -18,6 +18,7 @@ export function ModelTab(_props: SettingsTabProps) {
     const [defaultLlmModel, setDefaultLlmModel] = useState<string>("");
     const [ttsModels, setTtsModels] = useState<ModelOption[]>([]);
     const [defaultTtsModel, setDefaultTtsModel] = useState<string>("");
+    const [taskKeys, setTaskKeys] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
 
     const { ai, setAILlmModel, setAITtsModel } = useGlobalSettingsStore(
@@ -37,6 +38,7 @@ export function ModelTab(_props: SettingsTabProps) {
                 setDefaultLlmModel(config.llm.defaultModel);
                 setTtsModels(config.tts.models);
                 setDefaultTtsModel(config.tts.defaultModel);
+                setTaskKeys(config.taskKeys ?? []);
             } catch (error) {
                 log.error("Failed to fetch app config", toError(error));
             } finally {
@@ -46,18 +48,23 @@ export function ModelTab(_props: SettingsTabProps) {
         fetchConfig();
     }, []);
 
-    const getEffectiveLlmModel = () => ai.llmModel || defaultLlmModel;
-    const getEffectiveTtsModel = () => ai.ttsModel || defaultTtsModel;
+    const llmOptions = useMemo(
+        () =>
+            llmModels.map((m) => ({
+                value: m.id,
+                label: `${m.name} (${m.provider})${m.id === defaultLlmModel ? " - Default" : ""}`,
+            })),
+        [llmModels, defaultLlmModel]
+    );
 
-    const llmOptions = llmModels.map((m) => ({
-        value: m.id,
-        label: `${m.name} (${m.provider})${m.id === defaultLlmModel ? " - Default" : ""}`,
-    }));
-
-    const ttsOptions = ttsModels.map((m) => ({
-        value: m.id,
-        label: `${m.name} (${m.provider})${m.id === defaultTtsModel ? " - Default" : ""}`,
-    }));
+    const ttsOptions = useMemo(
+        () =>
+            ttsModels.map((m) => ({
+                value: m.id,
+                label: `${m.name} (${m.provider})${m.id === defaultTtsModel ? " - Default" : ""}`,
+            })),
+        [ttsModels, defaultTtsModel]
+    );
 
     if (loading) {
         return (
@@ -70,14 +77,11 @@ export function ModelTab(_props: SettingsTabProps) {
 
     return (
         <>
-            {/* LLM Model Selection */}
             <SettingsSection icon={Cpu} title="LLM Model" accentColor="indigo">
                 <SettingsCard>
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                Model for AI Tasks
-                            </label>
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Model for AI Tasks</label>
                             {ai.llmModel && (
                                 <button
                                     onClick={() => setAILlmModel(null)}
@@ -89,26 +93,21 @@ export function ModelTab(_props: SettingsTabProps) {
                             )}
                         </div>
                         <CustomSelect
-                            value={getEffectiveLlmModel()}
+                            value={ai.llmModel || defaultLlmModel}
                             onChange={(v) => setAILlmModel(v === defaultLlmModel ? null : v)}
                             options={llmOptions}
                             accent="indigo"
                         />
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                            Used for Q&A, explanations, notes, and timeline generation.
-                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Used for Q&A, explanations, notes, timeline and related tasks.</p>
                     </div>
                 </SettingsCard>
             </SettingsSection>
 
-            {/* TTS Model Selection */}
             <SettingsSection icon={Volume2} title="TTS Model" accentColor="rose">
                 <SettingsCard>
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                Voice for Audio
-                            </label>
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Voice for Audio</label>
                             {ai.ttsModel && (
                                 <button
                                     onClick={() => setAITtsModel(null)}
@@ -120,17 +119,25 @@ export function ModelTab(_props: SettingsTabProps) {
                             )}
                         </div>
                         <CustomSelect
-                            value={getEffectiveTtsModel()}
+                            value={ai.ttsModel || defaultTtsModel}
                             onChange={(v) => setAITtsModel(v === defaultTtsModel ? null : v)}
                             options={ttsOptions}
                             accent="rose"
                         />
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                            Used for voiceover and slide lecture audio.
-                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Used for voiceover and slide lecture audio tasks.</p>
                     </div>
                 </SettingsCard>
             </SettingsSection>
+
+            {taskKeys.length > 0 && (
+                <SettingsSection icon={Cpu} title="Task Model Mapping" accentColor="violet">
+                    <SettingsCard>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                            Backend task-level defaults are active for: {taskKeys.join(", ")}.
+                        </div>
+                    </SettingsCard>
+                </SettingsSection>
+            )}
         </>
     );
 }

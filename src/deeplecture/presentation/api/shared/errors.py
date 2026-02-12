@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, ParamSpec, TypeVar
 from werkzeug.exceptions import HTTPException
 
 from deeplecture.domain.errors import (
+    BookmarkNotFoundError,
     ContentNotFoundError,
     DomainError,
     InvalidURLError,
@@ -39,6 +40,7 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 ERROR_CODE_MAP: dict[type[Exception], tuple[str, int]] = {
+    BookmarkNotFoundError: ("BOOKMARK_NOT_FOUND", 404),
     ContentNotFoundError: ("CONTENT_NOT_FOUND", 404),
     SubtitleNotFoundError: ("SUBTITLE_NOT_FOUND", 404),
     TaskNotFoundError: ("TASK_NOT_FOUND", 404),

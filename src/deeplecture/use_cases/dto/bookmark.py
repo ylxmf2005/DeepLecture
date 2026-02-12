@@ -107,5 +107,4 @@ class BookmarkListResult:
         return {
             "content_id": self.content_id,
             "bookmarks": [b.to_dict() for b in self.bookmarks],
-            "count": len(self.bookmarks),
         }

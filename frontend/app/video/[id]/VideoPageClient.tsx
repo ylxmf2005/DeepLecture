@@ -237,6 +237,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
 
     // Bookmark timestamps for progress bar markers (set by BookmarkTab via onBookmarksChange)
     const [bookmarkTimestamps, setBookmarkTimestamps] = useState<number[]>([]);
+    const [refreshBookmarks, setRefreshBookmarks] = useState(0);
 
     // Handle B-key bookmark creation
     const handleAddBookmark = useCallback(async (time: number) => {
@@ -245,6 +246,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
             const title = active.map((s) => s.text).join(" ").trim() || `Bookmark at ${formatTime(time)}`;
             const item = await createBookmark(videoId, time, title);
             setBookmarkTimestamps((prev) => [...prev, item.timestamp].sort((a, b) => a - b));
+            setRefreshBookmarks((prev) => prev + 1);
             toast.success("Bookmark added");
         } catch {
             toast.error("Failed to add bookmark");
@@ -575,6 +577,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             refreshExplanations={refreshExplanations}
                             refreshVerification={refreshVerification}
                             refreshCheatsheet={refreshCheatsheet}
+                            refreshBookmarks={refreshBookmarks}
                             askContext={askContext}
                             learnerProfile={learnerProfile}
                             subtitleContextWindowSeconds={subtitleContextWindowSeconds}
@@ -611,6 +614,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                         refreshExplanations={refreshExplanations}
                         refreshVerification={refreshVerification}
                         refreshCheatsheet={refreshCheatsheet}
+                        refreshBookmarks={refreshBookmarks}
                         askContext={askContext}
                         learnerProfile={learnerProfile}
                         subtitleContextWindowSeconds={subtitleContextWindowSeconds}
@@ -648,6 +652,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             refreshExplanations={refreshExplanations}
                             refreshVerification={refreshVerification}
                             refreshCheatsheet={refreshCheatsheet}
+                            refreshBookmarks={refreshBookmarks}
                             askContext={askContext}
                             learnerProfile={learnerProfile}
                             subtitleContextWindowSeconds={subtitleContextWindowSeconds}
@@ -679,6 +684,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             refreshExplanations={refreshExplanations}
                             refreshVerification={refreshVerification}
                             refreshCheatsheet={refreshCheatsheet}
+                            refreshBookmarks={refreshBookmarks}
                             askContext={askContext}
                             learnerProfile={learnerProfile}
                             subtitleContextWindowSeconds={subtitleContextWindowSeconds}

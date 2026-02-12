@@ -62,6 +62,9 @@ function SortableTab({ id, active, onClick }: SortableTabProps) {
     };
 
     const config = TAB_CONFIG[id];
+    if (!config) {
+        return null;
+    }
 
     return (
         <button

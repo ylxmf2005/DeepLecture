@@ -7,7 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from deeplecture.use_cases.bookmark import BookmarkNotFoundError, BookmarkUseCase
+from deeplecture.domain.errors import BookmarkNotFoundError
+from deeplecture.use_cases.bookmark import BookmarkUseCase
 from deeplecture.use_cases.dto.bookmark import (
     BookmarkItem,
     CreateBookmarkRequest,

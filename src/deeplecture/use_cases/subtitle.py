@@ -234,7 +234,7 @@ class SubtitleUseCase:
         # Get prompt builder from registry
         impl_id = prompts.get("subtitle_background") if prompts else None
         prompt_builder = self._prompt_registry.get("subtitle_background", impl_id)
-        spec = prompt_builder.build(transcript=transcript)
+        spec = prompt_builder.build(transcript_text=transcript)
 
         try:
             raw = llm.complete(spec.user_prompt, system_prompt=spec.system_prompt)

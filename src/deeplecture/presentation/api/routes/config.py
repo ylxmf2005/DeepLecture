@@ -9,6 +9,7 @@ from flask import Blueprint
 from deeplecture.config import get_settings
 from deeplecture.di import get_container
 from deeplecture.presentation.api.shared import handle_errors, success
+from deeplecture.use_cases.task_modeling import TASK_KEYS, normalize_task_key
 
 if TYPE_CHECKING:
     from flask import Response
@@ -39,6 +40,18 @@ def get_app_config() -> Response:
     tts_models = [{"id": m.name, "name": m.name, "provider": m.provider} for m in tts_provider.list_models()]
     tts_default = tts_provider.get_default_model_name()
 
+    settings = get_settings()
+    global_cfg = container.global_config_storage.load()
+    llm_task_defaults: dict[str, str] = {normalize_task_key(k): v for k, v in settings.llm.task_models.items() if v}
+    tts_task_defaults: dict[str, str] = {normalize_task_key(k): v for k, v in settings.tts.task_models.items() if v}
+    if global_cfg:
+        for k, v in global_cfg.ai.llm.task_models.items():
+            if v:
+                llm_task_defaults[normalize_task_key(k)] = v
+        for k, v in global_cfg.ai.tts.task_models.items():
+            if v:
+                tts_task_defaults[normalize_task_key(k)] = v
+
     # Prompts
     prompts_data: dict[str, dict] = {}
     for func_id in prompt_registry.list_func_ids():
@@ -62,12 +75,15 @@ def get_app_config() -> Response:
             "llm": {
                 "models": llm_models,
                 "defaultModel": llm_default,
+                "taskModelDefaults": llm_task_defaults,
             },
             "tts": {
                 "models": tts_models,
                 "defaultModel": tts_default,
+                "taskModelDefaults": tts_task_defaults,
             },
             "prompts": prompts_data,
+            "taskKeys": list(TASK_KEYS),
         }
     )
 

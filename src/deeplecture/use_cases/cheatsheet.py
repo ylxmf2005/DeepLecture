@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 if TYPE_CHECKING:
     from deeplecture.use_cases.interfaces import (
+        LLMProtocol,
         LLMProviderProtocol,
         PathResolverProtocol,
     )
@@ -126,12 +127,14 @@ class CheatsheetUseCase:
             ValueError: If no content sources available
         """
         # Load context (subtitles for now, can extend to slides)
+        llm = self._llm.get(request.llm_model)
         context, used_sources = await self._load_context(request)
         if not context.strip():
             raise ValueError(f"No content available for {request.content_id}")
 
         # Stage 1: Extract knowledge items
         items = await self._extract_knowledge_items(
+            llm=llm,
             context=context,
             language=request.language,
             subject_type=request.subject_type,
@@ -143,6 +146,7 @@ class CheatsheetUseCase:
 
         # Stage 2: Render to Markdown
         cheatsheet_content = await self._render_cheatsheet(
+            llm=llm,
             items=filtered_items,
             language=request.language,
             target_pages=request.target_pages,
@@ -195,6 +199,7 @@ class CheatsheetUseCase:
 
     async def _extract_knowledge_items(
         self,
+        llm: LLMProtocol,
         context: str,
         language: str,
         subject_type: str,
@@ -218,7 +223,7 @@ class CheatsheetUseCase:
             user_instruction=user_instruction,
         )
 
-        response = await self._llm.complete(
+        response = await llm.complete(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
         )
@@ -272,6 +277,7 @@ class CheatsheetUseCase:
 
     async def _render_cheatsheet(
         self,
+        llm: LLMProtocol,
         items: list[KnowledgeItem],
         language: str,
         target_pages: int,
@@ -301,7 +307,7 @@ class CheatsheetUseCase:
             min_criticality=min_criticality,
         )
 
-        return await self._llm.complete(
+        return await llm.complete(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
         )

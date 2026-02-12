@@ -20,9 +20,11 @@ interface BookmarkTabProps {
     subtitles?: Subtitle[];
     /** Callback when bookmarks change — parent can use this for progress bar markers */
     onBookmarksChange?: (timestamps: number[]) => void;
+    /** Incremented by parent to trigger a re-fetch (e.g. after B-key creates a bookmark externally) */
+    refreshTrigger?: number;
 }
 
-export function BookmarkTab({ videoId, currentTime, onSeek, subtitles, onBookmarksChange }: BookmarkTabProps) {
+export function BookmarkTab({ videoId, currentTime, onSeek, subtitles, onBookmarksChange, refreshTrigger }: BookmarkTabProps) {
     const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -52,6 +54,13 @@ export function BookmarkTab({ videoId, currentTime, onSeek, subtitles, onBookmar
     useEffect(() => {
         fetchBookmarks();
     }, [fetchBookmarks]);
+
+    // Re-fetch when parent signals a change (e.g. B-key created a bookmark externally)
+    useEffect(() => {
+        if (refreshTrigger) {
+            fetchBookmarks();
+        }
+    }, [refreshTrigger, fetchBookmarks]);
 
     // Notify parent of bookmark timestamps for progress bar markers
     useEffect(() => {

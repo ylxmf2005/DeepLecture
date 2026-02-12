@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from deeplecture.use_cases.dto.cheatsheet import KnowledgeItem
     from deeplecture.use_cases.dto.quiz import GenerateQuizRequest
     from deeplecture.use_cases.interfaces import (
+        LLMProtocol,
         LLMProviderProtocol,
         PathResolverProtocol,
         QuizStorageProtocol,
@@ -164,12 +165,14 @@ class QuizUseCase:
             ValueError: If no content sources available
         """
         # Load context (subtitles for now, can extend to slides)
+        llm = self._llm.get(request.llm_model)
         context, used_sources = await self._load_context(request)
         if not context.strip():
             raise ValueError(f"No content available for {request.content_id}")
 
         # Stage 1: Extract knowledge items (reuses cheatsheet extraction)
         knowledge_items = await self._extract_knowledge_items(
+            llm=llm,
             context=context,
             language=request.language,
             subject_type=request.subject_type,
@@ -181,6 +184,7 @@ class QuizUseCase:
 
         # Stage 2: Generate quiz from knowledge items
         raw_quiz_items = await self._generate_quiz(
+            llm=llm,
             items=filtered_items,
             language=request.language,
             question_count=request.question_count,
@@ -239,6 +243,7 @@ class QuizUseCase:
 
     async def _extract_knowledge_items(
         self,
+        llm: LLMProtocol,
         context: str,
         language: str,
         subject_type: str,
@@ -266,7 +271,7 @@ class QuizUseCase:
             user_instruction=user_instruction,
         )
 
-        response = await self._llm.complete(
+        response = await llm.complete(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
         )
@@ -319,6 +324,7 @@ class QuizUseCase:
 
     async def _generate_quiz(
         self,
+        llm: LLMProtocol,
         items: list[KnowledgeItem],
         language: str,
         question_count: int,
@@ -348,7 +354,7 @@ class QuizUseCase:
             user_instruction=user_instruction,
         )
 
-        response = await self._llm.complete(
+        response = await llm.complete(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
         )

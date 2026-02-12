@@ -114,14 +114,3 @@ class FsBookmarkStorage:
             return datetime.fromtimestamp(st.st_mtime, tz=UTC)
         except OSError:
             return datetime.now(UTC)
-
-    def exists(self, content_id: str) -> bool:
-        """Check if bookmarks file exists.
-
-        Args:
-            content_id: Content identifier.
-
-        Returns:
-            True if bookmarks exist, False otherwise.
-        """
-        return self._get_path(content_id).exists()

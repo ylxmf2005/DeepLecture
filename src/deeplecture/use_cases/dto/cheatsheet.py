@@ -54,6 +54,7 @@ class GenerateCheatsheetRequest:
     min_criticality: str = "medium"  # high | medium | low
     target_pages: int = 2  # Approximate target length
     subject_type: str = "auto"  # stem | humanities | auto
+    llm_model: str | None = None
 
 
 @dataclass

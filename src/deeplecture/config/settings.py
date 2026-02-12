@@ -74,6 +74,7 @@ class LLMConfig(BaseModel):
     retry_min_wait: float = 1.0
     retry_max_wait: float = 60.0
     models: list[LLMModelConfig] = Field(default_factory=list)
+    task_models: dict[str, str] = Field(default_factory=dict)
 
     def get_model(self, name: str) -> LLMModelConfig | None:
         """Get model config by name."""
@@ -125,6 +126,7 @@ class TTSConfig(BaseModel):
     sample_rate: int = 44100
     max_sentence_duration: float = 8.0
     models: list[TTSModelConfig] = Field(default_factory=list)
+    task_models: dict[str, str] = Field(default_factory=dict)
 
     def get_model(self, name: str) -> TTSModelConfig | None:
         """Get model config by name."""

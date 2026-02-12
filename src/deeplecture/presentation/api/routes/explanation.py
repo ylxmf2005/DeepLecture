@@ -18,6 +18,7 @@ from deeplecture.presentation.api.shared import (
     rate_limit,
     success,
 )
+from deeplecture.presentation.api.shared.model_resolution import resolve_models_for_task
 from deeplecture.presentation.api.shared.validation import validate_content_id, validate_language
 from deeplecture.use_cases.dto.explanation import GenerateExplanationRequest
 
@@ -62,6 +63,13 @@ def create_explanation(content_id: str) -> Response:
     prompts = data.get("prompts") or None
 
     container = get_container()
+    llm_model, _ = resolve_models_for_task(
+        container=container,
+        content_id=content_id,
+        task_key="slide_explanation",
+        llm_model=llm_model,
+        tts_model=None,
+    )
 
     # Resolve image URL to local path
     image_path = _resolve_image_url_to_path(container, content_id, image_url)

@@ -8,6 +8,7 @@ from flask import Blueprint, request
 
 from deeplecture.di import get_container
 from deeplecture.presentation.api.shared import accepted, bad_request, handle_errors, not_found, rate_limit, success
+from deeplecture.presentation.api.shared.model_resolution import resolve_models_for_task
 from deeplecture.presentation.api.shared.validation import validate_content_id, validate_language
 from deeplecture.use_cases.dto.timeline import GenerateTimelineRequest
 
@@ -66,6 +67,15 @@ def generate_timeline(content_id: str) -> Response:
     prompts = data.get("prompts") or None
 
     container = get_container()
+
+    llm_model, _ = resolve_models_for_task(
+        container=container,
+        content_id=content_id,
+        task_key="timeline_generation",
+        llm_model=llm_model,
+        tts_model=None,
+    )
+
     req = GenerateTimelineRequest(
         content_id=content_id,
         subtitle_language=subtitle_language,

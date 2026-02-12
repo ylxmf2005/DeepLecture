@@ -9,6 +9,7 @@ from flask import Blueprint, request
 from deeplecture.di import get_container
 from deeplecture.domain import ContentType, FeatureStatus
 from deeplecture.presentation.api.shared import accepted, bad_request, handle_errors, rate_limit, success
+from deeplecture.presentation.api.shared.model_resolution import resolve_models_for_task
 from deeplecture.presentation.api.shared.validation import validate_content_id, validate_language
 from deeplecture.use_cases.dto.slide import SlideGenerationRequest
 
@@ -48,6 +49,13 @@ def generate_slide_video(content_id: str) -> Response:
     prompts = tuple(prompts_dict.items()) if prompts_dict else None
 
     container = get_container()
+    llm_model, tts_model = resolve_models_for_task(
+        container=container,
+        content_id=content_id,
+        task_key="video_generation",
+        llm_model=llm_model,
+        tts_model=tts_model,
+    )
     metadata = container.content_usecase.get_content(content_id)
 
     if metadata.type != ContentType.SLIDE:

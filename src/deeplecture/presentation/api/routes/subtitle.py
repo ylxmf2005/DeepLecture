@@ -10,6 +10,7 @@ from flask import Response as FlaskResponse
 from deeplecture.di import get_container
 from deeplecture.domain import FeatureStatus
 from deeplecture.presentation.api.shared import accepted, bad_request, handle_errors, not_found, rate_limit, success
+from deeplecture.presentation.api.shared.model_resolution import resolve_models_for_task
 from deeplecture.presentation.api.shared.validation import validate_content_id, validate_language
 from deeplecture.use_cases.dto.subtitle import EnhanceTranslateRequest, GenerateSubtitleRequest
 
@@ -126,6 +127,14 @@ def enhance_and_translate(content_id: str) -> Response:
     # Model and prompt selection (optional, None = use defaults)
     llm_model = data.get("llm_model") or None
     prompts = data.get("prompts") or None
+
+    llm_model, _ = resolve_models_for_task(
+        container=container,
+        content_id=content_id,
+        task_key="subtitle_translation",
+        llm_model=llm_model,
+        tts_model=None,
+    )
 
     if not force and getattr(metadata, "enhance_translate_status", "none") == FeatureStatus.READY.value:
         return success(

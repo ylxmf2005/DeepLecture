@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from deeplecture.domain.errors import ContentNotFoundError
+from deeplecture.domain.errors import BookmarkNotFoundError, ContentNotFoundError
 from deeplecture.use_cases.dto.bookmark import (
     BookmarkItem,
     BookmarkListResult,
@@ -20,12 +19,7 @@ if TYPE_CHECKING:
         MetadataStorageProtocol,
     )
 
-logger = logging.getLogger(__name__)
 UTC = timezone.utc
-
-
-class BookmarkNotFoundError(ValueError):
-    """Raised when a bookmark ID is not found."""
 
 
 class BookmarkUseCase:
@@ -148,7 +142,7 @@ class BookmarkUseCase:
         items = [b for b in items if b.id != bookmark_id]
 
         if len(items) == original_len:
-            raise BookmarkNotFoundError(f"Bookmark {bookmark_id} not found")
+            raise BookmarkNotFoundError(bookmark_id)
 
         self._save_items(content_id, items)
 
@@ -179,4 +173,4 @@ class BookmarkUseCase:
         for item in items:
             if item.id == bookmark_id:
                 return item
-        raise BookmarkNotFoundError(f"Bookmark {bookmark_id} not found")
+        raise BookmarkNotFoundError(bookmark_id)

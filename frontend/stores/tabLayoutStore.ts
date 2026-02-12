@@ -56,6 +56,10 @@ const DEFAULT_SIDEBAR_TABS: TabId[] = ["subtitles", "explanations", "timeline", 
 const DEFAULT_BOTTOM_TABS: TabId[] = ["verify", "notes", "flashcard", "bookmarks", "test", "report", "cheatsheet", "podcast"];
 const ALL_TABS = new Set<TabId>([...DEFAULT_SIDEBAR_TABS, ...DEFAULT_BOTTOM_TABS]);
 
+function isValidTabId(tabId: string): tabId is TabId {
+    return ALL_TABS.has(tabId as TabId);
+}
+
 export const LAYOUT_CONSTRAINTS = {
     MAX_SIDEBAR_TABS: 4,
     MAX_BOTTOM_TABS: 10,
@@ -202,8 +206,8 @@ export const useTabLayoutStore = create<TabLayoutState>()(
                 const persisted = persistedState as Partial<TabLayoutState> | undefined;
                 if (!persisted?.panels) return currentState;
 
-                const persistedSidebar = persisted.panels.sidebar || [];
-                const persistedBottom = persisted.panels.bottom || [];
+                const persistedSidebar = (persisted.panels.sidebar || []).filter(isValidTabId);
+                const persistedBottom = (persisted.panels.bottom || []).filter(isValidTabId);
                 const presentTabs = new Set([...persistedSidebar, ...persistedBottom]);
 
                 // Insert missing tabs at their default positions, not at the end
@@ -228,13 +232,27 @@ export const useTabLayoutStore = create<TabLayoutState>()(
                     }
                 }
 
+                const sidebarActive = persisted.activeTabs?.sidebar;
+                const bottomActive = persisted.activeTabs?.bottom;
+
+                const safeActiveTabs = {
+                    sidebar:
+                        sidebarActive && mergedSidebar.includes(sidebarActive)
+                            ? sidebarActive
+                            : mergedSidebar[0] || currentState.activeTabs.sidebar,
+                    bottom:
+                        bottomActive && mergedBottom.includes(bottomActive)
+                            ? bottomActive
+                            : mergedBottom[0] || currentState.activeTabs.bottom,
+                };
+
                 return {
                     ...currentState,
                     panels: {
                         sidebar: mergedSidebar,
                         bottom: mergedBottom,
                     },
-                    activeTabs: persisted.activeTabs || currentState.activeTabs,
+                    activeTabs: safeActiveTabs,
                 };
             },
             onRehydrateStorage: () => (state) => {

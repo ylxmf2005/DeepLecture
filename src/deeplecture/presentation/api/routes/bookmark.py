@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from flask import Blueprint, request
 
 from deeplecture.di import get_container
+from deeplecture.domain.errors import BookmarkNotFoundError
 from deeplecture.presentation.api.shared import bad_request, created, handle_errors, not_found, success
 from deeplecture.presentation.api.shared.validation import (
     validate_content_id,
     validate_title,
     validate_uuid,
 )
-from deeplecture.use_cases.bookmark import BookmarkNotFoundError
 from deeplecture.use_cases.dto.bookmark import CreateBookmarkRequest, UpdateBookmarkRequest
 
 if TYPE_CHECKING:
@@ -52,11 +53,13 @@ def create_bookmark() -> Response:
         timestamp = float(raw_timestamp)
     except (TypeError, ValueError):
         return bad_request("timestamp must be a number")
-    if timestamp < 0:
-        return bad_request("timestamp must be non-negative")
+    if timestamp < 0 or not math.isfinite(timestamp):
+        return bad_request("timestamp must be a finite non-negative number")
 
     title = validate_title(data.get("title"), field_name="title", default="")
     note = data.get("note", "")
+    if not isinstance(note, str):
+        return bad_request("note must be a string")
     if len(note) > MAX_NOTE_LENGTH:
         return bad_request(f"note exceeds maximum length ({MAX_NOTE_LENGTH})")
 
@@ -89,6 +92,8 @@ def update_bookmark(bookmark_id: str) -> Response:
     note = None
     if "note" in data:
         note = data["note"] or ""
+        if not isinstance(note, str):
+            return bad_request("note must be a string")
         if len(note) > MAX_NOTE_LENGTH:
             return bad_request(f"note exceeds maximum length ({MAX_NOTE_LENGTH})")
 
@@ -98,8 +103,8 @@ def update_bookmark(bookmark_id: str) -> Response:
             timestamp = float(data["timestamp"])
         except (TypeError, ValueError):
             return bad_request("timestamp must be a number")
-        if timestamp < 0:
-            return bad_request("timestamp must be non-negative")
+        if timestamp < 0 or not math.isfinite(timestamp):
+            return bad_request("timestamp must be a finite non-negative number")
 
     container = get_container()
     req = UpdateBookmarkRequest(

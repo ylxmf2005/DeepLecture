@@ -55,6 +55,8 @@ export interface NoteSettings {
 export interface AISettings {
     llmModel: string | null;
     ttsModel: string | null;
+    llmTaskModels?: Record<string, string | null>;
+    ttsTaskModels?: Record<string, string | null>;
     prompts: Record<string, string>;
 }
 
@@ -248,6 +250,8 @@ export const STORAGE_VERSIONS = {
     GLOBAL_SETTINGS: 3, // Bumped: added ai settings (llmModel, ttsModel, prompts)
     VIDEO_STATE: 2, // Bumped for semantic subtitle mode migration (en/zh → source/target/dual/dual_reversed)
 } as const;
+
+export type PerVideoConfig = Partial<GlobalSettings>;
 
 /** Maps legacy subtitle mode values to semantic equivalents */
 export const LEGACY_SUBTITLE_MODE_MAP: Record<string, SubtitleDisplayMode> = {
