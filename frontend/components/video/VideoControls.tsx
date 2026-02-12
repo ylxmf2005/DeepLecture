@@ -47,6 +47,8 @@ interface VideoControlsProps {
     viewMode?: ViewMode;
     /** View mode change callback */
     onViewModeChange?: (mode: ViewMode) => void;
+    /** Bookmark timestamps to display as dots on the progress bar */
+    bookmarkTimestamps?: number[];
     /** Optional className */
     className?: string;
 }
@@ -79,6 +81,7 @@ export function VideoControls({
     onToggleFullscreen,
     viewMode = "normal",
     onViewModeChange,
+    bookmarkTimestamps,
     className,
 }: VideoControlsProps) {
     const [volume, setVolume] = useState(1);
@@ -248,6 +251,7 @@ export function VideoControls({
                 currentTime={currentTime}
                 duration={duration}
                 onSeek={onSeek}
+                bookmarkTimestamps={bookmarkTimestamps}
                 className="mb-3"
             />
 

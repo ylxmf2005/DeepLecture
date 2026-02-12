@@ -39,6 +39,10 @@ interface VideoPlayerProps {
     onAskAtTime?: (time: number) => void;
     onAddNoteAtTime?: (time: number) => void;
     onPlayerReady?: (videoElement: HTMLVideoElement) => void;
+    /** Bookmark timestamps to display as dots on the progress bar */
+    bookmarkTimestamps?: number[];
+    /** Callback when user adds a bookmark (via B key) */
+    onAddBookmark?: (time: number) => void;
     /** Current view mode for layout control */
     viewMode?: ViewMode;
     /** Callback when view mode changes */
@@ -74,6 +78,8 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
         onAskAtTime,
         onAddNoteAtTime,
         onPlayerReady,
+        bookmarkTimestamps,
+        onAddBookmark,
         viewMode,
         onViewModeChange,
     }, ref) => {
@@ -213,8 +219,15 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                     e.preventDefault();
                     handleQuickToggle();
                     break;
+                case "b":
+                case "B":
+                    if (onAddBookmark) {
+                        e.preventDefault();
+                        onAddBookmark(getCurrentVideoTime());
+                    }
+                    break;
             }
-        }, [handlePlay, handlePause, handleSeek, getCurrentVideoTime, duration, videoRef, handleQuickToggle]);
+        }, [handlePlay, handlePause, handleSeek, getCurrentVideoTime, duration, videoRef, handleQuickToggle, onAddBookmark]);
 
         // Global keyboard listener
         useEffect(() => {
@@ -512,6 +525,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
                     onSeek={handleSeek}
                     isFullscreen={isFullscreen}
                     onToggleFullscreen={toggleFullscreen}
+                    bookmarkTimestamps={bookmarkTimestamps}
                     viewMode={viewMode}
                     onViewModeChange={onViewModeChange}
                 />

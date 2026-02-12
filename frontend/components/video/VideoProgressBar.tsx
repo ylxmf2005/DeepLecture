@@ -9,6 +9,8 @@ interface VideoProgressBarProps {
     onSeek: (time: number) => void;
     bufferTime?: number;
     className?: string;
+    /** Bookmark timestamps to display as dots on the progress bar */
+    bookmarkTimestamps?: number[];
 }
 
 export function VideoProgressBar({
@@ -17,6 +19,7 @@ export function VideoProgressBar({
     onSeek,
     bufferTime,
     className,
+    bookmarkTimestamps,
 }: VideoProgressBarProps) {
     const durationMs = Number.isFinite(duration) && duration > 0 ? duration * 1000 : 0;
     const currentTimeMs = Number.isFinite(currentTime)
@@ -33,7 +36,7 @@ export function VideoProgressBar({
     }
 
     return (
-        <div className={`video-progress-bar-wrapper w-full overflow-visible ${className ?? ""}`}>
+        <div className={`video-progress-bar-wrapper w-full overflow-visible relative ${className ?? ""}`}>
             <VideoSeekSlider
                 max={durationMs}
                 currentTime={currentTimeMs}
@@ -41,6 +44,17 @@ export function VideoProgressBar({
                 onChange={(timeMs: number) => onSeek(timeMs / 1000)}
                 limitTimeTooltipBySides
             />
+            {bookmarkTimestamps && bookmarkTimestamps.length > 0 && duration > 0 && (
+                <div className="absolute inset-0 pointer-events-none">
+                    {bookmarkTimestamps.map((ts, i) => (
+                        <div
+                            key={i}
+                            className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-yellow-400 border border-yellow-600"
+                            style={{ left: `${(ts / duration) * 100}%` }}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

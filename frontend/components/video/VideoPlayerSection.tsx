@@ -43,6 +43,10 @@ interface VideoPlayerSectionProps {
     viewMode?: ViewMode;
     /** Callback when view mode changes */
     onViewModeChange?: (mode: ViewMode) => void;
+    /** Bookmark timestamps to display as dots on the progress bar */
+    bookmarkTimestamps?: number[];
+    /** Callback when user adds a bookmark (via B key) */
+    onAddBookmark?: (time: number) => void;
     /** Optional className for the container */
     className?: string;
 }
@@ -72,6 +76,8 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
             onUploadSlide,
             viewMode,
             onViewModeChange,
+            bookmarkTimestamps,
+            onAddBookmark,
             className,
         },
         ref
@@ -276,6 +282,8 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                             onAskAtTime={onAskAtTime}
                             onAddNoteAtTime={onAddNoteAtTime}
                             onPlayerReady={onPlayerReady}
+                            bookmarkTimestamps={bookmarkTimestamps}
+                            onAddBookmark={onAddBookmark}
                             viewMode={viewMode}
                             onViewModeChange={onViewModeChange}
                         />

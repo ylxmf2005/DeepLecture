@@ -51,6 +51,11 @@ const FlashcardTab = dynamic(
     { loading: LoadingSpinner }
 );
 
+const BookmarkTab = dynamic(
+    () => import("@/components/features/BookmarkTab").then((mod) => mod.BookmarkTab),
+    { loading: LoadingSpinner }
+);
+
 // Grouped prop interfaces for better organization (ISP)
 
 /** Subtitle-related props for the sidebar subtitle panel */
@@ -95,6 +100,8 @@ export interface TabContentHandlers {
     onRemoveFromAsk: (id: string) => void;
     onGenerateSubtitles: () => void;
     onGenerateTimeline: () => void;
+    /** Callback when bookmarks change — parent uses for progress bar markers */
+    onBookmarksChange?: (timestamps: number[]) => void;
 }
 
 /** Complete props for TabContentRenderer using composition */
@@ -237,6 +244,7 @@ export function renderTabContent(tabId: TabId, props: TabContentProps): React.Re
         onRemoveFromAsk,
         onGenerateSubtitles,
         onGenerateTimeline,
+        onBookmarksChange,
     } = props;
 
     switch (tabId) {
@@ -365,6 +373,17 @@ export function renderTabContent(tabId: TabId, props: TabContentProps): React.Re
                     onSeek={onSeek}
                     refreshTrigger={refreshCheatsheet}
                     onAddToNotes={onAddToNotes}
+                />
+            );
+
+        case "bookmarks":
+            return (
+                <BookmarkTab
+                    videoId={videoId}
+                    currentTime={currentTime}
+                    onSeek={onSeek}
+                    subtitles={subtitlesSource}
+                    onBookmarksChange={onBookmarksChange}
                 />
             );
 

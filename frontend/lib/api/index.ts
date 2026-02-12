@@ -78,3 +78,7 @@ export { getTaskStatus, getTasksForContent, createTaskEventSource, getJobStatus 
 // Fact Verification APIs
 export { getFactVerificationReport, generateFactVerification } from "./factVerification";
 export type { GenerateFactVerificationParams, GenerateFactVerificationResponse } from "./factVerification";
+
+// Bookmark APIs
+export { listBookmarks, createBookmark, updateBookmark, deleteBookmark } from "./bookmarks";
+export type { BookmarkItem, BookmarkListResponse } from "./bookmarks";

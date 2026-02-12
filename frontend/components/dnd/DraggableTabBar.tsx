@@ -18,6 +18,7 @@ import {
     ScrollText,
     Mic,
     ShieldCheck,
+    Bookmark,
 } from "lucide-react";
 import type { TabId, PanelId } from "@/stores/tabLayoutStore";
 
@@ -33,6 +34,7 @@ export const TAB_CONFIG: Record<TabId, { label: string; icon: React.ReactNode }>
     test: { label: "Test", icon: <CheckSquare className="w-4 h-4" /> },
     report: { label: "Report", icon: <FileBarChart className="w-4 h-4" /> },
     cheatsheet: { label: "Cheatsheet", icon: <ScrollText className="w-4 h-4" /> },
+    bookmarks: { label: "Bookmarks", icon: <Bookmark className="w-4 h-4" /> },
     podcast: { label: "Podcast", icon: <Mic className="w-4 h-4" /> },
 };
 

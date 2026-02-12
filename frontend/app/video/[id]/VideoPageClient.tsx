@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useMemo, useId } from "react";
+import { useEffect, useRef, useCallback, useMemo, useId, useState } from "react";
 import dynamic from "next/dynamic";
 import { VideoPlayerRef } from "@/components/video/VideoPlayer";
 import type { ContentItem, VoiceoverEntry } from "@/lib/api";
+import { createBookmark } from "@/lib/api/bookmarks";
+import { getActiveSubtitles } from "@/lib/subtitleSearch";
+import { formatTime } from "@/lib/timeFormat";
+import { toast } from "sonner";
 import { useVideoPageState } from "@/hooks/useVideoPageState";
 import { useSmartSkip } from "@/hooks/useSmartSkip";
 import { useSubtitleRepeat } from "@/hooks/useSubtitleRepeat";
@@ -231,6 +235,22 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         onBaseTimeUpdate: baseHandleTimeUpdate,
     });
 
+    // Bookmark timestamps for progress bar markers (set by BookmarkTab via onBookmarksChange)
+    const [bookmarkTimestamps, setBookmarkTimestamps] = useState<number[]>([]);
+
+    // Handle B-key bookmark creation
+    const handleAddBookmark = useCallback(async (time: number) => {
+        try {
+            const active = getActiveSubtitles(subtitlesSource, time);
+            const title = active.map((s) => s.text).join(" ").trim() || `Bookmark at ${formatTime(time)}`;
+            const item = await createBookmark(videoId, time, title);
+            setBookmarkTimestamps((prev) => [...prev, item.timestamp].sort((a, b) => a - b));
+            toast.success("Bookmark added");
+        } catch {
+            toast.error("Failed to add bookmark");
+        }
+    }, [videoId, subtitlesSource]);
+
     // Event handlers
     const handlers = useVideoPageHandlers({
         videoId,
@@ -447,6 +467,8 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                         onUploadSlide={handlers.handleUploadSlide}
                         viewMode={viewMode}
                         onViewModeChange={setViewMode}
+                        bookmarkTimestamps={bookmarkTimestamps}
+                        onAddBookmark={handleAddBookmark}
                         className="w-full h-full"
                     />
                 </ErrorBoundary>
@@ -525,6 +547,8 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             onUploadSlide={handlers.handleUploadSlide}
                             viewMode={viewMode}
                             onViewModeChange={setViewMode}
+                            bookmarkTimestamps={bookmarkTimestamps}
+                            onAddBookmark={handleAddBookmark}
                         />
                     </ErrorBoundary>
 
@@ -560,6 +584,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             onRemoveFromAsk={handlers.handleRemoveFromAsk}
                             onGenerateSubtitles={handlers.handleGenerateSubtitles}
                             onGenerateTimeline={handlers.handleGenerateTimeline}
+                            onBookmarksChange={setBookmarkTimestamps}
                         />
                     )}
                 </div>
@@ -595,6 +620,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                         onRemoveFromAsk={handlers.handleRemoveFromAsk}
                         onGenerateSubtitles={handlers.handleGenerateSubtitles}
                         onGenerateTimeline={handlers.handleGenerateTimeline}
+                        onBookmarksChange={setBookmarkTimestamps}
                     />
                 )}
 
@@ -631,6 +657,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             onRemoveFromAsk={handlers.handleRemoveFromAsk}
                             onGenerateSubtitles={handlers.handleGenerateSubtitles}
                             onGenerateTimeline={handlers.handleGenerateTimeline}
+                            onBookmarksChange={setBookmarkTimestamps}
                         />
                         <SidebarTabs
                             content={content}
@@ -661,6 +688,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             onRemoveFromAsk={handlers.handleRemoveFromAsk}
                             onGenerateSubtitles={handlers.handleGenerateSubtitles}
                             onGenerateTimeline={handlers.handleGenerateTimeline}
+                            onBookmarksChange={setBookmarkTimestamps}
                         />
                     </div>
                 )}
