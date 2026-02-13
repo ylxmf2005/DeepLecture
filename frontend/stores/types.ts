@@ -160,6 +160,8 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     ai: {
         llmModel: null,
         ttsModel: null,
+        llmTaskModels: {},
+        ttsTaskModels: {},
         prompts: {},
     },
     dictionary: {
@@ -242,6 +244,7 @@ export interface GlobalSettingsActions {
     setSubtitleBottomOffset: (offset: number) => void;
     setOriginalLanguage: (lang: string) => void;
     setTranslatedLanguage: (lang: string) => void;
+    loadGlobalConfigFromServer: () => Promise<void>;
     loadLanguageFromServer: () => Promise<void>;
     toggleHideSidebars: () => void;
     setViewMode: (mode: ViewMode) => void;
@@ -258,6 +261,8 @@ export interface GlobalSettingsActions {
     loadNoteDefaultsFromServer: () => Promise<void>;
     setAILlmModel: (model: string | null) => void;
     setAITtsModel: (model: string | null) => void;
+    setAILlmTaskModel: (taskKey: string, model: string | null) => void;
+    setAITtsTaskModel: (taskKey: string, model: string | null) => void;
     setAIPrompt: (funcId: string, implId: string) => void;
     resetAIPrompt: (funcId: string) => void;
     loadAIConfigFromServer: () => Promise<void>;
@@ -293,8 +298,6 @@ export const STORAGE_VERSIONS = {
     GLOBAL_SETTINGS: 3, // Bumped: added ai settings (llmModel, ttsModel, prompts)
     VIDEO_STATE: 2, // Bumped for semantic subtitle mode migration (en/zh → source/target/dual/dual_reversed)
 } as const;
-
-export type PerVideoConfig = Partial<GlobalSettings>;
 
 /** Maps legacy subtitle mode values to semantic equivalents */
 export const LEGACY_SUBTITLE_MODE_MAP: Record<string, SubtitleDisplayMode> = {

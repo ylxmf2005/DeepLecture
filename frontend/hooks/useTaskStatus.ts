@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL } from '@/lib/api';
 import { logger } from '@/shared/infrastructure';
 import { toError } from '@/lib/utils/errorUtils';
+import { normalizeTaskType } from '@/lib/taskTypes';
 
 const log = logger.scope('TaskStatus');
 
@@ -9,6 +10,8 @@ export interface TaskStatus {
     id?: string;
     task_id: string;
     type: string;
+    content_id?: string;
+    contentId?: string;
     status: 'pending' | 'processing' | 'ready' | 'error';
     progress: number;
     result_path?: string;
@@ -24,17 +27,17 @@ interface UseTaskStatusReturn {
 export function useTaskStatus(contentId: string | null): UseTaskStatusReturn {
     const [tasks, setTasks] = useState<Record<string, TaskStatus>>({});
     const [isConnected, setIsConnected] = useState(false);
+    const prevContentIdRef = useRef<string | null>(null);
 
-    // Reset state when contentId becomes null (prop-driven state reset)
+    // Always reset task cache when switching content to avoid cross-content bleed.
     useEffect(() => {
-        if (contentId) return;
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- Prop-driven reset to avoid stale tasks when contentId clears
-        setTasks({});
-        if (isConnected) {
-
+        if (prevContentIdRef.current !== contentId) {
+            prevContentIdRef.current = contentId;
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- Prop-driven reset on content switch
+            setTasks({});
             setIsConnected(false);
         }
-    }, [contentId, isConnected]);
+    }, [contentId]);
 
     useEffect(() => {
         if (!contentId) {
@@ -58,11 +61,18 @@ export function useTaskStatus(contentId: string | null): UseTaskStatusReturn {
                 log.debug('SSE event received', { eventType, taskType: task?.type, status: task?.status });
 
                 if (task) {
+                    const eventContentId = task.content_id ?? task.contentId;
+                    if (eventContentId && eventContentId !== contentId) {
+                        return;
+                    }
+
                     const id = task.task_id || task.id;
                     if (id) {
+                        const normalizedType =
+                            typeof task.type === 'string' ? normalizeTaskType(task.type) : task.type;
                         setTasks(prev => ({
                             ...prev,
-                            [id]: { ...task, task_id: id, _eventType: eventType }
+                            [id]: { ...task, type: normalizedType, task_id: id, _eventType: eventType }
                         }));
                     }
                 }
@@ -80,6 +90,7 @@ export function useTaskStatus(contentId: string | null): UseTaskStatusReturn {
 
         return () => {
             eventSource.close();
+            setIsConnected(false);
         };
     }, [contentId]);
 

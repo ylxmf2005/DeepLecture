@@ -3,7 +3,6 @@
  */
 
 import { api } from "./client";
-import { withLLMOverrides } from "./ai-overrides";
 import type { FactVerificationReport } from "@/lib/verifyTypes";
 
 export interface GenerateFactVerificationResponse {
@@ -40,10 +39,10 @@ export const generateFactVerification = async (
 ): Promise<GenerateFactVerificationResponse> => {
     const response = await api.post<GenerateFactVerificationResponse>(
         "/fact-verification/generate",
-        withLLMOverrides({
+        {
             content_id: params.contentId,
             language: params.language,
-        })
+        }
     );
     return response.data;
 };

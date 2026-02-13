@@ -43,6 +43,7 @@ interface FocusModeHandlerProps {
     autoResumeOnReturn: boolean;
     autoSwitchSubtitlesOnLeave: boolean;
     autoSwitchVoiceoverOnLeave: boolean;
+    voiceoverAutoSwitchThresholdMs: number;
     subtitleMode: SubtitleDisplayMode;
     hasTranslation: boolean;
     onSubtitleModeChange: (mode: SubtitleDisplayMode) => void;
@@ -67,6 +68,7 @@ export function FocusModeHandler({
     autoResumeOnReturn,
     autoSwitchSubtitlesOnLeave,
     autoSwitchVoiceoverOnLeave,
+    voiceoverAutoSwitchThresholdMs,
     subtitleMode,
     hasTranslation,
     onSubtitleModeChange,
@@ -92,7 +94,8 @@ export function FocusModeHandler({
     const wasPlayingRef = useRef(false);
     const autoSwitchStateRef = useRef<AutoSwitchState>(createAutoSwitchState());
     const voiceoverAutoSwitchStateRef = useRef<VoiceoverAutoSwitchState>(createVoiceoverAutoSwitchState());
-    const hideDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const subtitleHideDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const voiceoverHideDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Compute the amount of "kept" content between two timestamps,
     // excluding gaps that Smart Skip would jump over.
@@ -136,22 +139,34 @@ export function FocusModeHandler({
                 : undefined;
 
             // Clear any existing debounce timer
-            if (hideDebounceRef.current) {
-                clearTimeout(hideDebounceRef.current);
-                hideDebounceRef.current = null;
+            if (subtitleHideDebounceRef.current) {
+                clearTimeout(subtitleHideDebounceRef.current);
+                subtitleHideDebounceRef.current = null;
+            }
+            if (voiceoverHideDebounceRef.current) {
+                clearTimeout(voiceoverHideDebounceRef.current);
+                voiceoverHideDebounceRef.current = null;
             }
 
-            // Voiceover auto-switch should happen immediately on hide.
-            // Timers in background tabs can be heavily throttled/suspended,
-            // which makes debounced switching unreliable.
+            // Voiceover switch uses a user-configurable threshold so brief tab
+            // switches do not trigger unwanted auto-switching.
             if (pendingVoiceoverAutoSwitch !== undefined) {
-                voiceoverAutoSwitchStateRef.current = updateStateOnVoiceoverAutoSwitch(selectedVoiceoverId);
-                onVoiceoverChange(pendingVoiceoverAutoSwitch);
+                const shouldSwitchNow = voiceoverAutoSwitchThresholdMs <= 0;
+                if (shouldSwitchNow) {
+                    voiceoverAutoSwitchStateRef.current = updateStateOnVoiceoverAutoSwitch(selectedVoiceoverId);
+                    onVoiceoverChange(pendingVoiceoverAutoSwitch);
+                } else {
+                    voiceoverHideDebounceRef.current = setTimeout(() => {
+                        voiceoverAutoSwitchStateRef.current = updateStateOnVoiceoverAutoSwitch(selectedVoiceoverId);
+                        onVoiceoverChange(pendingVoiceoverAutoSwitch);
+                        voiceoverHideDebounceRef.current = null;
+                    }, voiceoverAutoSwitchThresholdMs);
+                }
             }
 
             // Keep subtitle auto-switch debounced to avoid false triggers from brief tab switches
             if (autoSwitchSubtitlesOnLeave) {
-                hideDebounceRef.current = setTimeout(() => {
+                subtitleHideDebounceRef.current = setTimeout(() => {
                     const newMode = getAutoSwitchModeOnHide({
                         enabled: autoSwitchSubtitlesOnLeave,
                         hasTranslation,
@@ -173,9 +188,13 @@ export function FocusModeHandler({
             }
         } else {
             // Clear debounce timer if returning quickly
-            if (hideDebounceRef.current) {
-                clearTimeout(hideDebounceRef.current);
-                hideDebounceRef.current = null;
+            if (subtitleHideDebounceRef.current) {
+                clearTimeout(subtitleHideDebounceRef.current);
+                subtitleHideDebounceRef.current = null;
+            }
+            if (voiceoverHideDebounceRef.current) {
+                clearTimeout(voiceoverHideDebounceRef.current);
+                voiceoverHideDebounceRef.current = null;
             }
 
             // Handle auto-switch subtitle restore
@@ -242,6 +261,7 @@ export function FocusModeHandler({
         autoResumeOnReturn,
         autoSwitchSubtitlesOnLeave,
         autoSwitchVoiceoverOnLeave,
+        voiceoverAutoSwitchThresholdMs,
         subtitleMode,
         hasTranslation,
         onSubtitleModeChange,
@@ -260,9 +280,13 @@ export function FocusModeHandler({
             document.removeEventListener("visibilitychange", handleVisibilityChange);
             // Clear pending debounce timeout on unmount to prevent memory leak
             // and avoid calling onSubtitleModeChange on unmounted component
-            if (hideDebounceRef.current) {
-                clearTimeout(hideDebounceRef.current);
-                hideDebounceRef.current = null;
+            if (subtitleHideDebounceRef.current) {
+                clearTimeout(subtitleHideDebounceRef.current);
+                subtitleHideDebounceRef.current = null;
+            }
+            if (voiceoverHideDebounceRef.current) {
+                clearTimeout(voiceoverHideDebounceRef.current);
+                voiceoverHideDebounceRef.current = null;
             }
         };
     }, [handleVisibilityChange]);

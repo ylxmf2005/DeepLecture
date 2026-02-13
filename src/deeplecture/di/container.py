@@ -22,9 +22,11 @@ from deeplecture.infrastructure import (
     FsAskStorage,
     FsBookmarkStorage,
     FsCheatsheetStorage,
+    FsContentConfigStorage,
     FsExplanationStorage,
     FsFactVerificationStorage,
     FsFileStorage,
+    FsGlobalConfigStorage,
     FsNoteStorage,
     FsQuizStorage,
     FsSubtitleStorage,
@@ -59,6 +61,7 @@ from deeplecture.use_cases.prompts import create_default_registry
 from deeplecture.use_cases.quiz import QuizUseCase
 from deeplecture.use_cases.slide_lecture import SlideLectureUseCase
 from deeplecture.use_cases.subtitle import SubtitleUseCase
+from deeplecture.use_cases.task_modeling import TaskModelResolver
 from deeplecture.use_cases.timeline import TimelineUseCase
 from deeplecture.use_cases.upload import UploadUseCase
 from deeplecture.use_cases.voiceover import VoiceoverUseCase
@@ -340,6 +343,30 @@ class Container:
         if "tts_provider" not in self._cache:
             self._cache["tts_provider"] = TTSProvider(config=self._settings.tts)
         return self._cache["tts_provider"]  # type: ignore[return-value]
+
+    @property
+    def global_config_storage(self) -> FsGlobalConfigStorage:
+        """Service-level global configuration storage."""
+        if "global_config_storage" not in self._cache:
+            self._cache["global_config_storage"] = FsGlobalConfigStorage(self._data_dir())
+        return self._cache["global_config_storage"]  # type: ignore[return-value]
+
+    @property
+    def content_config_storage(self) -> FsContentConfigStorage:
+        """Per-content config storage."""
+        if "content_config_storage" not in self._cache:
+            self._cache["content_config_storage"] = FsContentConfigStorage(self.path_resolver)
+        return self._cache["content_config_storage"]  # type: ignore[return-value]
+
+    @property
+    def task_model_resolver(self) -> TaskModelResolver:
+        """Task model resolver (request > content > global > yaml)."""
+        if "task_model_resolver" not in self._cache:
+            self._cache["task_model_resolver"] = TaskModelResolver(
+                yaml_llm_task_models=self._settings.llm.task_models,
+                yaml_tts_task_models=self._settings.tts.task_models,
+            )
+        return self._cache["task_model_resolver"]  # type: ignore[return-value]
 
     @property
     def prompt_registry(self) -> PromptRegistry:

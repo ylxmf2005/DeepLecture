@@ -3,16 +3,19 @@
  */
 
 import { api } from "./client";
-import type { GlobalSettings } from "@/stores/types";
+import type { DeepPartial, GlobalSettings } from "@/stores/types";
+import { normalizeConfigPayload, serializeConfigPayload } from "./configSerialization";
 
-export async function getGlobalConfig(): Promise<Partial<GlobalSettings>> {
-    const response = await api.get<Partial<GlobalSettings>>("/global-config");
-    return response.data;
+type GlobalConfigPatch = DeepPartial<GlobalSettings>;
+
+export async function getGlobalConfig(): Promise<GlobalConfigPatch> {
+    const response = await api.get<unknown>("/global-config");
+    return normalizeConfigPayload(response.data);
 }
 
-export async function putGlobalConfig(config: Partial<GlobalSettings>): Promise<Partial<GlobalSettings>> {
-    const response = await api.put<Partial<GlobalSettings>>("/global-config", config);
-    return response.data;
+export async function putGlobalConfig(config: GlobalConfigPatch): Promise<GlobalConfigPatch> {
+    const response = await api.put<unknown>("/global-config", serializeConfigPayload(config));
+    return normalizeConfigPayload(response.data);
 }
 
 export async function deleteGlobalConfig(): Promise<void> {

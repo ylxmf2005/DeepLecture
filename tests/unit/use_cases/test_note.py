@@ -227,6 +227,32 @@ class TestNoteUseCaseGenerateNote:
         with pytest.raises(ContentNotFoundError):
             usecase.generate_note(request)
 
+    @pytest.mark.unit
+    def test_generate_note_raises_when_generated_content_is_effectively_empty(
+        self,
+        usecase: NoteUseCase,
+        mock_metadata_storage: MagicMock,
+        mock_note_storage: MagicMock,
+        sample_metadata: ContentMetadata,
+    ) -> None:
+        """generate_note() should fail instead of saving blank placeholder output."""
+        mock_metadata_storage.get.return_value = sample_metadata
+        usecase._load_context = MagicMock(return_value=("context", ["subtitle"]))  # type: ignore[method-assign]
+        usecase._build_outline = MagicMock(  # type: ignore[method-assign]
+            return_value=[NotePart(id=1, title="Part 1", summary="", focus_points=[])]
+        )
+        usecase._generate_parts_parallel = MagicMock(return_value=" \n <br /> \n ")  # type: ignore[method-assign]
+
+        request = GenerateNoteRequest(
+            content_id="test-content-id",
+            language="en",
+        )
+
+        with pytest.raises(ValueError, match="empty note content"):
+            usecase.generate_note(request)
+
+        mock_note_storage.save.assert_not_called()
+
 
 class TestNoteUseCaseSelectSources:
     """Tests for _select_sources() helper."""

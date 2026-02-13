@@ -19,7 +19,7 @@ const log = logger.scope("AppInitializer");
  * Initialization failures are non-critical and fall back to defaults.
  */
 export function AppInitializer({ children }: { children: React.ReactNode }) {
-    const loadLanguageFromServer = useGlobalSettingsStore((s) => s.loadLanguageFromServer);
+    const loadGlobalConfigFromServer = useGlobalSettingsStore((s) => s.loadGlobalConfigFromServer);
     const initializedRef = useRef(false);
 
     useEffect(() => {
@@ -27,11 +27,11 @@ export function AppInitializer({ children }: { children: React.ReactNode }) {
         if (initializedRef.current) return;
         initializedRef.current = true;
 
-        loadLanguageFromServer().catch((error) => {
-            // Non-critical failure - app continues with default language settings
-            log.warn("Failed to load language settings", { error: error instanceof Error ? error.message : String(error) });
+        loadGlobalConfigFromServer().catch((error) => {
+            // Non-critical failure - app continues with default global settings
+            log.warn("Failed to load global settings", { error: error instanceof Error ? error.message : String(error) });
         });
-    }, [loadLanguageFromServer]);
+    }, [loadGlobalConfigFromServer]);
 
     return (
         <>

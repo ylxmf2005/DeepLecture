@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import dynamic from "next/dynamic";
 import { Save, Maximize2, Loader2 } from "lucide-react";
-import { useTabLayoutStore, useTabLayoutHydrated, type TabId } from "@/stores/tabLayoutStore";
+import { useTabLayoutStore, useTabLayoutHydrated, LAYOUT_CONSTRAINTS, type TabId } from "@/stores/tabLayoutStore";
 import { DraggableTabBar } from "@/components/dnd/DraggableTabBar";
 import type { CrepeEditor } from "@/components/editor/MarkdownNoteEditor";
 import { renderTabContent, type TabContentProps } from "./TabContentRenderer";
@@ -111,7 +111,7 @@ export function NotesPanel({
                     tabs={tabs}
                     activeTab={activeTab}
                     onTabClick={handleTabClick}
-                    maxTabs={7}
+                    maxTabs={LAYOUT_CONSTRAINTS.MAX_BOTTOM_TABS}
                 />
                 <div className="flex-1 flex items-center justify-center text-muted-foreground p-8">
                     <p className="text-sm">Drop tabs here</p>
@@ -127,7 +127,7 @@ export function NotesPanel({
                 tabs={tabs}
                 activeTab={activeTab}
                 onTabClick={handleTabClick}
-                maxTabs={7}
+                maxTabs={LAYOUT_CONSTRAINTS.MAX_BOTTOM_TABS}
                 extraActions={extraActions}
             />
             <div className="flex-1 min-h-0 relative">{renderContent(activeTab)}</div>

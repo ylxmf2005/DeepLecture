@@ -5,6 +5,67 @@ export interface Subtitle {
     text: string;
 }
 
+function overlapSeconds(a: Subtitle, b: Subtitle): number {
+    return Math.min(a.endTime, b.endTime) - Math.max(a.startTime, b.startTime);
+}
+
+function centerDistanceSeconds(a: Subtitle, b: Subtitle): number {
+    const centerA = (a.startTime + a.endTime) / 2;
+    const centerB = (b.startTime + b.endTime) / 2;
+    return Math.abs(centerA - centerB);
+}
+
+function isTimingCompatible(a: Subtitle, b: Subtitle): boolean {
+    return overlapSeconds(a, b) > 0 || Math.abs(a.startTime - b.startTime) <= 0.5;
+}
+
+/**
+ * Find the best matching subtitle by time overlap first, then nearest center time.
+ * Returns undefined when no reasonable timing match exists.
+ */
+export function findBestSubtitleByTime(
+    source: Subtitle,
+    candidates: Subtitle[],
+    idLookup?: Map<string, Subtitle>
+): Subtitle | undefined {
+    const byId = idLookup?.get(source.id);
+    if (byId && isTimingCompatible(source, byId)) {
+        return byId;
+    }
+
+    let best: Subtitle | undefined;
+    let bestOverlap = Number.NEGATIVE_INFINITY;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const candidate of candidates) {
+        const overlap = overlapSeconds(source, candidate);
+        const distance = centerDistanceSeconds(source, candidate);
+
+        if (overlap > bestOverlap) {
+            best = candidate;
+            bestOverlap = overlap;
+            bestDistance = distance;
+            continue;
+        }
+
+        if (overlap === bestOverlap && distance < bestDistance) {
+            best = candidate;
+            bestDistance = distance;
+        }
+    }
+
+    if (!best) {
+        return undefined;
+    }
+
+    // If no overlap exists at all, only accept near-by cues.
+    if (bestOverlap <= 0 && bestDistance > 2.0) {
+        return undefined;
+    }
+
+    return best;
+}
+
 export function parseSRT(content: string): Subtitle[] {
     const subtitles: Subtitle[] = [];
     const blocks = content.trim().split(/\n\s*\n/);
@@ -99,8 +160,10 @@ export function mergeSubtitles(
     secondary: Subtitle[],
     primaryIsTop: boolean = true
 ): Subtitle[] {
-    return primary.map((sub, index) => {
-        const secondarySub = secondary[index];
+    const secondaryById = new Map(secondary.map((sub) => [sub.id, sub]));
+
+    return primary.map((sub) => {
+        const secondarySub = findBestSubtitleByTime(sub, secondary, secondaryById);
         const secondaryText = secondarySub ? secondarySub.text : "";
 
         let text = "";

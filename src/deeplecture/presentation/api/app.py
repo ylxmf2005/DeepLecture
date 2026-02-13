@@ -53,10 +53,12 @@ def _register_blueprints(app: Flask) -> None:
         cheatsheet_bp,
         config_bp,
         content_bp,
+        content_config_bp,
         conversation_bp,
         explanation_bp,
         fact_verification_bp,
         generation_bp,
+        global_config_bp,
         live2d_bp,
         media_bp,
         note_bp,
@@ -72,8 +74,10 @@ def _register_blueprints(app: Flask) -> None:
 
     app.register_blueprint(bookmark_bp, url_prefix="/api/bookmarks")
     app.register_blueprint(config_bp, url_prefix="/api")
+    app.register_blueprint(global_config_bp, url_prefix="/api")
     app.register_blueprint(cheatsheet_bp, url_prefix="/api/cheatsheet")
     app.register_blueprint(content_bp, url_prefix="/api/content")
+    app.register_blueprint(content_config_bp, url_prefix="/api/content")
     app.register_blueprint(conversation_bp, url_prefix="/api/conversations")
     app.register_blueprint(explanation_bp, url_prefix="/api/content")
     app.register_blueprint(fact_verification_bp, url_prefix="/api/fact-verification")

@@ -45,19 +45,10 @@ export function getAIOverrides(): AIOverrides {
     const { ai } = useGlobalSettingsStore.getState();
     const overrides: AIOverrides = {};
 
-    // Per-video overrides take precedence over global (nested shape)
-    const effectiveLlmModel = currentVideoConfig?.ai?.llmModel ?? ai.llmModel;
-    const effectiveTtsModel = currentVideoConfig?.ai?.ttsModel ?? ai.ttsModel;
-
-    if (effectiveLlmModel) {
-        overrides.llm_model = effectiveLlmModel;
-    }
-
-    if (effectiveTtsModel) {
-        overrides.tts_model = effectiveTtsModel;
-    }
-
-    // Merge prompts: global first, per-video overrides on top
+    // Merge prompts: global first, per-video overrides on top.
+    // NOTE: We intentionally do NOT inject llm_model/tts_model from settings here.
+    // Runtime model resolution should happen on backend:
+    // request > per-video config > global config > YAML task defaults.
     const mergedPrompts = {
         ...ai.prompts,
         ...(currentVideoConfig?.ai?.prompts ?? {}),
@@ -104,9 +95,7 @@ export function getLLMOverrides(): Pick<AIOverrides, "llm_model" | "prompts"> {
  * Get TTS-only overrides (for audio generation tasks).
  */
 export function getTTSOverrides(): Pick<AIOverrides, "tts_model"> {
-    const { ai } = useGlobalSettingsStore.getState();
-    const effectiveTtsModel = currentVideoConfig?.ai?.ttsModel ?? ai.ttsModel;
-    return effectiveTtsModel ? { tts_model: effectiveTtsModel } : {};
+    return {};
 }
 
 /**

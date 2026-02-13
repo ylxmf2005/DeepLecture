@@ -104,7 +104,6 @@ def _serialize_content_item(metadata: object) -> dict:
         "updated_at": _format_datetime(metadata.updated_at),
         "video_status": _normalize_status(getattr(metadata, "video_status", None)),
         "subtitle_status": _normalize_status(getattr(metadata, "subtitle_status", None)),
-        "translation_status": _normalize_status(getattr(metadata, "enhance_translate_status", None)),
         "enhanced_status": _normalize_status(getattr(metadata, "enhance_translate_status", None)),
         "timeline_status": _normalize_status(getattr(metadata, "timeline_status", None)),
         "notes_status": _normalize_status(getattr(metadata, "notes_status", None)),

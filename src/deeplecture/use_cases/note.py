@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from deeplecture.domain.errors import ContentNotFoundError
@@ -186,6 +187,9 @@ class NoteUseCase:
             llm=llm,
             prompts=request.prompts,
         )
+
+        if not self._has_meaningful_note_content(full_note):
+            raise ValueError("LLM returned empty note content. Please try again with a different model or prompt.")
 
         # 6. Save note
         save_request = SaveNoteRequest(content_id=request.content_id, content=full_note)
@@ -426,6 +430,16 @@ class NoteUseCase:
     # =========================================================================
     # PART GENERATION
     # =========================================================================
+
+    @staticmethod
+    def _has_meaningful_note_content(content: str) -> bool:
+        """
+        Return True when generated markdown has user-visible content.
+
+        Treat pure whitespace and HTML line-break placeholders as empty.
+        """
+        normalized = re.sub(r"(?is)<br\s*/?>", "", content or "")
+        return bool(normalized.strip())
 
     def _generate_parts_parallel(
         self,

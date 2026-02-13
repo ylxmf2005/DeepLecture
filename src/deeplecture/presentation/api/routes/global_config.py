@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from flask import Blueprint, request
 
@@ -28,16 +28,21 @@ def get_global_config() -> Response:
 @handle_errors
 def put_global_config() -> Response:
     payload = request.get_json(silent=True) or {}
-    cfg = ContentConfig.from_dict(payload)
+    if not isinstance(payload, dict):
+        raise ValueError("Request body must be a JSON object")
     container = get_container()
+
+    existing_cfg = container.global_config_storage.load()
+    merged_payload = _merge_sparse(existing_cfg.to_sparse_dict() if existing_cfg else {}, payload)
+    cfg = ContentConfig.from_dict(merged_payload)
 
     llm_valid = {item.name for item in container.llm_provider.list_models()}
     tts_valid = {item.name for item in container.tts_provider.list_models()}
 
-    for model_name in [cfg.ai.llm.default_model, cfg.ai.llm_model, *cfg.ai.llm.task_models.values()]:
+    for model_name in [cfg.llm_model, *(cfg.llm_task_models or {}).values()]:
         if model_name and model_name not in llm_valid:
             raise ValueError(f"Unknown LLM model in global config: {model_name}")
-    for model_name in [cfg.ai.tts.default_model, cfg.ai.tts_model, *cfg.ai.tts.task_models.values()]:
+    for model_name in [cfg.tts_model, *(cfg.tts_task_models or {}).values()]:
         if model_name and model_name not in tts_valid:
             raise ValueError(f"Unknown TTS model in global config: {model_name}")
 
@@ -51,3 +56,45 @@ def delete_global_config() -> Response:
     container = get_container()
     container.global_config_storage.delete()
     return success({"deleted": True})
+
+
+_REPLACE_DICT_PATHS = {
+    ("ai", "prompts"),
+    ("ai", "llm", "task_models"),
+    ("ai", "llm", "taskModels"),
+    ("ai", "tts", "task_models"),
+    ("ai", "tts", "taskModels"),
+}
+
+
+def _merge_sparse(existing: dict[str, Any], incoming: dict[str, Any], path: tuple[str, ...] = ()) -> dict[str, Any]:
+    """Merge sparse config patches into existing config.
+
+    - Missing fields in incoming keep existing values.
+    - Explicit null in incoming clears the field.
+    - Some dictionary fields are replace-on-write (prompts/task_models).
+    """
+    out = dict(existing)
+
+    for raw_key, value in incoming.items():
+        key = str(raw_key)
+        current_path = (*path, key)
+
+        if value is None:
+            out.pop(key, None)
+            continue
+
+        if isinstance(value, dict):
+            if current_path in _REPLACE_DICT_PATHS:
+                out[key] = value
+                continue
+            previous = out.get(key)
+            if isinstance(previous, dict):
+                out[key] = _merge_sparse(previous, value, current_path)
+            else:
+                out[key] = value
+            continue
+
+        out[key] = value
+
+    return out

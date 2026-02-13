@@ -8,18 +8,26 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from deeplecture.domain.entities.config import ContentConfig
 
-# Canonical task keys used by backend routing/use cases
-TASK_KEYS: tuple[str, ...] = (
+# Tasks that support per-task LLM model selection
+LLM_TASK_KEYS: tuple[str, ...] = (
     "subtitle_translation",
     "timeline_generation",
     "video_generation",
-    "voiceover_generation",
     "note_generation",
     "quiz_generation",
     "cheatsheet_generation",
     "slide_explanation",
     "ask_video",
 )
+
+# Tasks that support per-task TTS model selection
+TTS_TASK_KEYS: tuple[str, ...] = (
+    "video_generation",
+    "voiceover_generation",
+)
+
+# Canonical task keys exposed to frontend settings UI
+TASK_KEYS: tuple[str, ...] = tuple(dict.fromkeys((*LLM_TASK_KEYS, *TTS_TASK_KEYS)))
 
 TASK_KEY_ALIASES: dict[str, str] = {
     "slide_lecture": "video_generation",
@@ -69,19 +77,54 @@ class TaskModelResolver:
 
         llm_model = self._first_non_empty(
             requested_llm_model,
-            content_config.ai.get_llm_task_model(key) if content_config else None,
-            global_config.ai.get_llm_task_model(key) if global_config else None,
+            self._resolve_llm_from_config(content_config, key),
+            self._resolve_llm_from_config(global_config, key),
             self._yaml_llm.get(key),
             self._yaml_llm.get("default"),
         )
         tts_model = self._first_non_empty(
             requested_tts_model,
-            content_config.ai.get_tts_task_model(key) if content_config else None,
-            global_config.ai.get_tts_task_model(key) if global_config else None,
+            self._resolve_tts_from_config(content_config, key),
+            self._resolve_tts_from_config(global_config, key),
             self._yaml_tts.get(key),
             self._yaml_tts.get("default"),
         )
         return ResolvedModels(llm_model=llm_model, tts_model=tts_model)
+
+    @classmethod
+    def _resolve_llm_from_config(cls, config: ContentConfig | None, task_key: str) -> str | None:
+        if config is None:
+            return None
+        return cls._first_non_empty(
+            cls._task_map_value(config.llm_task_models, task_key),
+            config.llm_model,
+        )
+
+    @classmethod
+    def _resolve_tts_from_config(cls, config: ContentConfig | None, task_key: str) -> str | None:
+        if config is None:
+            return None
+        return cls._first_non_empty(
+            cls._task_map_value(config.tts_task_models, task_key),
+            config.tts_model,
+        )
+
+    @staticmethod
+    def _task_map_value(task_map: dict[str, str] | None, task_key: str) -> str | None:
+        if not task_map:
+            return None
+
+        direct = task_map.get(task_key)
+        if direct and str(direct).strip():
+            return str(direct).strip()
+
+        # Backward compatibility: stored keys may be legacy aliases.
+        for raw_key, value in task_map.items():
+            if normalize_task_key(raw_key) != task_key:
+                continue
+            if value and str(value).strip():
+                return str(value).strip()
+        return None
 
     @staticmethod
     def _first_non_empty(*values: str | None) -> str | None:

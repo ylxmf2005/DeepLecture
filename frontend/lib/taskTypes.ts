@@ -11,9 +11,24 @@ export interface TaskNotificationLabel {
     error: string;
 }
 
+/**
+ * Legacy/alias task types normalized to canonical backend task keys.
+ * Keep this aligned with backend task key aliasing for forward compatibility.
+ */
+const TASK_TYPE_ALIASES: Record<string, string> = {
+    slide_lecture: "video_generation",
+    voiceover: "voiceover_generation",
+    subtitle_timeline: "timeline_generation",
+    subtitle_enhancement: "subtitle_translation",
+};
+
 /** Normalize a raw task type string to its canonical form. */
 export function normalizeTaskType(raw: string): string {
-    return raw;
+    const normalized = raw.trim();
+    if (!normalized) {
+        return normalized;
+    }
+    return TASK_TYPE_ALIASES[normalized] ?? normalized;
 }
 
 /** Task types that trigger a content metadata refresh on completion. */

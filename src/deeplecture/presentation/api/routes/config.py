@@ -9,7 +9,7 @@ from flask import Blueprint
 from deeplecture.config import get_settings
 from deeplecture.di import get_container
 from deeplecture.presentation.api.shared import handle_errors, success
-from deeplecture.use_cases.task_modeling import TASK_KEYS, normalize_task_key
+from deeplecture.use_cases.task_modeling import LLM_TASK_KEYS, TASK_KEYS, TTS_TASK_KEYS, normalize_task_key
 
 if TYPE_CHECKING:
     from flask import Response
@@ -45,10 +45,14 @@ def get_app_config() -> Response:
     llm_task_defaults: dict[str, str] = {normalize_task_key(k): v for k, v in settings.llm.task_models.items() if v}
     tts_task_defaults: dict[str, str] = {normalize_task_key(k): v for k, v in settings.tts.task_models.items() if v}
     if global_cfg:
-        for k, v in global_cfg.ai.llm.task_models.items():
+        if global_cfg.llm_model:
+            llm_task_defaults["default"] = global_cfg.llm_model
+        for k, v in (global_cfg.llm_task_models or {}).items():
             if v:
                 llm_task_defaults[normalize_task_key(k)] = v
-        for k, v in global_cfg.ai.tts.task_models.items():
+        if global_cfg.tts_model:
+            tts_task_defaults["default"] = global_cfg.tts_model
+        for k, v in (global_cfg.tts_task_models or {}).items():
             if v:
                 tts_task_defaults[normalize_task_key(k)] = v
 
@@ -84,6 +88,8 @@ def get_app_config() -> Response:
             },
             "prompts": prompts_data,
             "taskKeys": list(TASK_KEYS),
+            "llmTaskKeys": list(LLM_TASK_KEYS),
+            "ttsTaskKeys": list(TTS_TASK_KEYS),
         }
     )
 

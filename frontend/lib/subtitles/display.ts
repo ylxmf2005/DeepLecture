@@ -5,7 +5,7 @@
  * source/target text separately for proper hover dictionary behavior.
  */
 
-import type { Subtitle } from "@/lib/srt";
+import { findBestSubtitleByTime, type Subtitle } from "@/lib/srt";
 import type { SubtitleDisplayMode } from "@/stores/types";
 
 /**
@@ -77,12 +77,16 @@ export function createSubtitleRows(
         case "dual":
         case "dual_reversed": {
             // Show both, use source subtitles as the base
-            // Match target by id for robustness when arrays diverge
+            // Match target by timing to handle segment merges/splits.
             const targetLookup = new Map(
                 subtitlesTarget.map((sub) => [sub.id, sub])
             );
             return subtitlesSource.map((sub) => {
-                const targetSub = targetLookup.get(sub.id);
+                const targetSub = findBestSubtitleByTime(
+                    sub,
+                    subtitlesTarget,
+                    targetLookup
+                );
                 return {
                     id: sub.id,
                     startTime: sub.startTime,

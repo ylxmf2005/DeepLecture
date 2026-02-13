@@ -140,5 +140,27 @@ describe("createSubtitleRows", () => {
             expect(rows[0].sourceText).toBe("Hello world");
             expect(rows[0].targetText).toBeUndefined();
         });
+
+        it("matches by time when ids diverge", () => {
+            const sourceWithDifferentIds: Subtitle[] = [
+                { id: "10", startTime: 0, endTime: 2, text: "Hello world" },
+                { id: "11", startTime: 2, endTime: 4, text: "How are you?" },
+            ];
+
+            const targetWithDifferentIds: Subtitle[] = [
+                { id: "1", startTime: 0, endTime: 2, text: "你好世界" },
+                { id: "2", startTime: 2, endTime: 4, text: "你好吗？" },
+            ];
+
+            const rows = createSubtitleRows({
+                mode: "dual",
+                subtitlesSource: sourceWithDifferentIds,
+                subtitlesTarget: targetWithDifferentIds,
+            });
+
+            expect(rows).toHaveLength(2);
+            expect(rows[0].targetText).toBe("你好世界");
+            expect(rows[1].targetText).toBe("你好吗？");
+        });
     });
 });

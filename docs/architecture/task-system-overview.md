@@ -403,7 +403,7 @@ function deriveProcessingState(content: ContentItem | null) {
     if (content.subtitleStatus === "processing") {
         return { processing: true, action: "generate" };
     }
-    if (content.translationStatus === "processing") {
+    if (content.enhancedStatus === "processing") {
         return { processing: true, action: "translate" };
     }
     if (content.videoStatus === "processing") {
@@ -430,7 +430,7 @@ function deriveProcessingState(content: ContentItem | null) {
 ```typescript
 const CONTENT_REFRESH_TASK_TYPES = new Set([
     "subtitle_generation",     // 生成字幕 → subtitleStatus
-    "subtitle_translation",    // 翻译字幕 → translationStatus
+    "subtitle_translation",    // 增强/翻译字幕 → enhancedStatus
     "timeline_generation",     // 生成时间线 → timelineStatus
     "video_generation",        // 生成视频 → videoStatus
     "video_merge",             // 合并视频 → videoStatus

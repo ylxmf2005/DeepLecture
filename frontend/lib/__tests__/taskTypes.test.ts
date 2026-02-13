@@ -14,6 +14,17 @@ describe('normalizeTaskType', () => {
         expect(normalizeTaskType('quiz_generation')).toBe('quiz_generation');
     });
 
+    it('normalizes known alias task types', () => {
+        expect(normalizeTaskType('slide_lecture')).toBe('video_generation');
+        expect(normalizeTaskType('voiceover')).toBe('voiceover_generation');
+        expect(normalizeTaskType('subtitle_timeline')).toBe('timeline_generation');
+        expect(normalizeTaskType('subtitle_enhancement')).toBe('subtitle_translation');
+    });
+
+    it('trims surrounding whitespace', () => {
+        expect(normalizeTaskType('  quiz_generation  ')).toBe('quiz_generation');
+    });
+
     it('returns unknown types as-is', () => {
         expect(normalizeTaskType('unknown_type')).toBe('unknown_type');
     });

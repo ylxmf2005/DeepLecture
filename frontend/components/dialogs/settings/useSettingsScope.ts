@@ -81,6 +81,8 @@ export interface ScopedSettings {
     setNoteContextMode: (mode: NoteContextMode) => void;
     setAILlmModel: (model: string | null) => void;
     setAITtsModel: (model: string | null) => void;
+    setAILlmTaskModel: (taskKey: string, model: string | null) => void;
+    setAITtsTaskModel: (taskKey: string, model: string | null) => void;
     setAIPrompt: (funcId: string, implId: string) => void;
     resetAIPrompt: (funcId: string) => void;
     setDictionaryEnabled: (v: boolean) => void;
@@ -136,6 +138,8 @@ export function useSettingsScope(scope: SettingsScope): ScopedSettings {
             setNoteContextMode: s.setNoteContextMode,
             setAILlmModel: s.setAILlmModel,
             setAITtsModel: s.setAITtsModel,
+            setAILlmTaskModel: s.setAILlmTaskModel,
+            setAITtsTaskModel: s.setAITtsTaskModel,
             setAIPrompt: s.setAIPrompt,
             resetAIPrompt: s.resetAIPrompt,
             setDictionaryEnabled: s.setDictionaryEnabled,
@@ -267,6 +271,36 @@ export function useSettingsScope(scope: SettingsScope): ScopedSettings {
         // AI
         setAILlmModel: makeSetter("ai.llmModel", globalActions.setAILlmModel),
         setAITtsModel: makeSetter("ai.ttsModel", globalActions.setAITtsModel),
+        setAILlmTaskModel: useCallback(
+            (taskKey: string, model: string | null) => {
+                if (isVideoScope) {
+                    const path = `ai.llmTaskModels.${taskKey}`;
+                    if (model) {
+                        videoCtx.setField(path, model);
+                    } else {
+                        videoCtx.clearField(path);
+                    }
+                } else {
+                    globalActions.setAILlmTaskModel(taskKey, model);
+                }
+            },
+            [isVideoScope, videoCtx, globalActions],
+        ),
+        setAITtsTaskModel: useCallback(
+            (taskKey: string, model: string | null) => {
+                if (isVideoScope) {
+                    const path = `ai.ttsTaskModels.${taskKey}`;
+                    if (model) {
+                        videoCtx.setField(path, model);
+                    } else {
+                        videoCtx.clearField(path);
+                    }
+                } else {
+                    globalActions.setAITtsTaskModel(taskKey, model);
+                }
+            },
+            [isVideoScope, videoCtx, globalActions],
+        ),
         setAIPrompt: useCallback(
             (funcId: string, implId: string) => {
                 if (isVideoScope) {

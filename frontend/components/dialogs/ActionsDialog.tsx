@@ -4,6 +4,7 @@ import { ContentItem, SubtitleSource, VoiceoverEntry } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { ProcessingAction } from "@/hooks/useVideoPageState";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 /** Format duration in seconds to mm:ss or hh:mm:ss */
 function formatDuration(seconds: number): string {
@@ -85,6 +86,15 @@ export function ActionsDialog({
 }: ActionsDialogProps) {
     const hasSubtitles = video?.subtitleStatus === "ready";
     const isSlideMode = video?.type === "slide";
+    const completedVoiceovers = voiceovers.filter((vo) => vo.status === "done");
+    const quickToggleOriginalOptions = [
+        { value: "__video_original__", label: "Video Original Audio" },
+        ...completedVoiceovers.map((vo) => ({ value: vo.id, label: vo.name })),
+    ];
+    const quickToggleTranslatedOptions = [
+        { value: "", label: "Not set" },
+        ...completedVoiceovers.map((vo) => ({ value: vo.id, label: vo.name })),
+    ];
 
     // Inline edit state
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -235,10 +245,10 @@ export function ActionsDialog({
                                         </div>
                                         <div className="flex flex-col">
                                             <span className="font-medium text-gray-900 dark:text-gray-100">
-                                                {video.translationStatus === "ready" ? "Re-enhance & Translate" : "Enhance & Translate"}
+                                                {video.enhancedStatus === "ready" ? "Re-enhance & Translate" : "Enhance & Translate"}
                                             </span>
                                             <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                {video.translationStatus === "ready" ? "Regenerate enhanced bilingual subtitles" : "Fix ASR errors & generate bilingual subtitles"}
+                                                {video.enhancedStatus === "ready" ? "Regenerate enhanced bilingual subtitles" : "Fix ASR errors & generate bilingual subtitles"}
                                             </span>
                                         </div>
                                     </div>
@@ -315,7 +325,7 @@ export function ActionsDialog({
                                         </button>
                                         <button
                                             onClick={() => handleGenerateVoiceover("translated")}
-                                            disabled={voiceoverProcessing !== null || video.translationStatus !== "ready" || !voiceoverName.trim()}
+                                            disabled={voiceoverProcessing !== null || video.enhancedStatus !== "ready" || !voiceoverName.trim()}
                                             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 text-xs font-medium hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             {voiceoverProcessing === "translated" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Globe className="w-3 h-3" />}
@@ -471,31 +481,23 @@ export function ActionsDialog({
                                                     {/* Original Track Preset */}
                                                     <div className="space-y-1.5">
                                                         <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Original Track</label>
-                                                        <select
+                                                        <CustomSelect
                                                             value={quickToggleOriginalVoiceoverId ?? "__video_original__"}
-                                                            onChange={(e) => setQuickToggleOriginalVoiceoverId(e.target.value === "__video_original__" ? null : e.target.value)}
-                                                            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all"
-                                                        >
-                                                            <option value="__video_original__">Video Original Audio</option>
-                                                            {voiceovers.filter(vo => vo.status === "done").map((vo) => (
-                                                                <option key={vo.id} value={vo.id}>{vo.name}</option>
-                                                            ))}
-                                                        </select>
+                                                            onChange={(value) => setQuickToggleOriginalVoiceoverId(value === "__video_original__" ? null : value)}
+                                                            options={quickToggleOriginalOptions}
+                                                            accent="violet"
+                                                        />
                                                     </div>
 
                                                     {/* Translated Track Preset */}
                                                     <div className="space-y-1.5">
                                                         <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Translated Track</label>
-                                                        <select
+                                                        <CustomSelect
                                                             value={quickToggleTranslatedVoiceoverId ?? ""}
-                                                            onChange={(e) => setQuickToggleTranslatedVoiceoverId(e.target.value || null)}
-                                                            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all"
-                                                        >
-                                                            <option value="">Not set</option>
-                                                            {voiceovers.filter(vo => vo.status === "done").map((vo) => (
-                                                                <option key={vo.id} value={vo.id}>{vo.name}</option>
-                                                            ))}
-                                                        </select>
+                                                            onChange={(value) => setQuickToggleTranslatedVoiceoverId(value || null)}
+                                                            options={quickToggleTranslatedOptions}
+                                                            accent="violet"
+                                                        />
                                                     </div>
 
                                                     {quickToggleTranslatedVoiceoverId && (

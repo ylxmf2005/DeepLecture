@@ -82,6 +82,9 @@ def put_config(content_id: str) -> Response:
 
     config = ContentConfig.from_dict(data)
     container = get_container()
+    model_error = _validate_model_names(config, container)
+    if model_error:
+        return bad_request(model_error)
     container.content_config_storage.save(content_id, config)
     return success(config.to_sparse_dict())
 
@@ -215,5 +218,21 @@ def _validate_config_fields(data: dict[str, Any]) -> str | None:
     # --- Live2D model scale ---
     if err := _validate_live2d_model_scale(data):
         return err
+
+    return None
+
+
+def _validate_model_names(config: ContentConfig, container: object) -> str | None:
+    """Validate model IDs used in per-content config."""
+    llm_valid = {item.name for item in container.llm_provider.list_models()}  # type: ignore[attr-defined]
+    tts_valid = {item.name for item in container.tts_provider.list_models()}  # type: ignore[attr-defined]
+
+    for model_name in [config.llm_model, *(config.llm_task_models or {}).values()]:
+        if model_name and model_name not in llm_valid:
+            return f"Unknown LLM model in content config: {model_name}"
+
+    for model_name in [config.tts_model, *(config.tts_task_models or {}).values()]:
+        if model_name and model_name not in tts_valid:
+            return f"Unknown TTS model in content config: {model_name}"
 
     return None

@@ -28,7 +28,6 @@ export interface ContentItem {
     createdAt: string;
     videoStatus?: FeatureStatus;
     subtitleStatus?: FeatureStatus;
-    translationStatus?: FeatureStatus;
     enhancedStatus?: FeatureStatus;
     timelineStatus?: FeatureStatus;
     notesStatus?: FeatureStatus;
@@ -382,6 +381,8 @@ export interface AppConfigResponse {
     };
     prompts: Record<string, PromptFunctionConfig>;
     taskKeys?: string[];
+    llmTaskKeys?: string[];
+    ttsTaskKeys?: string[];
 }
 
 // =============================================================================

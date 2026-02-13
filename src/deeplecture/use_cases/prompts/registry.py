@@ -297,7 +297,7 @@ class SubtitleBackgroundBuilder(BasePromptBuilder):
     def build(self, **kwargs) -> PromptSpec:
         from deeplecture.use_cases.prompts.subtitle import build_background_prompt
 
-        user_prompt, system_prompt = build_background_prompt(kwargs["transcript"])
+        user_prompt, system_prompt = build_background_prompt(kwargs["transcript_text"])
         return PromptSpec(user_prompt=user_prompt, system_prompt=system_prompt)
 
     def get_preview_text(self) -> str:

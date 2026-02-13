@@ -120,10 +120,10 @@ export const useVocabularyStore = create<VocabularyStore>()(
             name: "deeplecture-vocabulary",
             storage: createJSONStorage(() => localStorage),
             version: 1,
-            onRehydrateStorage: () => (_state, error) => {
-                if (!error) {
-                    useVocabularyStore.setState({ _hydrated: true });
-                }
+            onRehydrateStorage: () => (_state) => {
+                // Always unblock UI even if persisted data is malformed/unavailable.
+                // In that case we just fall back to the default empty list.
+                useVocabularyStore.setState({ _hydrated: true });
             },
         }
     )

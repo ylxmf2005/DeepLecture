@@ -46,11 +46,6 @@ const CheatsheetTab = dynamic(
     { loading: LoadingSpinner }
 );
 
-const FlashcardTab = dynamic(
-    () => import("@/components/features/FlashcardTab").then((mod) => mod.FlashcardTab),
-    { loading: LoadingSpinner }
-);
-
 const BookmarkTab = dynamic(
     () => import("@/components/features/BookmarkTab").then((mod) => mod.BookmarkTab),
     { loading: LoadingSpinner }
@@ -399,12 +394,7 @@ export function renderTabContent(tabId: TabId, props: TabContentProps): React.Re
 
         // Placeholder tabs
         case "flashcard":
-            return (
-                <FlashcardTab
-                    videoId={videoId}
-                    onSeek={onSeek}
-                />
-            );
+            return <FeaturePlaceholder label="Flashcard" />;
         case "quiz":
             return (
                 <QuizTab

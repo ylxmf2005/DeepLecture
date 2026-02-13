@@ -215,7 +215,7 @@ export function VideoList({ refreshTrigger }: VideoListProps) {
                                                         Subtitles
                                                     </span>
                                                 )}
-                                                {item.translationStatus === "ready" && (
+                                                {item.enhancedStatus === "ready" && (
                                                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-purple-50 dark:bg-purple-900/20 text-xs font-medium text-purple-700 dark:text-purple-400">
                                                         <Globe className="w-3 h-3" />
                                                         Translated

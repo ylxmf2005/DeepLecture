@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { isAPIError } from "@/lib/api";
+import { getTaskStatus, getTasksForContent } from "@/lib/api/task";
 import { toError } from "@/lib/utils/errorUtils";
 import { logger } from "@/shared/infrastructure";
 import { useTaskNotification } from "@/hooks/useTaskNotification";
+import { normalizeTaskType } from "@/lib/taskTypes";
 
 /** Logger interface matching the scoped logger returned by logger.scope() */
 type ScopedLog = ReturnType<typeof logger.scope>;
@@ -43,6 +45,42 @@ interface UseSSEGenerationRetryResult<T> {
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
+const TASK_POLL_INTERVAL_MS = 1500;
+const IN_FLIGHT_TASK_STATUSES = new Set(["pending", "processing"]);
+
+function parseTaskTimestamp(task: { updatedAt?: string; createdAt?: string }): number {
+    const updatedAtMs = Date.parse(task.updatedAt ?? "");
+    if (!Number.isNaN(updatedAtMs)) {
+        return updatedAtMs;
+    }
+
+    const createdAtMs = Date.parse(task.createdAt ?? "");
+    if (!Number.isNaN(createdAtMs)) {
+        return createdAtMs;
+    }
+
+    return 0;
+}
+
+function selectLatestInFlightTask(
+    tasks: Array<{ id: string; type: string; status: string; updatedAt?: string; createdAt?: string }>,
+    taskType: string
+): { id: string; type: string; status: string; updatedAt?: string; createdAt?: string } | null {
+    const canonicalType = normalizeTaskType(taskType);
+    const candidates = tasks.filter(
+        (task) =>
+            IN_FLIGHT_TASK_STATUSES.has(task.status) &&
+            normalizeTaskType(task.type) === canonicalType
+    );
+
+    if (candidates.length === 0) {
+        return null;
+    }
+
+    return candidates.reduce((latest, current) => {
+        return parseTaskTimestamp(current) > parseTaskTimestamp(latest) ? current : latest;
+    });
+}
 
 /**
  * Shared hook for SSE-driven generation with retry logic.
@@ -51,7 +89,8 @@ const RETRY_DELAY_MS = 1000;
  * 1. Fetch existing content on mount / refreshTrigger change
  * 2. When refreshTrigger changes while generating, retry up to 3 times
  *    (handles race condition where SSE arrives before file is readable)
- * 3. Provide a handleGenerate callback to submit generation requests
+ * 3. Poll task status as fallback when SSE updates are unavailable
+ * 4. Provide a handleGenerate callback to submit generation requests
  */
 export function useSSEGenerationRetry<T>({
     contentId,
@@ -66,6 +105,7 @@ export function useSSEGenerationRetry<T>({
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
     const { notifyTaskComplete } = useTaskNotification();
 
     // Track generating state across renders for SSE detection
@@ -74,6 +114,20 @@ export function useSSEGenerationRetry<T>({
 
     // Track previous refreshTrigger to detect SSE notifications
     const prevRefreshTriggerRef = useRef(refreshTrigger);
+    const prevContentIdRef = useRef(contentId);
+
+    // Reset generation state when content changes to avoid cross-content bleed.
+    useEffect(() => {
+        if (prevContentIdRef.current === contentId) {
+            return;
+        }
+        prevContentIdRef.current = contentId;
+        prevRefreshTriggerRef.current = refreshTrigger;
+        setData(null);
+        setLoadError(null);
+        setIsGenerating(false);
+        setActiveTaskId(null);
+    }, [contentId, refreshTrigger]);
 
     useEffect(() => {
         let cancelled = false;
@@ -95,10 +149,11 @@ export function useSSEGenerationRetry<T>({
                     setData(result);
                     setLoadError(null);
                     setIsGenerating(false);
+                    setActiveTaskId(null);
                     log.info("Content loaded", { contentId });
                 } else if (isSSETriggered && retryCount < MAX_RETRIES) {
                     retryCount++;
-                    log.debug("Content not found after SSE, retrying...", { contentId });
+                    log.debug("Content not found after SSE, retrying...", { contentId, retryCount });
                     setTimeout(() => {
                         if (!cancelled) loadData();
                     }, RETRY_DELAY_MS);
@@ -106,6 +161,7 @@ export function useSSEGenerationRetry<T>({
                 } else if (isSSETriggered) {
                     log.warn("Content not found after retries", { contentId });
                     setIsGenerating(false);
+                    setActiveTaskId(null);
                     setLoadError("Generation completed but content not found. Please try again.");
                 }
             } catch (err) {
@@ -113,7 +169,7 @@ export function useSSEGenerationRetry<T>({
                 if (isAPIError(err) && err.status === 404) {
                     if (isSSETriggered && retryCount < MAX_RETRIES) {
                         retryCount++;
-                        log.debug("404 after SSE, retrying...", { contentId });
+                        log.debug("404 after SSE, retrying...", { contentId, retryCount });
                         setTimeout(() => {
                             if (!cancelled) loadData();
                         }, RETRY_DELAY_MS);
@@ -121,6 +177,7 @@ export function useSSEGenerationRetry<T>({
                     } else if (isSSETriggered) {
                         log.warn("404 after retries", { contentId });
                         setIsGenerating(false);
+                        setActiveTaskId(null);
                         setLoadError("Generation completed but content not found. Please try again.");
                     } else {
                         log.debug("No existing content (404)", { contentId });
@@ -146,6 +203,143 @@ export function useSSEGenerationRetry<T>({
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [contentId, refreshTrigger, ...extraDeps]);
+
+    // Task polling fallback: keeps generation flows correct even when SSE drops.
+    useEffect(() => {
+        if (!contentId || !isGenerating || !activeTaskId) {
+            return;
+        }
+
+        let cancelled = false;
+        let polling = false;
+
+        const loadAfterReady = async (): Promise<void> => {
+            let retryCount = 0;
+
+            while (!cancelled) {
+                try {
+                    const result = await fetchContent();
+                    if (cancelled) return;
+
+                    if (result !== null) {
+                        setData(result);
+                        setLoadError(null);
+                        setIsGenerating(false);
+                        setActiveTaskId(null);
+                        return;
+                    }
+                } catch (err) {
+                    if (cancelled) return;
+                    if (!isAPIError(err) || err.status !== 404) {
+                        log.error("Failed to load generated content after task completion", toError(err), { contentId, taskId: activeTaskId });
+                        setLoadError("Failed to load generated content.");
+                        setIsGenerating(false);
+                        setActiveTaskId(null);
+                        return;
+                    }
+                }
+
+                if (retryCount >= MAX_RETRIES) {
+                    setLoadError("Generation completed but content not found. Please try again.");
+                    setIsGenerating(false);
+                    setActiveTaskId(null);
+                    return;
+                }
+
+                retryCount++;
+                await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+            }
+        };
+
+        const pollOnce = async () => {
+            if (cancelled || polling) {
+                return;
+            }
+            polling = true;
+
+            try {
+                const task = await getTaskStatus(activeTaskId);
+                if (cancelled) return;
+
+                if (task.status === "ready") {
+                    log.info("Task ready via polling fallback", { contentId, taskId: activeTaskId, taskType });
+                    await loadAfterReady();
+                } else if (task.status === "error") {
+                    setLoadError(task.error || "Generation failed. Please try again.");
+                    setIsGenerating(false);
+                    setActiveTaskId(null);
+                }
+            } catch (err) {
+                if (cancelled) return;
+                // 404 can happen briefly due eventual persistence timing.
+                if (isAPIError(err) && err.status === 404) {
+                    log.debug("Task status not yet visible during polling", { contentId, taskId: activeTaskId });
+                } else {
+                    log.warn("Task polling fallback failed", {
+                        contentId,
+                        taskId: activeTaskId,
+                        error: toError(err).message,
+                    });
+                }
+            } finally {
+                polling = false;
+            }
+        };
+
+        void pollOnce();
+        const interval = setInterval(() => {
+            void pollOnce();
+        }, TASK_POLL_INTERVAL_MS);
+
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [activeTaskId, contentId, fetchContent, isGenerating, log, taskType]);
+
+    // Recover in-flight state after page refresh so generation UI doesn't reset to idle.
+    useEffect(() => {
+        if (!contentId) {
+            return;
+        }
+
+        let cancelled = false;
+
+        const recoverInFlightTask = async () => {
+            try {
+                const taskList = await getTasksForContent(contentId);
+                if (cancelled) return;
+
+                const recoveredTask = selectLatestInFlightTask(taskList.tasks, taskType);
+                if (!recoveredTask) {
+                    return;
+                }
+
+                setIsGenerating(true);
+                setActiveTaskId(recoveredTask.id);
+                setLoadError(null);
+                log.info("Recovered in-flight generation task", {
+                    contentId,
+                    taskType,
+                    taskId: recoveredTask.id,
+                    status: recoveredTask.status,
+                });
+            } catch (err) {
+                if (cancelled) return;
+                log.debug("Failed to recover in-flight generation task", {
+                    contentId,
+                    taskType,
+                    error: toError(err).message,
+                });
+            }
+        };
+
+        void recoverInFlightTask();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [contentId, log, taskType]);
 
     const handleGenerate = useCallback(async () => {
         setIsGenerating(true);
@@ -174,11 +368,16 @@ export function useSSEGenerationRetry<T>({
             if (maybeStatus === "ready" || !maybeTaskId) {
                 notifyTaskComplete(taskType, "ready");
                 setIsGenerating(false);
+                setActiveTaskId(null);
+                return;
             }
+
+            setActiveTaskId(maybeTaskId);
         } catch (err) {
             log.error("Failed to start generation", toError(err));
             setLoadError("Failed to start generation. Please try again.");
             setIsGenerating(false);
+            setActiveTaskId(null);
             notifyTaskComplete(taskType, "error", toError(err).message);
         }
     }, [submitGeneration, log, notifyTaskComplete, taskType]);

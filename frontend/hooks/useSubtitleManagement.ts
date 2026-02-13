@@ -62,11 +62,10 @@ export function useSubtitleManagement({
     // Derive subtitle-related state to avoid unnecessary re-renders
     const hasSubtitles = content?.subtitleStatus === "ready";
     const hasEnhancedSubtitles = content?.enhancedStatus === "ready";
-    const hasTranslation = content?.translationStatus === "ready";
 
     // Create a stable key based on subtitle state - changes trigger reload
     // subtitleRefreshVersion acts as cache invalidation token for SSE-triggered regeneration
-    const subtitleStateKey = `${videoId}:${originalLanguage}:${targetLanguage}:${hasSubtitles}:${hasEnhancedSubtitles}:${hasTranslation}:${subtitleRefreshVersion}`;
+    const subtitleStateKey = `${videoId}:${originalLanguage}:${targetLanguage}:${hasSubtitles}:${hasEnhancedSubtitles}:${subtitleRefreshVersion}`;
 
     // Load subtitles when subtitle state changes
     // Using subtitleStateKey instead of content to prevent unnecessary reloads
@@ -108,8 +107,8 @@ export function useSubtitleManagement({
                 }));
                 setSubtitlesSource(sourceSubs);
 
-                // Check if translated subtitles exist
-                if (!hasTranslation) {
+                // Enhanced workflow generates source_enhanced + target subtitles together.
+                if (!hasEnhancedSubtitles) {
                     return;
                 }
 
@@ -154,7 +153,7 @@ export function useSubtitleManagement({
             loadRequestIdRef.current += 1;
         };
     // Dependencies are intentionally derived through subtitleStateKey which combines:
-    // videoId, hasSubtitles, hasEnhancedSubtitles, hasTranslation, subtitleRefreshVersion
+    // videoId, hasSubtitles, hasEnhancedSubtitles, subtitleRefreshVersion
     // This prevents unnecessary API calls when only unrelated content fields change
     }, [
         subtitleStateKey,
@@ -163,7 +162,6 @@ export function useSubtitleManagement({
         targetLanguage,
         hasSubtitles,
         hasEnhancedSubtitles,
-        hasTranslation,
         notifyOperation,
     ]);
 

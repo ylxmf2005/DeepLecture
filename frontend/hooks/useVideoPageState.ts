@@ -16,21 +16,11 @@ import { useVoiceoverManagement } from "@/hooks/useVoiceoverManagement";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
 import type { AskContextItem } from "@/lib/askTypes";
+import { isContentRefreshTask, normalizeTaskType, taskToProcessingAction } from "@/lib/taskTypes";
 
 const log = logger.scope("VideoPageState");
 
 export type ProcessingAction = "generate" | "translate" | "video" | "timeline" | null;
-
-// OCP: Task types that trigger content refresh - extend this set for new task types
-const CONTENT_REFRESH_TASK_TYPES = new Set([
-    "subtitle_generation",
-    "subtitle_translation",
-    "timeline_generation",
-    "video_generation",
-    "video_merge",
-    "video_import_url",
-    "pdf_merge",
-]);
 
 // OCP: Subtitle tasks that force subtitle reload even when status remains `ready`
 // This solves the SSE → UI refresh bug where subtitleStateKey doesn't change on regeneration
@@ -39,22 +29,11 @@ const SUBTITLE_REFRESH_TASK_TYPES = new Set([
     "subtitle_translation",
 ]);
 
-// OCP: Mapping of task types to their matching processing actions
-// Adding new task types only requires extending this configuration
-const TASK_TO_ACTION_MAP: Record<string, ProcessingAction | ProcessingAction[]> = {
-    subtitle_generation: "generate",
-    timeline_generation: "timeline",
-    video_generation: "video",
-    video_merge: "video",           // slide lecture video merge
-    video_import_url: "video",      // URL import also triggers video action
-    subtitle_translation: "translate",
-};
-
 // OCP: Mapping of processingAction to content status fields for fallback polling
 // This ensures fallback polling uses the same configuration as SSE handlers
 const ACTION_TO_STATUS_FIELDS: Record<Exclude<ProcessingAction, null>, (keyof ContentItem)[]> = {
     generate: ["subtitleStatus"],
-    translate: ["translationStatus"],
+    translate: ["enhancedStatus"],
     timeline: ["timelineStatus"],
     video: ["videoStatus"],
 };
@@ -76,7 +55,7 @@ export function deriveProcessingState(content: ContentItem | null): {
     if (content.subtitleStatus === "processing") {
         return { processing: true, action: "generate", timelineLoading: false };
     }
-    if (content.translationStatus === "processing") {
+    if (content.enhancedStatus === "processing") {
         return { processing: true, action: "translate", timelineLoading: false };
     }
     if (content.videoStatus === "processing") {
@@ -287,20 +266,21 @@ export function useVideoPageState({
 
                 if (task.status === "ready" || task.status === "error") {
                     handledTasksRef.current.add(taskId);
+                    const taskType = normalizeTaskType(task.type);
 
                     // Only notify for live events, not initial history
                     const isLiveEvent = task._eventType !== "initial";
                     if (isLiveEvent) {
-                        notifyTaskComplete(task.type, task.status, task.error);
+                        notifyTaskComplete(taskType, task.status, task.error);
                     }
 
                     // OCP: Use configuration set instead of inline array
-                    if (CONTENT_REFRESH_TASK_TYPES.has(task.type)) {
-                        log.info(`Task ${task.type} completed, refreshing content`, { taskType: task.type, videoId });
+                    if (isContentRefreshTask(taskType)) {
+                        log.info(`Task ${taskType} completed, refreshing content`, { taskType, videoId });
 
                         // Bump subtitle refresh version BEFORE metadata fetch
                         // This ensures UI refresh even if getContentMetadata() fails
-                        if (isLiveEvent && task.status === "ready" && SUBTITLE_REFRESH_TASK_TYPES.has(task.type)) {
+                        if (isLiveEvent && task.status === "ready" && SUBTITLE_REFRESH_TASK_TYPES.has(taskType)) {
                             setSubtitleRefreshVersion((v) => v + 1);
 
                             // Optimistic update to prevent stale metadata from blocking UI
@@ -308,10 +288,10 @@ export function useVideoPageState({
                                 if (!prev) return prev;
                                 const updates: Partial<ContentItem> = {};
 
-                                if (task.type === "subtitle_generation") {
+                                if (taskType === "subtitle_generation") {
                                     updates.subtitleStatus = "ready";
-                                } else if (task.type === "subtitle_translation") {
-                                    updates.translationStatus = "ready";
+                                } else if (taskType === "subtitle_translation") {
+                                    updates.enhancedStatus = "ready";
                                 }
 
                                 return { ...prev, ...updates };
@@ -325,16 +305,16 @@ export function useVideoPageState({
 
                                 // For subtitle tasks, preserve optimistic status to prevent race condition
                                 // where API returns stale data before DB commit is visible
-                                if (SUBTITLE_REFRESH_TASK_TYPES.has(task.type)) {
+                                if (SUBTITLE_REFRESH_TASK_TYPES.has(taskType)) {
                                     setContent((prev) => {
                                         if (!prev) return newContent;
 
                                         // Preserve the optimistic "ready" status we just set
                                         const preserved: Partial<ContentItem> = {};
-                                        if (task.type === "subtitle_generation" && prev.subtitleStatus === "ready") {
+                                        if (taskType === "subtitle_generation" && prev.subtitleStatus === "ready") {
                                             preserved.subtitleStatus = "ready";
-                                        } else if (task.type === "subtitle_translation" && prev.translationStatus === "ready") {
-                                            preserved.translationStatus = "ready";
+                                        } else if (taskType === "subtitle_translation" && prev.enhancedStatus === "ready") {
+                                            preserved.enhancedStatus = "ready";
                                         }
 
                                         return { ...newContent, ...preserved };
@@ -344,26 +324,22 @@ export function useVideoPageState({
                                 }
                             }
                         } catch (error) {
-                            log.error("Failed to refresh content after task completion", toError(error), { videoId, taskType: task.type });
+                            log.error("Failed to refresh content after task completion", toError(error), { videoId, taskType });
                         }
                     }
 
                     if (cancelled) return;
 
                     // OCP: Check if task type matches current processing action using config map
-                    const matchingAction = TASK_TO_ACTION_MAP[task.type];
-                    const actionMatches = matchingAction && (
-                        Array.isArray(matchingAction)
-                            ? matchingAction.includes(processingAction)
-                            : matchingAction === processingAction
-                    );
+                    const matchingAction = taskToProcessingAction(taskType);
+                    const actionMatches = Boolean(matchingAction && matchingAction === processingAction);
 
                     if (actionMatches) {
                         setProcessing(false);
                         setProcessingAction(null);
 
                         // Task-specific side effects
-                        if (task.type === "timeline_generation") {
+                        if (taskType === "timeline_generation") {
                             setTimelineLoading(false);
                             try {
                                 // Fetch the generated timeline (cache is keyed by output language)
@@ -377,7 +353,7 @@ export function useVideoPageState({
                                 log.error("Failed to load timeline after generation", toError(error), { videoId });
                             }
                         }
-                    } else if (task.type === "voiceover_generation") {
+                    } else if (taskType === "voiceover_generation") {
                         // Voiceover state is managed by useVoiceoverManagement
                         voiceoverState.setVoiceoverProcessing(null);
                         voiceoverState.setVoiceoversLoading(true);
@@ -393,19 +369,20 @@ export function useVideoPageState({
                                 voiceoverState.setVoiceoversLoading(false);
                             }
                         }
-                    } else if (task.type === "slide_explanation") {
+                    } else if (taskType === "slide_explanation" && isLiveEvent && task.status === "ready") {
                         setRefreshExplanations((prev) => prev + 1);
-                    } else if (task.type === "fact_verification") {
-                        log.info("SSE: fact_verification completed, bumping refreshVerification", { taskId, taskType: task.type, status: task.status });
+                    } else if (taskType === "fact_verification" && isLiveEvent && task.status === "ready") {
+                        log.info("SSE: fact_verification completed, bumping refreshVerification", { taskId, taskType, status: task.status });
                         setRefreshVerification((prev) => prev + 1);
-                    } else if (task.type === "cheatsheet_generation") {
-                        log.info("SSE: cheatsheet_generation completed, bumping refreshCheatsheet", { taskId, taskType: task.type, status: task.status });
+                    } else if (taskType === "cheatsheet_generation" && isLiveEvent && task.status === "ready") {
+                        log.info("SSE: cheatsheet_generation completed, bumping refreshCheatsheet", { taskId, taskType, status: task.status });
                         setRefreshCheatsheet((prev) => prev + 1);
-                    } else if (task.type === "quiz_generation") {
-                        log.info("SSE: quiz_generation completed, bumping refreshQuiz", { taskId, taskType: task.type, status: task.status });
+                    } else if (taskType === "quiz_generation" && isLiveEvent && task.status === "ready") {
+                        log.info("SSE: quiz_generation completed, bumping refreshQuiz", { taskId, taskType, status: task.status });
                         setRefreshQuiz((prev) => prev + 1);
-                    } else if (task.type === "note_generation") {
-                        // Note generation completed via SSE - stop the generating state
+                    } else if (taskType === "note_generation" && isLiveEvent) {
+                        // Note generation completed via live SSE event - stop generating state.
+                        // Ignore initial history snapshots to avoid premature completion on page load/reconnect.
                         if (!cancelled) {
                             setGeneratingNote(false);
                         }

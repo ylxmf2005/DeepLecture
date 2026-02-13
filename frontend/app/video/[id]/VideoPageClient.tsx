@@ -571,54 +571,6 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         );
     }
 
-    return (
-        <>
-        {/* Web fullscreen overlay - renders video only when in web-fullscreen mode */}
-        {viewMode === "web-fullscreen" && (
-            <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-                <ErrorBoundary
-                    component="VideoPlayerSection"
-                    fallback={(error, reset) => (
-                        <div className="flex flex-col items-center justify-center p-8 bg-muted/50 rounded-lg">
-                            <p className="text-destructive mb-4">Video player error: {error.message}</p>
-                            <button onClick={reset} className="px-4 py-2 bg-primary text-primary-foreground rounded-md">
-                                Reload Player
-                            </button>
-                        </div>
-                    )}
-                >
-                    <VideoPlayerSection
-                        ref={playerRef}
-                        content={content}
-                        videoId={videoId}
-                        selectedVoiceoverId={selectedVoiceoverId}
-                        selectedVoiceoverSyncTimeline={selectedVoiceoverSyncTimeline}
-                        playerSubtitles={playerSubtitles}
-                        playerSubtitleMode={playerSubtitleMode}
-                        setPlayerSubtitleMode={setPlayerSubtitleMode}
-                        hasTranslation={content.translationStatus === "ready"}
-                        quickToggleOriginalVoiceoverId={quickToggleOriginalVoiceoverId}
-                        quickToggleTranslatedVoiceoverId={quickToggleTranslatedVoiceoverId}
-                        onVoiceoverChange={setSelectedVoiceoverId}
-                        generatingVideo={generatingVideo}
-                        onTimeUpdate={handleTimeUpdate}
-                        onCapture={handlers.handleCapture}
-                        onAskAtTime={handlers.handleAskAtTime}
-                        onAddNoteAtTime={handlers.handleAddNoteAtTime}
-                        onPlayerReady={handlePlayerReady}
-                        onGenerateSlideLecture={handlers.handleGenerateSlideLecture}
-                        slideDeck={deck}
-                        onUploadSlide={handlers.handleUploadSlide}
-                        viewMode={viewMode}
-                        onViewModeChange={setViewMode}
-                        bookmarkTimestamps={bookmarkTimestamps}
-                        onAddBookmark={handleAddBookmark}
-                        className="w-full h-full"
-                    />
-                </ErrorBoundary>
-            </div>
-        )}
-
     const formattedCreatedDate = new Intl.DateTimeFormat("en-US", {
         timeZone: "UTC",
         year: "numeric",
@@ -689,7 +641,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             playerSubtitles={playerSubtitles}
                             playerSubtitleMode={playerSubtitleMode}
                             setPlayerSubtitleMode={setPlayerSubtitleMode}
-                            hasTranslation={content.translationStatus === "ready"}
+                            hasTranslation={content.enhancedStatus === "ready"}
                             quickToggleOriginalVoiceoverId={quickToggleOriginalVoiceoverId}
                             quickToggleTranslatedVoiceoverId={quickToggleTranslatedVoiceoverId}
                             onVoiceoverChange={setSelectedVoiceoverId}
@@ -907,7 +859,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 autoSwitchVoiceoverOnLeave={autoSwitchVoiceoverOnLeave}
                 voiceoverAutoSwitchThresholdMs={voiceoverAutoSwitchThresholdMs}
                 subtitleMode={playerSubtitleMode}
-                hasTranslation={content.translationStatus === "ready"}
+                hasTranslation={content.enhancedStatus === "ready"}
                 onSubtitleModeChange={setPlayerSubtitleMode}
                 summaryThresholdSeconds={summaryThresholdSeconds}
                 selectedVoiceoverId={selectedVoiceoverId}
