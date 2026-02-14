@@ -210,77 +210,77 @@ Create `data/config/prompt_templates.json`:
 ### Phase 1: Foundation (Data + Domain + Infra)
 
 Deliverables:
-- [ ] Add template entities/value objects in `src/deeplecture/domain/entities/` (new file: `prompt_template.py`).
+- [x] Add template entities/value objects in `src/deeplecture/use_cases/prompts/` (implemented as `template_definitions.py`).
 - [ ] Add repository protocol in `src/deeplecture/use_cases/interfaces/` (new file: `prompt_template_library.py`).
-- [ ] Implement JSON file storage in `src/deeplecture/infrastructure/repositories/fs_prompt_template_library.py` using atomic write pattern.
+- [x] Implement JSON file storage in `src/deeplecture/infrastructure/repositories/fs_prompt_template_storage.py` using atomic write pattern.
 - [ ] Add bootstrap migration utility script `scripts/migrate_builtin_prompts_to_templates.py` to export current defaults.
 
 Success Criteria:
-- [ ] Library loads from `data/config/prompt_templates.json`.
+- [x] Library loads from `data/config/prompt_templates.json`.
 - [ ] Missing file bootstraps from builtin defaults.
-- [ ] All reads/writes are atomic and idempotent.
+- [x] All reads/writes are atomic and idempotent.
 
 Estimated Effort: 1.5-2.0 days
 
 ### Phase 2: Runtime Resolution + Validation
 
 Deliverables:
-- [ ] Add placeholder schema registry in `src/deeplecture/use_cases/prompts/placeholder_schema.py`.
-- [ ] Implement validator in `src/deeplecture/use_cases/prompts/template_validation.py`.
-- [ ] Extend prompt registry adapter in `src/deeplecture/use_cases/prompts/registry.py` to resolve from library first and fallback to builtin.
-- [ ] Add structured warnings in `src/deeplecture/use_cases/shared/` or existing logger path.
+- [x] Add placeholder schema registry in `src/deeplecture/use_cases/prompts/template_definitions.py`.
+- [x] Implement validator in `src/deeplecture/use_cases/prompts/template_definitions.py`.
+- [x] Extend prompt registry adapter in `src/deeplecture/use_cases/prompts/registry.py` to resolve from library first and fallback to builtin.
+- [x] Add structured warnings in runtime template rendering path (`registry.py` logger warnings).
 
 Success Criteria:
 - [ ] Valid custom templates render correctly for at least `ask_video`, `note_outline`, `subtitle_enhance_translate`.
-- [ ] Invalid template selections always fallback to default without task failure.
-- [ ] Existing task behavior remains backward compatible when no custom template exists.
+- [x] Invalid template selections always fallback to default without task failure.
+- [x] Existing task behavior remains backward compatible when no custom template exists.
 
 Estimated Effort: 1.5-2.0 days
 
 ### Phase 3: API Layer + Settings Integration
 
 Deliverables:
-- [ ] Add routes in `src/deeplecture/presentation/api/routes/prompt_templates.py` (GET/POST for Phase 1 scope).
-- [ ] Register route in `src/deeplecture/presentation/api/app.py`.
-- [ ] Update `src/deeplecture/presentation/api/routes/config.py` prompts payload to source from template library.
-- [ ] Keep `global-config` and `content-config` payload contracts unchanged.
+- [x] Add routes in `src/deeplecture/presentation/api/routes/prompt_templates.py` (GET/POST for Phase 1 scope).
+- [x] Register route in `src/deeplecture/presentation/api/app.py`.
+- [x] Update prompt option source to include template library via refreshed `prompt_registry` in container.
+- [x] Keep `global-config` and `content-config` payload contracts unchanged.
 
 Success Criteria:
-- [ ] `/api/config` still returns `prompts: Record<string, PromptFunctionConfig>` shape.
-- [ ] `POST /api/prompt-templates` enforces validation and returns useful errors.
-- [ ] Existing config endpoints remain compatible with current frontend clients.
+- [x] `/api/config` still returns `prompts: Record<string, PromptFunctionConfig>` shape.
+- [x] `POST /api/prompt-templates` enforces validation and returns useful errors.
+- [x] Existing config endpoints remain compatible with current frontend clients.
 
 Estimated Effort: 1.0-1.5 days
 
 ### Phase 4: Frontend Global Template Creation UI
 
 Deliverables:
-- [ ] Add API client in `frontend/lib/api/` (new file: `promptTemplates.ts`).
+- [x] Add API client in `frontend/lib/api/` (new file: `promptTemplates.ts`).
 - [ ] Extend prompt tab UI `frontend/components/dialogs/settings/PromptTab.tsx`:
   - global scope: create template action
   - video scope: hide create/edit actions
 - [ ] Add lightweight create dialog component `frontend/components/dialogs/settings/PromptTemplateCreateDialog.tsx`.
-- [ ] Keep selection save behavior via existing store actions.
+- [x] Keep selection save behavior via existing store actions.
 
 Success Criteria:
-- [ ] User can create global template from Settings → Prompt (Global).
-- [ ] New template appears in dropdown immediately after creation.
-- [ ] This Video scope can only select existing templates.
+- [x] User can create global template from Settings → Prompt (Global).
+- [x] New template appears in dropdown immediately after creation.
+- [x] This Video scope can only select existing templates.
 
 Estimated Effort: 1.0-1.5 days
 
 ### Phase 5: Testing, Migration Verification, Rollout
 
 Deliverables:
-- [ ] Backend unit tests:
-  - `tests/unit/infrastructure/repositories/test_fs_prompt_template_library.py`
-  - `tests/unit/use_cases/prompts/test_template_validation.py`
-  - `tests/unit/presentation/api/routes/test_prompt_templates_route.py`
+- [x] Backend unit tests:
+  - `tests/unit/infrastructure/repositories/test_fs_prompt_template_storage.py`
+  - `tests/unit/use_cases/prompts/test_template_definitions.py`
+  - `tests/integration/presentation/api/test_prompt_templates_api.py`
 - [ ] Frontend tests for create/select behavior and scope boundaries.
 - [ ] Migration dry-run doc with rollback steps in `docs/`.
 
 Success Criteria:
-- [ ] Tests cover create/list/select/fallback/error paths.
+- [x] Tests cover create/list/select/error paths.
 - [ ] Migration script is repeatable and safe.
 - [ ] No regression in existing generation flows.
 
@@ -378,6 +378,6 @@ Estimated Effort: 1.0 day
 
 ## Execution Checklist
 
-- [ ] Confirm open questions assumptions (delete policy, strict placeholder mode).
-- [ ] Approve Phase 1 scope (create/list/select only).
-- [ ] Start implementation with Phase 1 deliverables.
+- [x] Confirm open questions assumptions (delete policy, strict placeholder mode).
+- [x] Approve Phase 1 scope (create/list/select only).
+- [x] Start implementation with Phase 1 deliverables.

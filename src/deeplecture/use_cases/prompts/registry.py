@@ -9,6 +9,7 @@ Central registry for all prompt builders. Supports:
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from deeplecture.use_cases.interfaces.prompt_registry import (
@@ -20,6 +21,9 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from deeplecture.use_cases.interfaces.prompt_registry import PromptBuilder
+    from deeplecture.use_cases.prompts.template_definitions import PromptTemplateDefinition
+
+logger = logging.getLogger(__name__)
 
 
 class PromptRegistry:
@@ -462,12 +466,82 @@ class QuizGenerationBuilder(BasePromptBuilder):
         )
 
 
+class TemplateOverrideBuilder(BasePromptBuilder):
+    """Builder that overrides default prompts with template-based rendering."""
+
+    def __init__(
+        self,
+        *,
+        impl_id: str,
+        name: str,
+        description: str | None,
+        func_id: str,
+        fallback_builder: PromptBuilder,
+        system_template: str,
+        user_template: str,
+    ) -> None:
+        super().__init__(impl_id=impl_id, name=name, description=description)
+        self._func_id = func_id
+        self._fallback = fallback_builder
+        self._system_template = system_template
+        self._user_template = user_template
+
+    def build(self, **kwargs) -> PromptSpec:
+        base = self._fallback.build(**kwargs)
+        context = {k: self._stringify(v) for k, v in kwargs.items()}
+        system_prompt = base.system_prompt
+        user_prompt = base.user_prompt
+
+        if self._system_template.strip():
+            system_prompt = self._render(self._system_template, context, field_name="system_template") or system_prompt
+        if self._user_template.strip():
+            user_prompt = self._render(self._user_template, context, field_name="user_template") or user_prompt
+
+        return PromptSpec(
+            user_prompt=user_prompt,
+            system_prompt=system_prompt,
+            temperature=base.temperature,
+        )
+
+    def get_preview_text(self) -> str:
+        return f"Template override for {self._func_id} (fallbacks to default on render error)."
+
+    def _render(self, template: str, context: dict[str, str], *, field_name: str) -> str | None:
+        try:
+            return template.format_map(context)
+        except KeyError as exc:
+            logger.warning(
+                "Prompt template render fallback (%s/%s): missing key %s in %s",
+                self._func_id,
+                self.impl_id,
+                exc,
+                field_name,
+            )
+            return None
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.warning(
+                "Prompt template render fallback (%s/%s): %s",
+                self._func_id,
+                self.impl_id,
+                exc,
+            )
+            return None
+
+    @staticmethod
+    def _stringify(value: object) -> str:
+        if isinstance(value, str):
+            return value
+        if value is None:
+            return ""
+        return str(value)
+
+
 # =============================================================================
 # REGISTRY FACTORY
 # =============================================================================
 
 
-def create_default_registry() -> PromptRegistry:
+def create_default_registry(custom_templates: Sequence[PromptTemplateDefinition] | None = None) -> PromptRegistry:
     """Create registry with all default prompt builders."""
     registry = PromptRegistry()
 
@@ -556,5 +630,31 @@ def create_default_registry() -> PromptRegistry:
         QuizGenerationBuilder("default", "Default", "Misconception-based MCQ generation"),
         is_default=True,
     )
+
+    if custom_templates:
+        for template in custom_templates:
+            if not template.active or template.impl_id == "default":
+                continue
+            try:
+                fallback = registry.get(template.func_id)
+                registry.register(
+                    template.func_id,
+                    TemplateOverrideBuilder(
+                        impl_id=template.impl_id,
+                        name=template.name,
+                        description=template.description,
+                        func_id=template.func_id,
+                        fallback_builder=fallback,
+                        system_template=template.system_template,
+                        user_template=template.user_template,
+                    ),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Skip invalid custom prompt template (%s/%s): %s",
+                    template.func_id,
+                    template.impl_id,
+                    exc,
+                )
 
     return registry

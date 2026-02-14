@@ -385,6 +385,33 @@ export interface AppConfigResponse {
     ttsTaskKeys?: string[];
 }
 
+export interface PromptTemplate {
+    funcId: string;
+    implId: string;
+    name: string;
+    description: string | null;
+    systemTemplate: string;
+    userTemplate: string;
+    source: string;
+    createdAt: string | null;
+    updatedAt: string | null;
+    active: boolean;
+}
+
+export interface PromptTemplatesResponse {
+    templates: PromptTemplate[];
+    funcIds: string[];
+}
+
+export interface CreatePromptTemplatePayload {
+    funcId: string;
+    implId: string;
+    name: string;
+    description?: string;
+    systemTemplate?: string;
+    userTemplate?: string;
+}
+
 // =============================================================================
 // SLIDE TYPES
 // =============================================================================

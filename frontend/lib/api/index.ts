@@ -72,6 +72,7 @@ export type { AskVideoQuestionParams, SummarizeContextParams } from "./ask";
 // Config APIs
 export { getLanguageSettings, getLive2DModels, getNoteDefaults, getAppConfig } from "./config";
 export { getGlobalConfig, putGlobalConfig, deleteGlobalConfig } from "./globalConfig";
+export { createPromptTemplate, listPromptTemplates } from "./promptTemplates";
 
 // Task APIs
 export { getTaskStatus, getTasksForContent, createTaskEventSource, getJobStatus } from "./task";

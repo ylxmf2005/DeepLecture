@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileText, Loader2, RotateCcw } from "lucide-react";
-import { getAppConfig, PromptFunctionConfig } from "@/lib/api";
+import { FileText, Loader2, Plus, RotateCcw } from "lucide-react";
+import { createPromptTemplate, getAppConfig, PromptFunctionConfig } from "@/lib/api";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
@@ -33,20 +33,40 @@ export function PromptTab({ scope, settings }: SettingsTabProps) {
 
     const [loading, setLoading] = useState(true);
     const [promptConfigs, setPromptConfigs] = useState<Record<string, PromptFunctionConfig>>({});
+    const [showCreate, setShowCreate] = useState(false);
+    const [creating, setCreating] = useState(false);
+    const [createError, setCreateError] = useState<string | null>(null);
+    const [createForm, setCreateForm] = useState({
+        funcId: "",
+        implId: "",
+        name: "",
+        description: "",
+        systemTemplate: "",
+        userTemplate: "",
+    });
+
+    const fetchConfig = async () => {
+        setLoading(true);
+        try {
+            const config = await getAppConfig();
+            setPromptConfigs(config.prompts);
+            const firstFuncId = Object.keys(config.prompts)[0] || "";
+            setCreateForm((prev) => ({
+                ...prev,
+                funcId: prev.funcId || firstFuncId,
+            }));
+        } catch (error) {
+            log.error("Failed to fetch app config", toError(error));
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchConfig = async () => {
-            setLoading(true);
-            try {
-                const config = await getAppConfig();
-                setPromptConfigs(config.prompts);
-            } catch (error) {
-                log.error("Failed to fetch app config", toError(error));
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchConfig();
+        fetchConfig().catch((error) => {
+            log.error("Failed to initialize prompt config", toError(error));
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const getEffectivePrompt = (funcId: string) => {
@@ -65,9 +85,122 @@ export function PromptTab({ scope, settings }: SettingsTabProps) {
     return (
         <SettingsSection icon={FileText} title="Prompt Templates" accentColor="orange">
             <SettingsCard>
-                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mb-4">
-                    Customize AI behavior by selecting different prompt templates for each function.
-                </p>
+                <div className="flex items-start justify-between gap-3 mb-4">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                        Customize AI behavior by selecting different prompt templates for each function.
+                    </p>
+                    {!isVideoScope && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setShowCreate((v) => !v);
+                                setCreateError(null);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-orange-200 px-2.5 py-1 text-xs font-medium text-orange-700 hover:bg-orange-50"
+                        >
+                            <Plus className="w-3.5 h-3.5" />
+                            New Template
+                        </button>
+                    )}
+                </div>
+                {showCreate && !isVideoScope && (
+                    <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50/50 p-3 space-y-2">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            <select
+                                value={createForm.funcId}
+                                onChange={(e) => setCreateForm((prev) => ({ ...prev, funcId: e.target.value }))}
+                                className="rounded-md border border-gray-200 px-2 py-1.5 text-xs"
+                            >
+                                {Object.keys(promptConfigs).map((funcId) => (
+                                    <option key={funcId} value={funcId}>{funcId}</option>
+                                ))}
+                            </select>
+                            <input
+                                value={createForm.implId}
+                                onChange={(e) => setCreateForm((prev) => ({ ...prev, implId: e.target.value }))}
+                                placeholder="impl_id (e.g. concise_v1)"
+                                className="rounded-md border border-gray-200 px-2 py-1.5 text-xs"
+                            />
+                            <input
+                                value={createForm.name}
+                                onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
+                                placeholder="Display name"
+                                className="rounded-md border border-gray-200 px-2 py-1.5 text-xs"
+                            />
+                        </div>
+                        <input
+                            value={createForm.description}
+                            onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
+                            placeholder="Description (optional)"
+                            className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-xs"
+                        />
+                        <textarea
+                            rows={3}
+                            value={createForm.systemTemplate}
+                            onChange={(e) => setCreateForm((prev) => ({ ...prev, systemTemplate: e.target.value }))}
+                            placeholder="System template (optional). Placeholders use {name}."
+                            className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-xs"
+                        />
+                        <textarea
+                            rows={3}
+                            value={createForm.userTemplate}
+                            onChange={(e) => setCreateForm((prev) => ({ ...prev, userTemplate: e.target.value }))}
+                            placeholder="User template (optional). Placeholders use {name}."
+                            className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-xs"
+                        />
+                        {createError && (
+                            <p className="text-xs text-red-600">{createError}</p>
+                        )}
+                        <div className="flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowCreate(false);
+                                    setCreateError(null);
+                                }}
+                                className="rounded-md border border-gray-200 px-3 py-1.5 text-xs"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                disabled={creating}
+                                onClick={async () => {
+                                    try {
+                                        setCreating(true);
+                                        setCreateError(null);
+                                        const created = await createPromptTemplate({
+                                            funcId: createForm.funcId.trim(),
+                                            implId: createForm.implId.trim(),
+                                            name: createForm.name.trim(),
+                                            description: createForm.description.trim() || undefined,
+                                            systemTemplate: createForm.systemTemplate,
+                                            userTemplate: createForm.userTemplate,
+                                        });
+                                        await fetchConfig();
+                                        settings.setAIPrompt(created.funcId, created.implId);
+                                        setShowCreate(false);
+                                        setCreateForm((prev) => ({
+                                            ...prev,
+                                            implId: "",
+                                            name: "",
+                                            description: "",
+                                            systemTemplate: "",
+                                            userTemplate: "",
+                                        }));
+                                    } catch (error) {
+                                        setCreateError(toError(error).message);
+                                    } finally {
+                                        setCreating(false);
+                                    }
+                                }}
+                                className="rounded-md bg-orange-600 px-3 py-1.5 text-xs text-white disabled:opacity-60"
+                            >
+                                {creating ? "Creating..." : "Create"}
+                            </button>
+                        </div>
+                    </div>
+                )}
                 <div className="space-y-4">
                     {Object.entries(promptConfigs).map(([funcId, config]) => {
                         const meta = PROMPT_LABELS[funcId] || { label: funcId, desc: "" };
@@ -76,7 +209,10 @@ export function PromptTab({ scope, settings }: SettingsTabProps) {
 
                         const options = config.options.map((opt) => ({
                             value: opt.id,
-                            label: `${opt.name}${opt.isDefault ? " (Default)" : ""}`,
+                            label:
+                                config.options.length === 1 && opt.isDefault && opt.name.toLowerCase() === "default"
+                                    ? "Default"
+                                    : `${opt.name}${opt.isDefault ? " (Default)" : ""}`,
                         }));
 
                         return (

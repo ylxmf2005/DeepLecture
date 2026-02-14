@@ -28,6 +28,7 @@ from deeplecture.infrastructure import (
     FsFileStorage,
     FsGlobalConfigStorage,
     FsNoteStorage,
+    FsPromptTemplateStorage,
     FsQuizStorage,
     FsSubtitleStorage,
     FsTimelineStorage,
@@ -359,6 +360,13 @@ class Container:
         return self._cache["content_config_storage"]  # type: ignore[return-value]
 
     @property
+    def prompt_template_storage(self) -> FsPromptTemplateStorage:
+        """Global prompt template library storage."""
+        if "prompt_template_storage" not in self._cache:
+            self._cache["prompt_template_storage"] = FsPromptTemplateStorage(self._data_dir())
+        return self._cache["prompt_template_storage"]  # type: ignore[return-value]
+
+    @property
     def task_model_resolver(self) -> TaskModelResolver:
         """Task model resolver (request > content > global > yaml)."""
         if "task_model_resolver" not in self._cache:
@@ -372,8 +380,13 @@ class Container:
     def prompt_registry(self) -> PromptRegistry:
         """Prompt registry for runtime prompt selection."""
         if "prompt_registry" not in self._cache:
-            self._cache["prompt_registry"] = create_default_registry()
+            self._cache["prompt_registry"] = create_default_registry(self.prompt_template_storage.list_templates())
         return self._cache["prompt_registry"]  # type: ignore[return-value]
+
+    def refresh_prompt_registry(self) -> None:
+        """Drop cached prompt registry to reload runtime templates."""
+        with self._lock:
+            self._cache.pop("prompt_registry", None)
 
     @property
     def audio_processor(self) -> FFmpegAudioProcessor:
