@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Video, BookMarked } from "lucide-react";
+import { Video } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
+import { GlobalSettingsButton } from "./GlobalSettingsButton";
 
 export function Header() {
     return (
@@ -23,9 +24,8 @@ export function Header() {
                     </Link>
                     <Link
                         href="/vocabulary"
-                        className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground flex items-center gap-1.5"
+                        className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
                     >
-                        <BookMarked className="w-4 h-4" />
                         Vocabulary
                     </Link>
                     <a
@@ -38,6 +38,7 @@ export function Header() {
                     </a>
                     <div id="header-actions" className="flex items-center gap-2 pl-2">
                         <ThemeToggle />
+                        <GlobalSettingsButton />
                     </div>
                 </nav>
             </div>
