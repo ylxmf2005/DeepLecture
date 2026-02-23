@@ -14,4 +14,4 @@ export interface VideoFile {
     duration?: number;
 }
 
-export type UploadTab = "local" | "url";
+export type UploadTab = "local" | "url" | "record";

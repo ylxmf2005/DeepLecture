@@ -17,6 +17,7 @@ interface UploadQueueState {
     uploadingPdf: boolean;
     uploadingVideo: boolean;
     uploadingUrl: boolean;
+    uploadingRecording: boolean;
     error: string | null;
 
     // Actions
@@ -30,6 +31,7 @@ interface UploadQueueState {
     submitPdfs: (onSuccess: () => void) => Promise<void>;
     submitVideos: (onSuccess: () => void) => Promise<void>;
     importUrl: (url: string, customName: string, onSuccess: () => void) => Promise<void>;
+    uploadRecordedAudio: (file: File, customName: string, onSuccess: () => void) => Promise<void>;
     clearError: () => void;
     setError: (error: string | null) => void;
     reset: () => void;
@@ -45,6 +47,7 @@ export const useUploadQueueStore = create<UploadQueueState>()((set, get) => ({
     uploadingPdf: false,
     uploadingVideo: false,
     uploadingUrl: false,
+    uploadingRecording: false,
     error: null,
 
     addFiles: (files: File[]) => {
@@ -217,6 +220,28 @@ export const useUploadQueueStore = create<UploadQueueState>()((set, get) => ({
         }
     },
 
+    uploadRecordedAudio: async (file: File, customName: string, onSuccess: () => void) => {
+        if (get().uploadingRecording) return;
+
+        set({ uploadingRecording: true, error: null });
+
+        try {
+            const formData = new FormData();
+            formData.append("videos", file, file.name);
+            const fallbackName = file.name.replace(/\.[^/.]+$/i, "");
+            formData.append("custom_name", customName.trim() || fallbackName);
+
+            await api.post("/content/upload", formData);
+
+            set({ uploadingRecording: false });
+            onSuccess();
+        } catch (err) {
+            log.error("Failed to upload recording", toError(err), { filename: file.name, size: file.size });
+            const message = getErrorMessage(err, "Failed to upload recording. Please try again.");
+            set({ error: message, uploadingRecording: false });
+        }
+    },
+
     clearError: () => set({ error: null }),
     setError: (error: string | null) => set({ error }),
 
@@ -228,6 +253,7 @@ export const useUploadQueueStore = create<UploadQueueState>()((set, get) => ({
         uploadingPdf: false,
         uploadingVideo: false,
         uploadingUrl: false,
+        uploadingRecording: false,
         error: null,
     }),
 }));
