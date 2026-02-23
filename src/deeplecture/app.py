@@ -91,7 +91,7 @@ def main() -> None:
 
     settings = get_settings()
 
-    host = os.environ.get("DEEPLECTURE_HOST", "127.0.0.1")
+    host = os.environ.get("DEEPLECTURE_HOST", "0.0.0.0")
     port = int(os.environ.get("DEEPLECTURE_PORT", "11393"))
 
     debug = bool(settings.app.debug)

@@ -4,12 +4,53 @@ import { forwardRef, useState, useRef, useEffect, useMemo } from "react";
 import { VideoPlayer, VideoPlayerRef, SubtitlePlayerMode } from "@/components/video/VideoPlayer";
 import { ContentItem, API_BASE_URL, SyncTimeline } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { FileText, BookOpen, Loader2, Maximize, Minimize } from "lucide-react";
+import {
+    BookOpen,
+    ChevronsLeftRight,
+    ChevronsRightLeft,
+    FileText,
+    Loader2,
+    Maximize,
+    Maximize2,
+    Minimize,
+    Minimize2,
+} from "lucide-react";
+import { Worker, Viewer, SpecialZoomLevel } from "@react-pdf-viewer/core";
+import { defaultLayoutPlugin } from "@react-pdf-viewer/default-layout";
 import type { SubtitleDisplayMode, ViewMode } from "@/stores/types";
 import { Subtitle } from "@/lib/srt";
 import { logger } from "@/shared/infrastructure";
 
 const log = logger.scope("VideoPlayerSection");
+const PDF_WORKER_URL = "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+
+interface PdfSlideViewerProps {
+    fileUrl: string;
+}
+
+function PdfSlideViewer({ fileUrl }: PdfSlideViewerProps) {
+    const layoutPlugin = useMemo(
+        () =>
+            defaultLayoutPlugin({
+                // Remove the sidebar tabs to avoid oversized thumbnail/navigation panel.
+                sidebarTabs: () => [],
+            }),
+        []
+    );
+
+    return (
+        <div className="w-full h-full bg-[#111827] [&_.rpv-core__inner-page]:min-h-full [&_.rpv-core__viewer]:h-full">
+            <Worker workerUrl={PDF_WORKER_URL}>
+                <Viewer
+                    key={fileUrl}
+                    fileUrl={fileUrl}
+                    defaultScale={SpecialZoomLevel.PageWidth}
+                    plugins={[layoutPlugin]}
+                />
+            </Worker>
+        </div>
+    );
+}
 
 interface VideoPlayerSectionProps {
     content: ContentItem;
@@ -88,9 +129,20 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
             () => subtitleModeOverride ?? playerSubtitleMode,
             [subtitleModeOverride, playerSubtitleMode]
         );
+        const currentViewMode = viewMode ?? "normal";
         const fileRef = useRef<HTMLInputElement | null>(null);
         const slideContainerRef = useRef<HTMLDivElement>(null);
         const [isSlideFullscreen, setIsSlideFullscreen] = useState(false);
+        const slidePdfUrl = useMemo(() => {
+            if (content.type === "slide") {
+                return `${API_BASE_URL}/api/content/${videoId}/pdf`;
+            }
+            if (slideDeck?.id) {
+                return `${API_BASE_URL}/api/content/${slideDeck.id}/pdf`;
+            }
+            return null;
+        }, [content.type, slideDeck?.id, videoId]);
+        const hasSlidePdf = !!slidePdfUrl;
 
         const handleFileClick = () => {
             if (!onUploadSlide) return;
@@ -131,24 +183,8 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
         };
 
         const renderSlideTab = () => {
-            if (content.type === "slide") {
-                return (
-                    <iframe
-                        src={`${API_BASE_URL}/api/content/${videoId}/pdf`}
-                        className="w-full h-full"
-                        title="PDF Slide Deck"
-                    />
-                );
-            }
-
-            if (slideDeck && slideDeck.id) {
-                return (
-                    <iframe
-                        src={`${API_BASE_URL}/api/content/${slideDeck.id}/pdf`}
-                        className="w-full h-full"
-                        title="PDF Slide Deck"
-                    />
-                );
+            if (slidePdfUrl) {
+                return <PdfSlideViewer fileUrl={slidePdfUrl} />;
             }
 
             if (!onUploadSlide) {
@@ -192,9 +228,16 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                 viewMode === "web-fullscreen" ? "w-full h-full" : "shrink-0",
                 className
             )}>
-                {/* Floating toggle button - only visible on hover */}
-                <div className="absolute top-4 left-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <div className="flex gap-1 bg-black/70 backdrop-blur-sm rounded-lg p-1 shadow-lg">
+                {/* Floating toggle button - only visible when hovering top-left hotspot */}
+                <div className="absolute top-4 left-4 z-20 group/tab-toggle p-2 -m-2">
+                    <div
+                        className={cn(
+                            "flex gap-1 bg-black/70 backdrop-blur-sm rounded-lg p-1 shadow-lg transition-opacity duration-200",
+                            "opacity-0 pointer-events-none",
+                            "group-hover/tab-toggle:opacity-100 group-hover/tab-toggle:pointer-events-auto",
+                            "group-focus-within/tab-toggle:opacity-100 group-focus-within/tab-toggle:pointer-events-auto"
+                        )}
+                    >
                         <button
                             onClick={() => setPlayerTab("player")}
                             className={cn(
@@ -292,27 +335,85 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                 <div
                     ref={slideContainerRef}
                     className={cn(
-                        "relative w-full bg-card rounded-xl border border-border shadow-sm overflow-hidden group flex items-center justify-center bg-black",
-                        isSlideFullscreen ? "h-full" : "aspect-video",
+                        "relative w-full bg-card rounded-xl border border-border shadow-sm overflow-hidden flex items-center justify-center bg-black",
+                        currentViewMode === "web-fullscreen" || isSlideFullscreen
+                            ? "h-full"
+                            : "h-[72vh] min-h-[480px] max-h-[calc(100vh-180px)]",
                         playerTab === "slide" ? "" : "hidden"
                     )}
                 >
                     {renderSlideTab()}
 
-                    {/* Fullscreen button - only show when slide tab is active and has content */}
-                    {playerTab === "slide" && (content.type === "slide" || (slideDeck && slideDeck.id)) && (
-                        <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                            <button
-                                onClick={toggleSlideFullscreen}
-                                className="p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
-                                title={isSlideFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-                            >
-                                {isSlideFullscreen ? (
-                                    <Minimize className="w-5 h-5" />
-                                ) : (
-                                    <Maximize className="w-5 h-5" />
+                    {/* Slide mode controls */}
+                    {playerTab === "slide" && hasSlidePdf && (
+                        <div className="absolute bottom-4 right-4 z-20 group/slide-controls p-2 -m-2">
+                            <div
+                                className={cn(
+                                    "flex items-center gap-1 rounded-lg bg-black/60 p-1 backdrop-blur-sm shadow-lg transition-opacity",
+                                    "opacity-0 pointer-events-none",
+                                    "group-hover/slide-controls:opacity-100 group-hover/slide-controls:pointer-events-auto",
+                                    "group-focus-within/slide-controls:opacity-100 group-focus-within/slide-controls:pointer-events-auto"
                                 )}
-                            </button>
+                            >
+                                {onViewModeChange && (
+                                    <button
+                                        onClick={() =>
+                                            onViewModeChange(currentViewMode === "widescreen" ? "normal" : "widescreen")
+                                        }
+                                        className={cn(
+                                            "p-2 rounded-md transition-colors",
+                                            currentViewMode === "widescreen"
+                                                ? "text-blue-400 bg-white/10"
+                                                : "text-white hover:text-white/80"
+                                        )}
+                                        title={currentViewMode === "widescreen" ? "Exit widescreen" : "Widescreen"}
+                                    >
+                                        {currentViewMode === "widescreen" ? (
+                                            <ChevronsRightLeft className="w-4 h-4" />
+                                        ) : (
+                                            <ChevronsLeftRight className="w-4 h-4" />
+                                        )}
+                                    </button>
+                                )}
+
+                                {onViewModeChange && (
+                                    <button
+                                        onClick={() =>
+                                            onViewModeChange(currentViewMode === "web-fullscreen" ? "normal" : "web-fullscreen")
+                                        }
+                                        className={cn(
+                                            "p-2 rounded-md transition-colors",
+                                            currentViewMode === "web-fullscreen"
+                                                ? "text-blue-400 bg-white/10"
+                                                : "text-white hover:text-white/80"
+                                        )}
+                                        title={currentViewMode === "web-fullscreen" ? "Exit web fullscreen" : "Web fullscreen"}
+                                    >
+                                        {currentViewMode === "web-fullscreen" ? (
+                                            <Minimize className="w-4 h-4" />
+                                        ) : (
+                                            <Maximize className="w-4 h-4" />
+                                        )}
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={toggleSlideFullscreen}
+                                    className={cn(
+                                        "p-2 rounded-md transition-colors",
+                                        isSlideFullscreen
+                                            ? "text-blue-400 bg-white/10"
+                                            : "text-white hover:text-white/80"
+                                    )}
+                                    title={isSlideFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                                >
+                                    {isSlideFullscreen ? (
+                                        <Minimize2 className="w-4 h-4" />
+                                    ) : (
+                                        <Maximize2 className="w-4 h-4" />
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>

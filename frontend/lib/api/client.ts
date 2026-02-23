@@ -10,8 +10,9 @@ import axios, { AxiosRequestConfig, CancelTokenSource } from "axios";
 import { wrapAPIError } from "./errors";
 import { logger } from "@/shared/infrastructure";
 import { camelizeKeys, snakifyKeys, unwrapApiResponse } from "./transform";
+import { API_BASE_URL } from "./baseUrl";
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:11393";
+export { API_BASE_URL };
 
 export const api = axios.create({
     baseURL: `${API_BASE_URL}/api`,

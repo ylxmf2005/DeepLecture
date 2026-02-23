@@ -1,7 +1,6 @@
 "use client";
 
-// Direct env access to avoid circular dependency with @/lib/api
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:11393";
+import { API_BASE_URL } from "@/lib/api/baseUrl";
 
 /**
  * Zustand Store Type Definitions

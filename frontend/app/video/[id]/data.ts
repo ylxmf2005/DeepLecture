@@ -4,11 +4,11 @@
  */
 
 import type { ContentItem, VoiceoverEntry } from "@/lib/api";
+import { API_BASE_URL } from "@/lib/api/baseUrl";
 import { unwrapApiResponse } from "@/lib/api/transform";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:11393";
 const log = logger.scope("VideoDataServer");
 
 /**

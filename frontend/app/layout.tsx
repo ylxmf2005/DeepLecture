@@ -8,6 +8,8 @@ import { AppInitializer } from "@/components/providers/AppInitializer";
 import { RootErrorBoundary } from "@/components/providers/RootErrorBoundary";
 import { Toaster } from "sonner";
 import "./globals.css";
+import "@react-pdf-viewer/core/lib/styles/index.css";
+import "@react-pdf-viewer/default-layout/lib/styles/index.css";
 import { cn } from "@/lib/utils";
 
 const inter = Inter({ subsets: ["latin"] });
