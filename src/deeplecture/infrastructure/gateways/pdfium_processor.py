@@ -49,7 +49,8 @@ class PdfiumRenderer:
         self._file_storage.makedirs(output_dir)
         images: dict[int, str] = {}
 
-        with pdfium.PdfDocument(pdf_path) as doc:
+        doc = pdfium.PdfDocument(pdf_path)
+        try:
             for index in range(len(doc)):
                 page_idx = index + 1
                 out_path = os.path.join(output_dir, f"page_{page_idx:03d}.png")
@@ -76,6 +77,9 @@ class PdfiumRenderer:
                     if page is not None:
                         with contextlib.suppress(Exception):
                             page.close()
+        finally:
+            with contextlib.suppress(Exception):
+                doc.close()
 
         return images
 
@@ -106,7 +110,8 @@ class PdfiumTextExtractor:
             return ""
 
         try:
-            with pdfium.PdfDocument(pdf_path) as doc:
+            doc = pdfium.PdfDocument(pdf_path)
+            try:
                 parts: list[str] = []
 
                 for index in range(len(doc)):
@@ -132,6 +137,9 @@ class PdfiumTextExtractor:
                                 page.close()
 
                 return "\n\n".join(parts) if parts else ""
+            finally:
+                with contextlib.suppress(Exception):
+                    doc.close()
 
         except Exception as e:
             logger.error("Failed to read PDF %s: %s", pdf_path, e)

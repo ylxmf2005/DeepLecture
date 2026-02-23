@@ -90,8 +90,11 @@ class FsFileStorage:
         try:
             import pypdfium2 as pdfium
 
-            with pdfium.PdfDocument(pdf_path) as pdf:
+            pdf = pdfium.PdfDocument(pdf_path)
+            try:
                 return len(pdf)
+            finally:
+                pdf.close()
         except ImportError:
             return 0
 
