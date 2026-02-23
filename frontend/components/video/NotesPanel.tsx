@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Save, Maximize2, Loader2 } from "lucide-react";
+import { Save, Maximize2, Minimize2, Loader2 } from "lucide-react";
 import { useTabLayoutStore, useTabLayoutHydrated, LAYOUT_CONSTRAINTS, type TabId } from "@/stores/tabLayoutStore";
 import { DraggableTabBar } from "@/components/dnd/DraggableTabBar";
 import type { CrepeEditor } from "@/components/editor/MarkdownNoteEditor";
@@ -38,26 +38,48 @@ export function NotesPanel({
     const tabs = useTabLayoutStore((state) => state.panels.bottom);
     const activeTab = useTabLayoutStore((state) => state.activeTabs.bottom);
     const setActiveTab = useTabLayoutStore((state) => state.setActiveTab);
+    const [isNotesFullscreen, setIsNotesFullscreen] = useState(false);
+    const isInPageFullscreen = isNotesFullscreen && activeTab === "notes";
 
     const handleTabClick = (id: TabId) => {
+        if (id !== "notes") {
+            setIsNotesFullscreen(false);
+        }
         setActiveTab("bottom", id);
     };
 
     const handleToggleFullscreen = useCallback(() => {
-        const editor = document.querySelector(".markdown-note-editor-container");
-        if (editor) {
-            if (document.fullscreenElement) {
-                document.exitFullscreen();
-            } else {
-                editor.requestFullscreen();
-            }
-        }
+        setIsNotesFullscreen((prev) => !prev);
     }, []);
+
+    useEffect(() => {
+        if (!isInPageFullscreen) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                setIsNotesFullscreen(false);
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [isInPageFullscreen]);
+
+    useEffect(() => {
+        if (!isInPageFullscreen) return;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        return () => {
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [isInPageFullscreen]);
+
+    const panelClassName = isInPageFullscreen
+        ? "fixed inset-0 z-[70] m-0 h-screen w-screen min-h-0 flex flex-col overflow-hidden rounded-none border-0 bg-card dark:bg-[#20293a] shadow-none"
+        : "flex-1 min-h-0 flex flex-col bg-card dark:bg-[#20293a] rounded-xl border border-border shadow-sm overflow-hidden";
 
     // Wait for hydration before rendering to prevent tab order flash
     if (!isHydrated) {
         return (
-            <div className="flex-1 min-h-0 flex flex-col bg-card dark:bg-[#20293a] rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className={panelClassName}>
                 <div className="flex border-b border-border px-1 items-center min-h-[44px]">
                     <div className="flex gap-2 px-2">
                         {[1, 2, 3, 4, 5].map((i) => (
@@ -95,9 +117,13 @@ export function NotesPanel({
                 <button
                     onClick={handleToggleFullscreen}
                     className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                    title="Toggle fullscreen"
+                    title={isInPageFullscreen ? "Exit in-page fullscreen" : "Enter in-page fullscreen"}
                 >
-                    <Maximize2 className="w-4 h-4 text-muted-foreground" />
+                    {isInPageFullscreen ? (
+                        <Minimize2 className="w-4 h-4 text-muted-foreground" />
+                    ) : (
+                        <Maximize2 className="w-4 h-4 text-muted-foreground" />
+                    )}
                 </button>
             </div>
         ) : null;
@@ -105,7 +131,7 @@ export function NotesPanel({
     // If no tabs in bottom panel, show empty state
     if (tabs.length === 0) {
         return (
-            <div className="flex-1 min-h-0 flex flex-col bg-card dark:bg-[#20293a] rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className={panelClassName}>
                 <DraggableTabBar
                     panelId="bottom"
                     tabs={tabs}
@@ -121,7 +147,7 @@ export function NotesPanel({
     }
 
     return (
-        <div className="flex-1 min-h-0 flex flex-col bg-card dark:bg-[#20293a] rounded-xl border border-border shadow-sm overflow-hidden">
+        <div className={panelClassName}>
             <DraggableTabBar
                 panelId="bottom"
                 tabs={tabs}
