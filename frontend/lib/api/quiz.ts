@@ -29,7 +29,7 @@ export interface GenerateQuizResponse {
     message: string;
 }
 
-export type QuizContextMode = "auto" | "subtitle" | "slide" | "both";
+export type QuizContextMode = "subtitle" | "slide" | "both";
 export type QuizCriticality = "high" | "medium" | "low";
 export type QuizSubjectType = "auto" | "stem" | "humanities";
 
@@ -64,10 +64,10 @@ export const generateQuiz = async (
         `/quiz/${params.contentId}/generate`,
         withLLMOverrides({
             language: params.language,
-            question_count: params.questionCount ?? 5,
-            context_mode: params.contextMode ?? "auto",
+            ...(params.questionCount ? { question_count: params.questionCount } : {}),
+            context_mode: params.contextMode ?? "both",
             user_instruction: params.instruction ?? "",
-            min_criticality: params.minCriticality ?? "medium",
+            min_criticality: params.minCriticality ?? "low",
             subject_type: params.subjectType ?? "auto",
         })
     );

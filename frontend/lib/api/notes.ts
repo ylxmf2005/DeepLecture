@@ -41,7 +41,7 @@ export const generateVideoNote = async (
         withLLMOverrides({
             content_id: params.contentId,
             language: params.language,
-            context_mode: params.contextMode ?? "auto",
+            context_mode: params.contextMode ?? "both",
             user_instruction: params.instruction ?? "",
             learner_profile: params.learnerProfile ?? "",
             max_parts: params.maxParts,

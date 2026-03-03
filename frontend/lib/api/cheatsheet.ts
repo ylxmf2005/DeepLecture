@@ -24,7 +24,7 @@ export const saveVideoCheatsheet = async (
     return response.data;
 };
 
-export type CheatsheetContextMode = "auto" | "subtitle" | "slide" | "both";
+export type CheatsheetContextMode = "subtitle" | "slide" | "both";
 export type CheatsheetCriticality = "high" | "medium" | "low";
 export type CheatsheetSubjectType = "auto" | "stem" | "humanities";
 
@@ -46,7 +46,7 @@ export const generateVideoCheatsheet = async (
         withLLMOverrides({
             content_id: params.contentId,
             language: params.language,
-            context_mode: params.contextMode ?? "auto",
+            context_mode: params.contextMode ?? "both",
             user_instruction: params.instruction ?? "",
             min_criticality: params.minCriticality ?? "medium",
             target_pages: params.targetPages ?? 2,

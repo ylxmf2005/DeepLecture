@@ -17,6 +17,7 @@ from deeplecture.use_cases.dto.quiz import (
     QuizResult,
     QuizStats,
 )
+from deeplecture.use_cases.shared.context import extract_first_available_slide_text
 from deeplecture.use_cases.shared.llm_json import parse_llm_json
 from deeplecture.use_cases.shared.prompt_safety import sanitize_question
 from deeplecture.use_cases.shared.subtitle import (
@@ -30,7 +31,9 @@ if TYPE_CHECKING:
     from deeplecture.use_cases.interfaces import (
         LLMProtocol,
         LLMProviderProtocol,
+        MetadataStorageProtocol,
         PathResolverProtocol,
+        PdfTextExtractorProtocol,
         QuizStorageProtocol,
         SubtitleStorageProtocol,
     )
@@ -92,6 +95,8 @@ class QuizUseCase:
         llm_provider: LLMProviderProtocol,
         path_resolver: PathResolverProtocol,
         prompt_registry: PromptRegistryProtocol,
+        metadata_storage: MetadataStorageProtocol | None = None,
+        pdf_text_extractor: PdfTextExtractorProtocol | None = None,
     ) -> None:
         """Initialize QuizUseCase.
 
@@ -101,12 +106,16 @@ class QuizUseCase:
             llm_provider: LLM provider for generation
             path_resolver: Path resolution service
             prompt_registry: Prompt registry for prompt selection
+            metadata_storage: Content metadata storage for slide source resolution (optional)
+            pdf_text_extractor: PDF text extraction service for slide context (optional)
         """
         self._quizzes = quiz_storage
         self._subtitles = subtitle_storage
         self._llm_provider = llm_provider
         self._paths = path_resolver
         self._prompt_registry = prompt_registry
+        self._metadata = metadata_storage
+        self._pdf_text_extractor = pdf_text_extractor
 
     def get(self, content_id: str, language: str | None = None) -> QuizResult:
         """Get existing quiz.
@@ -175,7 +184,7 @@ class QuizUseCase:
         # Get LLM from provider
         llm = self._llm_provider.get(request.llm_model)
 
-        # Load context (subtitles for now, can extend to slides)
+        # Load context from selected sources (subtitle/slide/both)
         context, used_sources = self._load_context(request)
         if not context.strip():
             raise ValueError(f"No content available for {request.content_id}")
@@ -196,11 +205,21 @@ class QuizUseCase:
         # Filter by criticality
         filtered_items = self._filter_by_criticality(knowledge_items, request.min_criticality)
 
+        # Resolve question count: 0 = auto (coverage-first scaling from extracted items)
+        question_count = request.question_count
+        if question_count <= 0:
+            question_count = self._resolve_auto_question_count(len(filtered_items))
+            logger.info(
+                "Auto question_count: %d (from %d knowledge items)",
+                question_count,
+                len(filtered_items),
+            )
+
         # Stage 2: Generate quiz from knowledge items
         raw_quiz_items = self._generate_quiz(
             items=filtered_items,
             language=request.language,
-            question_count=request.question_count,
+            question_count=question_count,
             user_instruction=instruction,
             llm=llm,
             prompts=request.prompts,
@@ -238,15 +257,26 @@ class QuizUseCase:
         Returns:
             Tuple of (context_text, list_of_sources_used)
         """
+        mode = (request.context_mode or "both").strip().lower()
         used_sources: list[str] = []
         context_parts: list[str] = []
 
-        # Try subtitle
-        if request.context_mode in ("auto", "subtitle", "both"):
-            subtitle_text = self._load_subtitle_context(request.content_id)
-            if subtitle_text:
-                context_parts.append(subtitle_text)
-                used_sources.append("subtitle")
+        subtitle_text = self._load_subtitle_context(request.content_id)
+        slide_text = self._load_slide_context(request.content_id)
+
+        use_subtitle, use_slide = self._select_sources(
+            mode=mode,
+            has_subtitle=bool(subtitle_text),
+            has_slide=bool(slide_text),
+        )
+
+        if use_subtitle and subtitle_text:
+            context_parts.append(subtitle_text)
+            used_sources.append("subtitle")
+
+        if use_slide and slide_text:
+            context_parts.append(slide_text)
+            used_sources.append("slide")
 
         return "\n\n".join(context_parts), used_sources
 
@@ -268,6 +298,41 @@ class QuizUseCase:
                 return "\n".join(lines)
 
         return ""
+
+    def _load_slide_context(self, content_id: str) -> str:
+        """Load slide/PDF text from best available candidate path."""
+        metadata = self._metadata.get(content_id) if self._metadata else None
+        return extract_first_available_slide_text(
+            content_id,
+            metadata=metadata,
+            path_resolver=self._paths,
+            pdf_text_extractor=self._pdf_text_extractor,
+        )
+
+    @staticmethod
+    def _select_sources(
+        *,
+        mode: str,
+        has_subtitle: bool,
+        has_slide: bool,
+    ) -> tuple[bool, bool]:
+        """Select context sources based on requested mode and availability."""
+        if mode == "subtitle":
+            if not has_subtitle:
+                raise ValueError("Requested subtitle context, but no subtitles are available.")
+            return True, False
+
+        if mode == "slide":
+            if not has_slide:
+                raise ValueError("Requested slide context, but no slide deck is available.")
+            return False, True
+
+        if mode == "both":
+            if not has_subtitle and not has_slide:
+                raise ValueError("Cannot generate quiz: no transcript or slides are available for this content.")
+            return has_subtitle, has_slide
+
+        raise ValueError("Unsupported context_mode. Allowed values are 'subtitle', 'slide', or 'both'.")
 
     def _extract_knowledge_items(
         self,
@@ -297,11 +362,19 @@ class QuizUseCase:
 
         impl_id = prompts.get("cheatsheet_extraction") if prompts else None
         prompt_builder = self._prompt_registry.get("cheatsheet_extraction", impl_id)
+        coverage_instruction = (
+            "Coverage priority: extract comprehensive knowledge points across the full lecture. "
+            "Do not limit to one item per module, and split compound concepts into separate items."
+        )
+        combined_instruction = (
+            f"{coverage_instruction}\n{user_instruction.strip()}" if user_instruction.strip() else coverage_instruction
+        )
         spec = prompt_builder.build(
             context=context,
             language=language,
             subject_type=subject_type,
-            user_instruction=user_instruction,
+            user_instruction=combined_instruction,
+            coverage_mode="comprehensive",
         )
 
         response = llm.complete(
@@ -318,6 +391,7 @@ class QuizUseCase:
                 content=item.get("content", ""),
                 criticality=item.get("criticality", "medium"),
                 tags=item.get("tags", []),
+                source_start=item.get("source_start"),
             )
             for item in items_data
             if isinstance(item, dict) and item.get("content")
@@ -389,6 +463,18 @@ class QuizUseCase:
         if not isinstance(quiz_data, list):
             return []
         return quiz_data
+
+    @staticmethod
+    def _resolve_auto_question_count(knowledge_item_count: int) -> int:
+        """Resolve auto question count with coverage-first defaults.
+
+        Targets broader coverage than one-question-per-item:
+        - Scale question count to roughly 1.5x item count
+        - Keep a practical minimum for short lectures
+        - Cap upper bound to control latency/cost
+        """
+        scaled_count = round(max(0, knowledge_item_count) * 1.5)
+        return max(6, min(40, scaled_count))
 
     def _validate_and_filter(
         self,

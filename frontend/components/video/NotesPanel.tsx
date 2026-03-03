@@ -37,6 +37,7 @@ export function NotesPanel({
     const isHydrated = useTabLayoutHydrated();
     const tabs = useTabLayoutStore((state) => state.panels.bottom);
     const activeTab = useTabLayoutStore((state) => state.activeTabs.bottom);
+    const mountedTabs = useTabLayoutStore((state) => state.mountedTabs.bottom);
     const setActiveTab = useTabLayoutStore((state) => state.setActiveTab);
     const [isNotesFullscreen, setIsNotesFullscreen] = useState(false);
     const isInPageFullscreen = isNotesFullscreen && activeTab === "notes";
@@ -156,7 +157,17 @@ export function NotesPanel({
                 maxTabs={LAYOUT_CONSTRAINTS.MAX_BOTTOM_TABS}
                 extraActions={extraActions}
             />
-            <div className="flex-1 min-h-0 relative">{renderContent(activeTab)}</div>
+            <div className="flex-1 min-h-0 relative">
+                {mountedTabs.filter((tabId) => tabs.includes(tabId)).map((tabId) => (
+                    <div
+                        key={tabId}
+                        className={tabId === activeTab ? "absolute inset-0 min-h-0" : "absolute inset-0 min-h-0 hidden"}
+                        aria-hidden={tabId !== activeTab}
+                    >
+                        {renderContent(tabId)}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

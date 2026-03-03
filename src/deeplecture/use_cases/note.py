@@ -13,6 +13,7 @@ from deeplecture.use_cases.dto.note import (
     NoteResult,
     SaveNoteRequest,
 )
+from deeplecture.use_cases.shared.context import extract_first_available_slide_text
 from deeplecture.use_cases.shared.llm_json import parse_llm_json
 from deeplecture.use_cases.shared.prompt_safety import sanitize_learner_profile, sanitize_question
 from deeplecture.use_cases.shared.subtitle import (
@@ -21,6 +22,7 @@ from deeplecture.use_cases.shared.subtitle import (
 )
 
 if TYPE_CHECKING:
+    from deeplecture.domain.entities.content import ContentMetadata
     from deeplecture.use_cases.dto.note import GenerateNoteRequest
     from deeplecture.use_cases.interfaces import (
         LLMProtocol,
@@ -153,6 +155,7 @@ class NoteUseCase:
             request.content_id,
             request.context_mode,
             metadata.type,
+            metadata=metadata,
         )
 
         if not context_block:
@@ -212,23 +215,25 @@ class NoteUseCase:
         content_id: str,
         context_mode: str,
         content_type: str,
+        *,
+        metadata: ContentMetadata | None = None,
     ) -> tuple[str, list[str]]:
         """
         Load context from subtitle and/or slide sources.
 
         Args:
             content_id: Content identifier
-            context_mode: "auto" | "subtitle" | "slide" | "both"
+            context_mode: "subtitle" | "slide" | "both"
             content_type: "video" | "pdf"
 
         Returns:
             (context_block, used_sources)
         """
-        mode = (context_mode or "auto").strip().lower()
+        mode = (context_mode or "both").strip().lower()
 
         # Check available sources
         subtitle_text = self._load_subtitle_context(content_id)
-        slide_text = self._load_pdf_context(content_id)
+        slide_text = self._load_pdf_context(content_id, metadata=metadata)
 
         has_subtitle = bool(subtitle_text)
         has_slides = bool(slide_text)
@@ -277,9 +282,6 @@ class NoteUseCase:
         Returns:
             (use_subtitle, use_slides)
         """
-        if not has_subtitle and not has_slides:
-            raise ValueError("Cannot generate notes: no transcript or slides are available for this content.")
-
         if mode == "subtitle":
             if not has_subtitle:
                 raise ValueError("Requested subtitle context, but no subtitles are available.")
@@ -290,11 +292,13 @@ class NoteUseCase:
                 raise ValueError("Requested slide context, but no slide deck is available.")
             return False, True
 
-        if mode in ("auto", "both"):
+        if mode == "both":
+            if not has_subtitle and not has_slides:
+                raise ValueError("Cannot generate notes: no transcript or slides are available for this content.")
             # "both" means: use both if available (not "require both").
             return has_subtitle, has_slides
 
-        raise ValueError("Unsupported context_mode. Allowed values are 'auto', 'subtitle', 'slide', or 'both'.")
+        raise ValueError("Unsupported context_mode. Allowed values are 'subtitle', 'slide', or 'both'.")
 
     def _load_subtitle_context(self, content_id: str) -> str:
         """Load subtitle text from best available source."""
@@ -316,17 +320,14 @@ class NoteUseCase:
 
         return ""
 
-    def _load_pdf_context(self, content_id: str) -> str:
-        """Load PDF text if available."""
-        if self._pdf_text_extractor is None:
-            return ""
-
-        try:
-            pdf_path = self._paths.build_content_path(content_id, "slide", "slide.pdf")
-            return self._pdf_text_extractor.extract_text(pdf_path)
-        except Exception as exc:
-            logger.warning("Failed to extract PDF text for %s: %s", content_id, exc)
-            return ""
+    def _load_pdf_context(self, content_id: str, *, metadata: ContentMetadata | None = None) -> str:
+        """Load slide/PDF text from best available candidate path."""
+        return extract_first_available_slide_text(
+            content_id,
+            metadata=metadata,
+            path_resolver=self._paths,
+            pdf_text_extractor=self._pdf_text_extractor,
+        )
 
     # =========================================================================
     # OUTLINE GENERATION

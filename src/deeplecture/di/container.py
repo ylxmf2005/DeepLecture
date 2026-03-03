@@ -26,6 +26,7 @@ from deeplecture.infrastructure import (
     FsExplanationStorage,
     FsFactVerificationStorage,
     FsFileStorage,
+    FsFlashcardStorage,
     FsGlobalConfigStorage,
     FsNoteStorage,
     FsPromptTemplateStorage,
@@ -57,6 +58,7 @@ from deeplecture.use_cases.cheatsheet import CheatsheetUseCase
 from deeplecture.use_cases.content import ContentUseCase
 from deeplecture.use_cases.explanation import ExplanationUseCase
 from deeplecture.use_cases.fact_verification import FactVerificationUseCase
+from deeplecture.use_cases.flashcard import FlashcardUseCase
 from deeplecture.use_cases.note import NoteUseCase
 from deeplecture.use_cases.prompts import create_default_registry
 from deeplecture.use_cases.quiz import QuizUseCase
@@ -196,6 +198,13 @@ class Container:
         if "quiz_storage" not in self._cache:
             self._cache["quiz_storage"] = FsQuizStorage(self.path_resolver)
         return self._cache["quiz_storage"]  # type: ignore[return-value]
+
+    @property
+    def flashcard_storage(self) -> FsFlashcardStorage:
+        """Filesystem-based flashcard persistence."""
+        if "flashcard_storage" not in self._cache:
+            self._cache["flashcard_storage"] = FsFlashcardStorage(self.path_resolver)
+        return self._cache["flashcard_storage"]  # type: ignore[return-value]
 
     @property
     def explanation_storage(self) -> FsExplanationStorage:
@@ -573,6 +582,8 @@ class Container:
                 path_resolver=self.path_resolver,
                 llm_provider=self.llm_provider,
                 prompt_registry=self.prompt_registry,
+                metadata_storage=self.metadata_storage,
+                pdf_text_extractor=self.pdf_text_extractor,
             )
         return self._cache["cheatsheet_uc"]  # type: ignore[return-value]
 
@@ -586,8 +597,25 @@ class Container:
                 llm_provider=self.llm_provider,
                 path_resolver=self.path_resolver,
                 prompt_registry=self.prompt_registry,
+                metadata_storage=self.metadata_storage,
+                pdf_text_extractor=self.pdf_text_extractor,
             )
         return self._cache["quiz_uc"]  # type: ignore[return-value]
+
+    @property
+    def flashcard_usecase(self) -> FlashcardUseCase:
+        """Flashcard generation and retrieval use case."""
+        if "flashcard_uc" not in self._cache:
+            self._cache["flashcard_uc"] = FlashcardUseCase(
+                flashcard_storage=self.flashcard_storage,
+                subtitle_storage=self.subtitle_storage,
+                llm_provider=self.llm_provider,
+                path_resolver=self.path_resolver,
+                prompt_registry=self.prompt_registry,
+                metadata_storage=self.metadata_storage,
+                pdf_text_extractor=self.pdf_text_extractor,
+            )
+        return self._cache["flashcard_uc"]  # type: ignore[return-value]
 
     @property
     def slide_lecture_usecase(self) -> SlideLectureUseCase:

@@ -8,6 +8,7 @@ from deeplecture.infrastructure.repositories.fs_content_config_storage import Fs
 from deeplecture.infrastructure.repositories.fs_explanation_storage import FsExplanationStorage
 from deeplecture.infrastructure.repositories.fs_fact_verification_storage import FsFactVerificationStorage
 from deeplecture.infrastructure.repositories.fs_file_storage import FsFileStorage
+from deeplecture.infrastructure.repositories.fs_flashcard_storage import FsFlashcardStorage
 from deeplecture.infrastructure.repositories.fs_global_config_storage import FsGlobalConfigStorage
 from deeplecture.infrastructure.repositories.fs_note_storage import FsNoteStorage
 from deeplecture.infrastructure.repositories.fs_prompt_template_storage import FsPromptTemplateStorage
@@ -32,6 +33,7 @@ __all__ = [
     "FsExplanationStorage",
     "FsFactVerificationStorage",
     "FsFileStorage",
+    "FsFlashcardStorage",
     "FsGlobalConfigStorage",
     "FsNoteStorage",
     "FsPromptTemplateStorage",

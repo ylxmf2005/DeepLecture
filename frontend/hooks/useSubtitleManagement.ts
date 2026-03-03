@@ -62,6 +62,7 @@ export function useSubtitleManagement({
     // Derive subtitle-related state to avoid unnecessary re-renders
     const hasSubtitles = content?.subtitleStatus === "ready";
     const hasEnhancedSubtitles = content?.enhancedStatus === "ready";
+    const shouldLoadTargetSubtitles = hasEnhancedSubtitles || content?.type === "slide";
 
     // Create a stable key based on subtitle state - changes trigger reload
     // subtitleRefreshVersion acts as cache invalidation token for SSE-triggered regeneration
@@ -108,7 +109,8 @@ export function useSubtitleManagement({
                 setSubtitlesSource(sourceSubs);
 
                 // Enhanced workflow generates source_enhanced + target subtitles together.
-                if (!hasEnhancedSubtitles) {
+                // Slide-lecture generation also produces source + target subtitle tracks.
+                if (!shouldLoadTargetSubtitles) {
                     return;
                 }
 
@@ -162,6 +164,7 @@ export function useSubtitleManagement({
         targetLanguage,
         hasSubtitles,
         hasEnhancedSubtitles,
+        shouldLoadTargetSubtitles,
         notifyOperation,
     ]);
 

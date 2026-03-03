@@ -13,6 +13,7 @@ def build_cheatsheet_extraction_prompts(
     language: str,
     subject_type: str = "auto",
     user_instruction: str = "",
+    coverage_mode: str = "exam_focused",
 ) -> tuple[str, str]:
     """Build system and user prompts for knowledge extraction stage.
 
@@ -21,6 +22,8 @@ def build_cheatsheet_extraction_prompts(
         language: Output language
         subject_type: "stem" | "humanities" | "auto"
         user_instruction: Additional user guidance
+        coverage_mode: Extraction strategy. "exam_focused" keeps only high-yield points,
+            while "comprehensive" prioritizes full topic coverage.
 
     Returns:
         Tuple of (system_prompt, user_prompt)
@@ -31,21 +34,42 @@ def build_cheatsheet_extraction_prompts(
     elif subject_type == "humanities":
         subject_hint = "Focus on key concepts, dates, names, and theoretical frameworks."
 
+    mode = (coverage_mode or "exam_focused").strip().lower()
+    if mode == "comprehensive":
+        extraction_focus = """IMPORTANT: Extract items that are:
+- Required to understand the full lecture (major + supporting points)
+- Distinct concepts, definitions, conditions, procedures, examples, and pitfalls
+- Granular enough for assessment and active recall (split compound ideas into separate items)
+
+COVERAGE REQUIREMENTS:
+- Cover ALL major topics and subtopics present in the input.
+- Do NOT cap output to one item per module/section.
+- For each major topic, include multiple distinct items when the content supports it.
+- Prioritize complete coverage first, then concise phrasing."""
+        exclusion_rules = """DO NOT extract:
+- Pure filler, repetition, or off-topic chatter
+- Verbatim long narrative paragraphs when a concise knowledge item is possible"""
+        end_instruction = "Return a JSON array of knowledge items. Prioritize comprehensive coverage of the lecture."
+    else:
+        extraction_focus = """IMPORTANT: Extract items that are:
+- Hard to memorize (formulas, exact values, specific conditions)
+- Easy to forget under pressure
+- Frequently tested in exams"""
+        exclusion_rules = """DO NOT extract:
+- General explanations that are easy to derive
+- Obvious definitions
+- Lengthy narratives"""
+        end_instruction = "Return a JSON array of knowledge items. Focus on exam-critical information."
+
     system_prompt = f"""You are an expert knowledge extractor for exam preparation.
 Your task is to extract high-value knowledge items from educational content.
 
 Output language: {language}
 {subject_hint}
 
-IMPORTANT: Extract items that are:
-- Hard to memorize (formulas, exact values, specific conditions)
-- Easy to forget under pressure
-- Frequently tested in exams
+{extraction_focus}
 
-DO NOT extract:
-- General explanations that are easy to derive
-- Obvious definitions
-- Lengthy narratives
+{exclusion_rules}
 
 Output ONLY valid JSON array with this structure:
 [
@@ -53,9 +77,16 @@ Output ONLY valid JSON array with this structure:
     "category": "formula|definition|condition|algorithm|constant|example",
     "content": "The actual knowledge item content",
     "criticality": "high|medium|low",
-    "tags": ["topic1", "topic2"]
+    "tags": ["topic1", "topic2"],
+    "source_start": 123.0
   }}
-]"""
+]
+
+NOTE on "source_start":
+- If the input text contains timestamp markers like [HH:MM:SS], set source_start to the
+  corresponding time in seconds (e.g. [00:02:15] → 135.0). Use the timestamp of the
+  line where the knowledge item originates.
+- If no timestamp markers are present, omit source_start entirely."""
 
     user_prompt = f"""Extract knowledge items from the following content:
 
@@ -63,7 +94,9 @@ Output ONLY valid JSON array with this structure:
 
 {f"Additional instructions: {user_instruction}" if user_instruction else ""}
 
-Return a JSON array of knowledge items. Focus on exam-critical information."""
+Coverage mode: {mode}
+
+{end_instruction}"""
 
     return system_prompt, user_prompt
 

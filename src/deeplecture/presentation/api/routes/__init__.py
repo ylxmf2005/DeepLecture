@@ -9,6 +9,7 @@ from deeplecture.presentation.api.routes.conversation import bp as conversation_
 from deeplecture.presentation.api.routes.conversation import summaries_bp
 from deeplecture.presentation.api.routes.explanation import bp as explanation_bp
 from deeplecture.presentation.api.routes.fact_verification import bp as fact_verification_bp
+from deeplecture.presentation.api.routes.flashcard import bp as flashcard_bp
 from deeplecture.presentation.api.routes.generation import bp as generation_bp
 from deeplecture.presentation.api.routes.global_config import bp as global_config_bp
 from deeplecture.presentation.api.routes.live2d import bp as live2d_bp
@@ -32,6 +33,7 @@ __all__ = [
     "conversation_bp",
     "explanation_bp",
     "fact_verification_bp",
+    "flashcard_bp",
     "generation_bp",
     "global_config_bp",
     "live2d_bp",

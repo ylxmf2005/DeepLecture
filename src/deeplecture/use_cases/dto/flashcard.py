@@ -1,4 +1,4 @@
-"""Cheatsheet DTOs (Data Transfer Objects)."""
+"""Flashcard DTOs (Data Transfer Objects)."""
 
 from __future__ import annotations
 
@@ -14,29 +14,36 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class KnowledgeItem:
-    """Single knowledge item extracted from content.
+class FlashcardItem:
+    """Single flashcard for active recall study.
 
-    Used internally between extraction and rendering stages.
+    Front: question, term, or prompt that triggers recall.
+    Back: answer, definition, or explanation.
     """
 
-    category: str  # formula | definition | condition | algorithm | constant | example
-    content: str  # The actual content
-    criticality: str  # high | medium | low
-    tags: list[str] = field(default_factory=list)
-    source_start: float | None = None  # Video timestamp in seconds (from timestamped context)
+    front: str  # Question or term
+    back: str  # Answer or explanation
+    source_timestamp: float | None = None  # Video timestamp in seconds
+    source_category: str | None = None  # formula | definition | concept | ...
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
-        d: dict[str, Any] = {
-            "category": self.category,
-            "content": self.content,
-            "criticality": self.criticality,
-            "tags": self.tags,
+        return {
+            "front": self.front,
+            "back": self.back,
+            "source_timestamp": self.source_timestamp,
+            "source_category": self.source_category,
         }
-        if self.source_start is not None:
-            d["source_start"] = self.source_start
-        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> FlashcardItem:
+        """Create from dictionary."""
+        return cls(
+            front=data.get("front", ""),
+            back=data.get("back", ""),
+            source_timestamp=data.get("source_timestamp"),
+            source_category=data.get("source_category"),
+        )
 
 
 # =============================================================================
@@ -45,29 +52,21 @@ class KnowledgeItem:
 
 
 @dataclass
-class GenerateCheatsheetRequest:
-    """Request to generate AI cheatsheet.
+class GenerateFlashcardRequest:
+    """Request to generate AI flashcards.
 
     All language parameters must be provided by the frontend.
+    Card count is determined by the model (not configurable).
     """
 
     content_id: str
     language: str  # Required: output language
     context_mode: str = "both"  # subtitle | slide | both
     user_instruction: str = ""
-    min_criticality: str = "medium"  # high | medium | low
-    target_pages: int = 2  # Approximate target length
+    min_criticality: str = "low"  # high | medium | low
     subject_type: str = "auto"  # stem | humanities | auto
     llm_model: str | None = None  # Optional model override
     prompts: dict[str, str] | None = None  # Optional prompt overrides
-
-
-@dataclass
-class SaveCheatsheetRequest:
-    """Request to save cheatsheet content."""
-
-    content_id: str
-    content: str
 
 
 # =============================================================================
@@ -76,52 +75,62 @@ class SaveCheatsheetRequest:
 
 
 @dataclass
-class CheatsheetStats:
-    """Statistics about generated cheatsheet."""
+class FlashcardStats:
+    """Statistics about generated flashcards."""
 
-    total_items: int = 0
+    total_items: int = 0  # Items from LLM
+    valid_items: int = 0  # Items after validation
+    filtered_items: int = 0  # Items removed by validation
     by_category: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "total_items": self.total_items,
+            "valid_items": self.valid_items,
+            "filtered_items": self.filtered_items,
             "by_category": self.by_category,
         }
 
 
 @dataclass
-class CheatsheetResult:
-    """Result of cheatsheet retrieval or save."""
+class FlashcardResult:
+    """Result of flashcard retrieval."""
 
     content_id: str
-    content: str
+    language: str
+    items: list[FlashcardItem] = field(default_factory=list)
     updated_at: datetime | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "content_id": self.content_id,
-            "content": self.content,
+            "language": self.language,
+            "items": [item.to_dict() for item in self.items],
+            "count": len(self.items),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
 
 @dataclass
-class GeneratedCheatsheetResult:
-    """Result of AI-generated cheatsheet creation."""
+class GeneratedFlashcardResult:
+    """Result of AI-generated flashcard creation."""
 
     content_id: str
-    content: str
+    language: str
+    items: list[FlashcardItem]
     updated_at: datetime | None
     used_sources: list[str]  # ["subtitle", "slide"]
-    stats: CheatsheetStats = field(default_factory=CheatsheetStats)
+    stats: FlashcardStats = field(default_factory=FlashcardStats)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "content_id": self.content_id,
-            "content": self.content,
+            "language": self.language,
+            "items": [item.to_dict() for item in self.items],
+            "count": len(self.items),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "used_sources": self.used_sources,
             "stats": self.stats.to_dict(),
