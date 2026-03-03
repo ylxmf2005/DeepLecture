@@ -66,6 +66,7 @@ def _register_blueprints(app: Flask) -> None:
         podcast_bp,
         prompt_templates_bp,
         quiz_bp,
+        read_aloud_bp,
         screenshot_bp,
         subtitle_bp,
         summaries_bp,
@@ -93,6 +94,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(prompt_templates_bp, url_prefix="/api")
     app.register_blueprint(podcast_bp, url_prefix="/api/podcast")
     app.register_blueprint(quiz_bp, url_prefix="/api/quiz")
+    app.register_blueprint(read_aloud_bp, url_prefix="/api/read-aloud")
     app.register_blueprint(screenshot_bp, url_prefix="/api/content")
     app.register_blueprint(subtitle_bp, url_prefix="/api/subtitle")
     app.register_blueprint(summaries_bp, url_prefix="/api/summaries")
