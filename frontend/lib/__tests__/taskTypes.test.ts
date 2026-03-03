@@ -48,6 +48,7 @@ describe('isContentRefreshTask', () => {
         expect(isContentRefreshTask('cheatsheet_generation')).toBe(false);
         expect(isContentRefreshTask('note_generation')).toBe(false);
         expect(isContentRefreshTask('quiz_generation')).toBe(false);
+        expect(isContentRefreshTask('test_paper_generation')).toBe(false);
     });
 
     it('returns false for unknown types', () => {
@@ -81,11 +82,12 @@ describe('taskToProcessingAction', () => {
         expect(taskToProcessingAction('cheatsheet_generation')).toBeNull();
         expect(taskToProcessingAction('note_generation')).toBeNull();
         expect(taskToProcessingAction('quiz_generation')).toBeNull();
+        expect(taskToProcessingAction('test_paper_generation')).toBeNull();
     });
 });
 
 describe('TASK_LABELS', () => {
-    const ALL_13_TYPES = [
+    const ALL_14_TYPES = [
         'subtitle_generation',
         'subtitle_translation',
         'timeline_generation',
@@ -99,10 +101,11 @@ describe('TASK_LABELS', () => {
         'cheatsheet_generation',
         'note_generation',
         'quiz_generation',
+        'test_paper_generation',
     ];
 
-    it('covers all 13 backend task types', () => {
-        for (const taskType of ALL_13_TYPES) {
+    it('covers all known backend task types', () => {
+        for (const taskType of ALL_14_TYPES) {
             expect(TASK_LABELS[taskType]).toBeDefined();
             expect(TASK_LABELS[taskType].success).toBeTruthy();
             expect(TASK_LABELS[taskType].error).toBeTruthy();

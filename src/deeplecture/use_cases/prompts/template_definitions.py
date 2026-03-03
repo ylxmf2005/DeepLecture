@@ -132,6 +132,14 @@ _FUNC_PLACEHOLDER_RULES: dict[str, dict[str, set[str]]] = {
         "allowed": {"knowledge_items_json", "language", "question_count", "user_instruction"},
         "required": {"knowledge_items_json", "language"},
     },
+    "flashcard_generation": {
+        "allowed": {"knowledge_items_json", "language", "user_instruction"},
+        "required": {"knowledge_items_json", "language"},
+    },
+    "test_paper_generation": {
+        "allowed": {"knowledge_items_json", "language", "user_instruction"},
+        "required": {"knowledge_items_json", "language"},
+    },
 }
 
 

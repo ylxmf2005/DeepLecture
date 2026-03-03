@@ -29,6 +29,8 @@ const PROMPT_LABELS: Record<string, { label: string; desc: string }> = {
     cheatsheet_extraction: { label: "Cheatsheet Extraction", desc: "Extract key knowledge for cheatsheets" },
     cheatsheet_rendering: { label: "Cheatsheet Rendering", desc: "Render cheatsheet layout" },
     quiz_generation: { label: "Quiz Generation", desc: "Generate quiz questions" },
+    flashcard_generation: { label: "Flashcard Generation", desc: "Generate active-recall flashcards" },
+    test_paper_generation: { label: "Test Paper Generation", desc: "Generate exam-style open-ended questions" },
 };
 
 const FUNC_PLACEHOLDERS: Record<string, { allowed: string[]; required: string[] }> = {
@@ -86,6 +88,14 @@ const FUNC_PLACEHOLDERS: Record<string, { allowed: string[]; required: string[] 
     },
     quiz_generation: {
         allowed: ["knowledge_items_json", "language", "question_count", "user_instruction"],
+        required: ["knowledge_items_json", "language"],
+    },
+    flashcard_generation: {
+        allowed: ["knowledge_items_json", "language", "user_instruction"],
+        required: ["knowledge_items_json", "language"],
+    },
+    test_paper_generation: {
+        allowed: ["knowledge_items_json", "language", "user_instruction"],
         required: ["knowledge_items_json", "language"],
     },
 };

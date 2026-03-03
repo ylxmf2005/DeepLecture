@@ -57,6 +57,7 @@ from deeplecture.use_cases.interfaces.task import (
     TaskContextProtocol,
     TaskQueueProtocol,
 )
+from deeplecture.use_cases.interfaces.test_paper import TestPaperStorageProtocol
 from deeplecture.use_cases.interfaces.timeline import TimelineStorageProtocol
 from deeplecture.use_cases.interfaces.tts_provider import TTSModelInfo, TTSProviderProtocol
 
@@ -105,6 +106,7 @@ __all__ = [
     "TTSProviderProtocol",
     "TaskContextProtocol",
     "TaskQueueProtocol",
+    "TestPaperStorageProtocol",
     "TimelineStorageProtocol",
     "VideoDownloaderProtocol",
     "VideoMergerProtocol",

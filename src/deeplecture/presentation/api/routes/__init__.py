@@ -20,6 +20,7 @@ from deeplecture.presentation.api.routes.quiz import bp as quiz_bp
 from deeplecture.presentation.api.routes.screenshot import bp as screenshot_bp
 from deeplecture.presentation.api.routes.subtitle import bp as subtitle_bp
 from deeplecture.presentation.api.routes.task import bp as task_bp
+from deeplecture.presentation.api.routes.test_paper import bp as test_paper_bp
 from deeplecture.presentation.api.routes.timeline import bp as timeline_bp
 from deeplecture.presentation.api.routes.upload import bp as upload_bp
 from deeplecture.presentation.api.routes.voiceover import bp as voiceover_bp
@@ -45,6 +46,7 @@ __all__ = [
     "subtitle_bp",
     "summaries_bp",
     "task_bp",
+    "test_paper_bp",
     "timeline_bp",
     "upload_bp",
     "voiceover_bp",

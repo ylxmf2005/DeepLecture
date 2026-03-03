@@ -120,6 +120,7 @@ export interface UseVideoPageStateReturn {
     refreshCheatsheet: number;
     refreshQuiz: number;
     refreshFlashcard: number;
+    refreshTest: number;
     subtitleRefreshVersion: number;
 
     // Ask context
@@ -181,6 +182,7 @@ export function useVideoPageState({
     const [refreshCheatsheet, setRefreshCheatsheet] = useState(0);
     const [refreshQuiz, setRefreshQuiz] = useState(0);
     const [refreshFlashcard, setRefreshFlashcard] = useState(0);
+    const [refreshTest, setRefreshTest] = useState(0);
     const [subtitleRefreshVersion, setSubtitleRefreshVersion] = useState(0);
 
     // Ask context
@@ -385,6 +387,9 @@ export function useVideoPageState({
                     } else if (taskType === "flashcard_generation" && isLiveEvent && task.status === "ready") {
                         log.info("SSE: flashcard_generation completed, bumping refreshFlashcard", { taskId, taskType, status: task.status });
                         setRefreshFlashcard((prev) => prev + 1);
+                    } else if (taskType === "test_paper_generation" && isLiveEvent && task.status === "ready") {
+                        log.info("SSE: test_paper_generation completed, bumping refreshTest", { taskId, taskType, status: task.status });
+                        setRefreshTest((prev) => prev + 1);
                     } else if (taskType === "note_generation" && isLiveEvent) {
                         // Note generation completed via live SSE event - stop generating state.
                         // Ignore initial history snapshots to avoid premature completion on page load/reconnect.
@@ -547,6 +552,7 @@ export function useVideoPageState({
         refreshCheatsheet,
         refreshQuiz,
         refreshFlashcard,
+        refreshTest,
         subtitleRefreshVersion,
 
         // Ask context

@@ -39,6 +39,10 @@ const TASK_MODEL_META: Record<string, { label: string; llmHint?: string; ttsHint
         label: "Quiz Generation",
         llmHint: "Used when generating quiz questions and explanations.",
     },
+    test_paper_generation: {
+        label: "Test Paper Generation",
+        llmHint: "Used when generating exam-style open-ended test questions.",
+    },
     cheatsheet_generation: {
         label: "Cheatsheet Generation",
         llmHint: "Used when generating exam cheatsheets.",

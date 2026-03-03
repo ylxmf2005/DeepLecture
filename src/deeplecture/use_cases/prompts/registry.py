@@ -487,6 +487,26 @@ class FlashcardGenerationBuilder(BasePromptBuilder):
         )
 
 
+class TestPaperGenerationBuilder(BasePromptBuilder):
+    """Builder for test paper generation prompts."""
+
+    def build(self, **kwargs) -> PromptSpec:
+        from deeplecture.use_cases.prompts.test_paper import build_test_paper_generation_prompts
+
+        system_prompt, user_prompt = build_test_paper_generation_prompts(
+            knowledge_items_json=kwargs["knowledge_items_json"],
+            language=kwargs["language"],
+            user_instruction=kwargs.get("user_instruction", ""),
+        )
+        return PromptSpec(user_prompt=user_prompt, system_prompt=system_prompt)
+
+    def get_preview_text(self) -> str:
+        return (
+            "Generates exam-style open-ended test paper questions from knowledge items. "
+            "Includes reference answers, scoring criteria, and Bloom levels."
+        )
+
+
 class TemplateOverrideBuilder(BasePromptBuilder):
     """Builder that overrides default prompts with template-based rendering."""
 
@@ -656,6 +676,13 @@ def create_default_registry(custom_templates: Sequence[PromptTemplateDefinition]
     registry.register(
         "flashcard_generation",
         FlashcardGenerationBuilder("default", "Default", "Flashcard generation from knowledge items"),
+        is_default=True,
+    )
+
+    # Test paper
+    registry.register(
+        "test_paper_generation",
+        TestPaperGenerationBuilder("default", "Default", "Exam-style test paper generation"),
         is_default=True,
     )
 

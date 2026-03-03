@@ -126,6 +126,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         refreshCheatsheet,
         refreshQuiz,
         refreshFlashcard,
+        refreshTest,
         subtitleRefreshVersion,
         askContext,
         setAskContext,
@@ -741,6 +742,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             refreshBookmarks={refreshBookmarks}
                             refreshQuiz={refreshQuiz}
                             refreshFlashcard={refreshFlashcard}
+                            refreshTest={refreshTest}
                             askContext={askContext}
                             learnerProfile={learnerProfile}
                             subtitleContextWindowSeconds={subtitleContextWindowSeconds}
@@ -780,6 +782,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                         refreshBookmarks={refreshBookmarks}
                         refreshQuiz={refreshQuiz}
                         refreshFlashcard={refreshFlashcard}
+                        refreshTest={refreshTest}
                         askContext={askContext}
                         learnerProfile={learnerProfile}
                         subtitleContextWindowSeconds={subtitleContextWindowSeconds}
@@ -820,6 +823,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             refreshBookmarks={refreshBookmarks}
                             refreshQuiz={refreshQuiz}
                             refreshFlashcard={refreshFlashcard}
+                            refreshTest={refreshTest}
                             askContext={askContext}
                             learnerProfile={learnerProfile}
                             subtitleContextWindowSeconds={subtitleContextWindowSeconds}
@@ -854,6 +858,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             refreshBookmarks={refreshBookmarks}
                             refreshQuiz={refreshQuiz}
                             refreshFlashcard={refreshFlashcard}
+                            refreshTest={refreshTest}
                             askContext={askContext}
                             learnerProfile={learnerProfile}
                             subtitleContextWindowSeconds={subtitleContextWindowSeconds}
