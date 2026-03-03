@@ -32,6 +32,7 @@ from deeplecture.infrastructure import (
     FsPromptTemplateStorage,
     FsQuizStorage,
     FsSubtitleStorage,
+    FsTestPaperStorage,
     FsTimelineStorage,
     FsVoiceoverStorage,
     LLMProvider,
@@ -65,6 +66,7 @@ from deeplecture.use_cases.quiz import QuizUseCase
 from deeplecture.use_cases.slide_lecture import SlideLectureUseCase
 from deeplecture.use_cases.subtitle import SubtitleUseCase
 from deeplecture.use_cases.task_modeling import TaskModelResolver
+from deeplecture.use_cases.test_paper import TestPaperUseCase
 from deeplecture.use_cases.timeline import TimelineUseCase
 from deeplecture.use_cases.upload import UploadUseCase
 from deeplecture.use_cases.voiceover import VoiceoverUseCase
@@ -205,6 +207,13 @@ class Container:
         if "flashcard_storage" not in self._cache:
             self._cache["flashcard_storage"] = FsFlashcardStorage(self.path_resolver)
         return self._cache["flashcard_storage"]  # type: ignore[return-value]
+
+    @property
+    def test_paper_storage(self) -> FsTestPaperStorage:
+        """Filesystem-based test paper persistence."""
+        if "test_paper_storage" not in self._cache:
+            self._cache["test_paper_storage"] = FsTestPaperStorage(self.path_resolver)
+        return self._cache["test_paper_storage"]  # type: ignore[return-value]
 
     @property
     def explanation_storage(self) -> FsExplanationStorage:
@@ -616,6 +625,21 @@ class Container:
                 pdf_text_extractor=self.pdf_text_extractor,
             )
         return self._cache["flashcard_uc"]  # type: ignore[return-value]
+
+    @property
+    def test_paper_usecase(self) -> TestPaperUseCase:
+        """Test paper generation and retrieval use case."""
+        if "test_paper_uc" not in self._cache:
+            self._cache["test_paper_uc"] = TestPaperUseCase(
+                test_paper_storage=self.test_paper_storage,
+                subtitle_storage=self.subtitle_storage,
+                llm_provider=self.llm_provider,
+                path_resolver=self.path_resolver,
+                prompt_registry=self.prompt_registry,
+                metadata_storage=self.metadata_storage,
+                pdf_text_extractor=self.pdf_text_extractor,
+            )
+        return self._cache["test_paper_uc"]  # type: ignore[return-value]
 
     @property
     def slide_lecture_usecase(self) -> SlideLectureUseCase:

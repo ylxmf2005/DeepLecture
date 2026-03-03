@@ -69,6 +69,7 @@ def _register_blueprints(app: Flask) -> None:
         subtitle_bp,
         summaries_bp,
         task_bp,
+        test_paper_bp,
         timeline_bp,
         upload_bp,
         voiceover_bp,
@@ -94,6 +95,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(subtitle_bp, url_prefix="/api/subtitle")
     app.register_blueprint(summaries_bp, url_prefix="/api/summaries")
     app.register_blueprint(task_bp, url_prefix="/api/task")
+    app.register_blueprint(test_paper_bp, url_prefix="/api/test-paper")
     app.register_blueprint(timeline_bp, url_prefix="/api/timeline")
     app.register_blueprint(upload_bp, url_prefix="/api/content")
     app.register_blueprint(voiceover_bp, url_prefix="/api")

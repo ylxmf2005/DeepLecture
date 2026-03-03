@@ -14,6 +14,7 @@ from deeplecture.infrastructure.repositories.fs_note_storage import FsNoteStorag
 from deeplecture.infrastructure.repositories.fs_prompt_template_storage import FsPromptTemplateStorage
 from deeplecture.infrastructure.repositories.fs_quiz_storage import FsQuizStorage
 from deeplecture.infrastructure.repositories.fs_subtitle_storage import FsSubtitleStorage
+from deeplecture.infrastructure.repositories.fs_test_paper_storage import FsTestPaperStorage
 from deeplecture.infrastructure.repositories.fs_timeline_storage import FsTimelineStorage
 from deeplecture.infrastructure.repositories.fs_voiceover_storage import FsVoiceoverStorage
 from deeplecture.infrastructure.repositories.path_resolver import (
@@ -39,6 +40,7 @@ __all__ = [
     "FsPromptTemplateStorage",
     "FsQuizStorage",
     "FsSubtitleStorage",
+    "FsTestPaperStorage",
     "FsTimelineStorage",
     "FsVoiceoverStorage",
     "PathResolver",

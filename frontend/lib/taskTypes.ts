@@ -116,6 +116,10 @@ export const TASK_LABELS: Record<string, TaskNotificationLabel> = {
         success: "Quiz generated successfully",
         error: "Quiz generation failed",
     },
+    test_paper_generation: {
+        success: "Test paper generated successfully",
+        error: "Test paper generation failed",
+    },
 };
 
 function humanizeTaskType(taskType: string): string {

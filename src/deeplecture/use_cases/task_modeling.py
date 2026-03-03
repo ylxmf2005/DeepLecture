@@ -15,6 +15,7 @@ LLM_TASK_KEYS: tuple[str, ...] = (
     "video_generation",
     "note_generation",
     "quiz_generation",
+    "test_paper_generation",
     "cheatsheet_generation",
     "slide_explanation",
     "ask_video",

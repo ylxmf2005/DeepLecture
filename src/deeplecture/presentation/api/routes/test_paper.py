@@ -1,0 +1,120 @@
+"""Test paper routes."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from flask import Blueprint, request
+
+from deeplecture.di import get_container
+from deeplecture.presentation.api.shared import (
+    accepted,
+    bad_request,
+    handle_errors,
+    not_found,
+    rate_limit,
+    success,
+)
+from deeplecture.presentation.api.shared.model_resolution import resolve_models_for_task
+from deeplecture.presentation.api.shared.validation import (
+    validate_content_id,
+    validate_language,
+)
+from deeplecture.use_cases.dto.test_paper import GenerateTestPaperRequest
+
+if TYPE_CHECKING:
+    from flask import Response
+
+bp = Blueprint("test_paper", __name__)
+
+
+@bp.route("/<content_id>", methods=["GET"])
+@handle_errors
+def get_test_paper(content_id: str) -> Response:
+    """Get test paper for content."""
+    content_id = validate_content_id(content_id)
+    language = validate_language(request.args.get("language"), field_name="language", default="") or None
+
+    container = get_container()
+    result = container.test_paper_usecase.get(content_id, language)
+
+    if not result.questions:
+        return not_found(f"Test paper not found for {content_id}")
+
+    return success(result.to_dict())
+
+
+@bp.route("/<content_id>/generate", methods=["POST"])
+@rate_limit("generate")
+@handle_errors
+def generate_test_paper(content_id: str) -> Response:
+    """Generate test paper using LLM (async task)."""
+    content_id = validate_content_id(content_id)
+    data = request.get_json() or {}
+
+    language = validate_language(data.get("language"), field_name="language", default="")
+    if not language:
+        return bad_request("language is required")
+
+    context_mode = data.get("context_mode", "both")
+    user_instruction = data.get("user_instruction", "").strip()
+    min_criticality = data.get("min_criticality", "medium")
+    subject_type = data.get("subject_type", "auto")
+
+    valid_context_modes = {"subtitle", "slide", "both"}
+    if context_mode not in valid_context_modes:
+        return bad_request(f"context_mode must be one of: {', '.join(sorted(valid_context_modes))}")
+
+    valid_criticality = {"high", "medium", "low"}
+    if min_criticality not in valid_criticality:
+        return bad_request(f"min_criticality must be one of: {', '.join(valid_criticality)}")
+
+    valid_subjects = {"auto", "stem", "humanities"}
+    if subject_type not in valid_subjects:
+        return bad_request(f"subject_type must be one of: {', '.join(valid_subjects)}")
+
+    llm_model = data.get("llm_model") or None
+    prompts = data.get("prompts") or None
+
+    container = get_container()
+    llm_model, _ = resolve_models_for_task(
+        container=container,
+        content_id=content_id,
+        task_key="test_paper_generation",
+        llm_model=llm_model,
+        tts_model=None,
+    )
+
+    req = GenerateTestPaperRequest(
+        content_id=content_id,
+        language=language,
+        context_mode=context_mode,
+        user_instruction=user_instruction,
+        min_criticality=min_criticality,
+        subject_type=subject_type,
+        llm_model=llm_model,
+        prompts=prompts,
+    )
+
+    def _run_generation(_ctx: object) -> dict:
+        result = container.test_paper_usecase.generate(req)
+        return result.to_dict()
+
+    task_id = container.task_manager.submit(
+        content_id=content_id,
+        task_type="test_paper_generation",
+        task=_run_generation,
+        metadata={
+            "language": language,
+            "context_mode": context_mode,
+        },
+    )
+
+    return accepted(
+        {
+            "content_id": content_id,
+            "task_id": task_id,
+            "status": "pending",
+            "message": "Test paper generation started",
+        }
+    )

@@ -390,32 +390,32 @@ Props: `{ videoId: string; onSeek: (time: number) => void; refreshTrigger: numbe
 
 ### Functional Requirements
 
-- [ ] 从视频字幕和/或幻灯片生成混合开放式大题
-- [ ] 每道题包含: 题型标签、题目、参考答案、评分要点（list[str]）、布鲁姆认知层次
-- [ ] LLM 自动选择题型组合，生成至少 2 种不同题型
-- [ ] 布鲁姆认知层次覆盖至少 3 个不同层次
-- [ ] 每道题可选关联视频时间戳，支持点击跳转
-- [ ] 纯展示模式：所有题目列表展示，点击展开参考答案和评分要点
-- [ ] 支持 context_mode: subtitle / slide / both（严格验证，不接受 auto）
-- [ ] 异步生成：POST 返回 task_id → SSE 通知完成 → 前端自动刷新
-- [ ] 支持多语言（按语言存储和获取）
-- [ ] 支持重新生成（替换旧内容）
+- [x] 从视频字幕和/或幻灯片生成混合开放式大题
+- [x] 每道题包含: 题型标签、题目、参考答案、评分要点（list[str]）、布鲁姆认知层次
+- [x] LLM 自动选择题型组合，生成至少 2 种不同题型
+- [x] 布鲁姆认知层次覆盖至少 3 个不同层次
+- [x] 每道题可选关联视频时间戳，支持点击跳转
+- [x] 纯展示模式：所有题目列表展示，点击展开参考答案和评分要点
+- [x] 支持 context_mode: subtitle / slide / both（严格验证，不接受 auto）
+- [x] 异步生成：POST 返回 task_id → SSE 通知完成 → 前端自动刷新
+- [x] 支持多语言（按语言存储和获取）
+- [x] 支持重新生成（替换旧内容）
 
 ### Non-Functional Requirements
 
-- [ ] 完全遵循现有 Clean Architecture 分层
-- [ ] 复用两阶段 LLM 管线（共享 Stage 1 知识提取）
-- [ ] context_mode 使用共享验证（遵循 context-mode-unification 教训）
-- [ ] 原子写入存储（tempfile + os.replace）
-- [ ] 前端键盘可访问（Enter/Space 展开折叠，tabIndex，aria-expanded）
+- [x] 完全遵循现有 Clean Architecture 分层
+- [x] 复用两阶段 LLM 管线（共享 Stage 1 知识提取）
+- [x] context_mode 使用共享验证（遵循 context-mode-unification 教训）
+- [x] 原子写入存储（tempfile + os.replace）
+- [x] 前端键盘可访问（Enter/Space 展开折叠，tabIndex，aria-expanded）
 
 ### Quality Gates
 
-- [ ] 所有单元测试通过
-- [ ] 覆盖 validate_test_question 边界情况
-- [ ] 覆盖 get() 和 generate() 的 happy path + error path
-- [ ] context_mode=invalid → 400 Bad Request
-- [ ] 前端 4 种状态（loading/generating/error/content）均正确渲染
+- [x] 所有单元测试通过
+- [x] 覆盖 validate_test_question 边界情况
+- [x] 覆盖 get() 和 generate() 的 happy path + error path
+- [x] context_mode=invalid → 400 Bad Request
+- [x] 前端 4 种状态（loading/generating/error/content）均正确渲染
 
 ---
 
