@@ -446,32 +446,32 @@ Replace the entire content with:
 
 ### Functional Requirements
 
-- [ ] User can view all templates grouped by 9 categories with collapsible sections
-- [ ] User can create a new template with pre-filled default content
-- [ ] User can edit an existing custom template via the drawer
-- [ ] User can duplicate any template (including defaults) as a new template
-- [ ] User can delete a custom template (with confirmation dialog)
-- [ ] User cannot edit or delete default (built-in) templates
-- [ ] User cannot delete a template that is currently selected globally (409 error with clear message)
-- [ ] Placeholder panel shows all available variables with descriptions and required/optional markers
-- [ ] Clicking a placeholder chip inserts `{placeholder_name}` at the cursor position in the last-focused textarea
-- [ ] System/User template roles are explained with a visible banner
-- [ ] Unsaved changes warning when closing drawer with modifications
-- [ ] Template selection dropdown (existing) continues to work with new/edited/deleted templates
+- [x] User can view all templates grouped by 9 categories with collapsible sections
+- [x] User can create a new template with pre-filled default content
+- [x] User can edit an existing custom template via the drawer
+- [x] User can duplicate any template (including defaults) as a new template
+- [x] User can delete a custom template (with confirmation dialog)
+- [x] User cannot edit or delete default (built-in) templates
+- [x] User cannot delete a template that is currently selected globally (409 error with clear message)
+- [x] Placeholder panel shows all available variables with descriptions and required/optional markers
+- [x] Clicking a placeholder chip inserts `{placeholder_name}` at the cursor position in the last-focused textarea
+- [x] System/User template roles are explained with a visible banner
+- [x] Unsaved changes warning when closing drawer with modifications
+- [x] Template selection dropdown (existing) continues to work with new/edited/deleted templates
 
 ### Non-Functional Requirements
 
-- [ ] Placeholder metadata is fetched from the API, not hardcoded in frontend
-- [ ] `PromptRegistry.get()` gracefully falls back to default for unknown impl_ids (no crashes)
-- [ ] Registry cache invalidation correctly propagates to all dependent use cases
-- [ ] Delete operation checks global config for usage before allowing deletion
-- [ ] All drawer interactions are keyboard-accessible
+- [x] Placeholder metadata is fetched from the API, not hardcoded in frontend
+- [x] `PromptRegistry.get()` gracefully falls back to default for unknown impl_ids (no crashes)
+- [x] Registry cache invalidation correctly propagates to all dependent use cases
+- [x] Delete operation checks global config for usage before allowing deletion
+- [x] All drawer interactions are keyboard-accessible
 
 ### Quality Gates
 
-- [ ] Existing template creation still works (backward compatible POST endpoint)
-- [ ] Existing template selection still works (no regression in config API)
-- [ ] All 18 func_ids appear in the UI with correct placeholder metadata
+- [x] Existing template creation still works (backward compatible POST endpoint)
+- [x] Existing template selection still works (no regression in config API)
+- [x] All 18 func_ids appear in the UI with correct placeholder metadata
 - [ ] Backend tests for PUT, DELETE endpoints + storage delete method
 - [ ] Frontend tests for drawer open/close, placeholder insertion, CRUD flows
 

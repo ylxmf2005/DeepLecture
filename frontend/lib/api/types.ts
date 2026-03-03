@@ -401,6 +401,13 @@ export interface PromptTemplate {
 export interface PromptTemplatesResponse {
     templates: PromptTemplate[];
     funcIds: string[];
+    metadata: Record<string, PlaceholderMetadata>;
+}
+
+export interface PlaceholderMetadata {
+    allowed: string[];
+    required: string[];
+    descriptions: Record<string, string>;
 }
 
 export interface CreatePromptTemplatePayload {
@@ -410,6 +417,18 @@ export interface CreatePromptTemplatePayload {
     description?: string;
     systemTemplate?: string;
     userTemplate?: string;
+}
+
+export interface UpdatePromptTemplatePayload {
+    name?: string;
+    description?: string;
+    systemTemplate?: string;
+    userTemplate?: string;
+}
+
+export interface PromptTemplateTexts {
+    systemTemplate: string;
+    userTemplate: string;
 }
 
 // =============================================================================
