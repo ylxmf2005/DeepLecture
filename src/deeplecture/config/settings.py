@@ -415,6 +415,7 @@ class ReadAloudConfig(BaseModel):
 
     voices: list[ReadAloudVoiceConfig] = Field(default_factory=list)
     default_voice: str = "en-US-AriaNeural"
+    tts_model: str = "edge-default"
     min_sentence_length: int = 2
     max_concurrent_tts: int = 3
     deepl: DeepLConfig = Field(default_factory=DeepLConfig)

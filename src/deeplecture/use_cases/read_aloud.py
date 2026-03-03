@@ -125,8 +125,8 @@ class ReadAloudUseCase:
         # 5. Resolve TTS voice for target language
         voice = self._config.get_voice(req.target_language)
 
-        # 6. Get TTS instance
-        tts = self._tts.get(req.tts_model)
+        # 6. Get TTS instance (fallback to config default, typically edge-default)
+        tts = self._tts.get(req.tts_model or self._config.tts_model)
 
         # 7. Process each paragraph
         total_errors = 0
