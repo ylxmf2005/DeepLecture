@@ -21,6 +21,7 @@ import {
     type SentenceReady,
     type ReadAloudStreamParams,
 } from "@/lib/api/readAloud";
+import { camelizeKeys } from "@/lib/api/transform";
 import { logger } from "@/shared/infrastructure";
 
 const log = logger.scope("useReadAloud");
@@ -64,12 +65,12 @@ export interface UseReadAloudReturn {
     jumpToParagraph: (params: ReadAloudStreamParams, paragraphIndex: number) => void;
 }
 
-// Parse SSE data — backend sends JSON in the `data:` field
+// Parse SSE data — backend sends flat JSON with snake_case keys
+// EventSource bypasses Axios, so we need manual camelCase conversion
 function parseSSEData<T>(event: MessageEvent): T | null {
     try {
-        const envelope = JSON.parse(event.data);
-        // Backend wraps events as { event: "type", data: {...} }
-        return (envelope.data ?? envelope) as T;
+        const raw = JSON.parse(event.data);
+        return camelizeKeys(raw) as T;
     } catch {
         log.warn("Failed to parse SSE data", { raw: event.data });
         return null;
@@ -78,8 +79,8 @@ function parseSSEData<T>(event: MessageEvent): T | null {
 
 function extractEventType(event: MessageEvent): string | null {
     try {
-        const envelope = JSON.parse(event.data);
-        return envelope.event ?? null;
+        const raw = JSON.parse(event.data);
+        return raw.event ?? null;
     } catch {
         return null;
     }
