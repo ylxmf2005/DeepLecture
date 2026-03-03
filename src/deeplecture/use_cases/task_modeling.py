@@ -19,12 +19,14 @@ LLM_TASK_KEYS: tuple[str, ...] = (
     "cheatsheet_generation",
     "slide_explanation",
     "ask_video",
+    "podcast_generation",
 )
 
 # Tasks that support per-task TTS model selection
 TTS_TASK_KEYS: tuple[str, ...] = (
     "video_generation",
     "voiceover_generation",
+    "podcast_generation",
 )
 
 # Canonical task keys exposed to frontend settings UI

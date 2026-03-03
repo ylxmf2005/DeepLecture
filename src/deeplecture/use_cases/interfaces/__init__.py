@@ -34,6 +34,9 @@ from deeplecture.use_cases.interfaces.path import PathResolverProtocol
 
 # PDF Processing
 from deeplecture.use_cases.interfaces.pdf import PdfRendererProtocol, PdfTextExtractorProtocol
+
+# Podcast
+from deeplecture.use_cases.interfaces.podcast import PodcastStorageProtocol
 from deeplecture.use_cases.interfaces.prompt_registry import (
     PromptBuilder,
     PromptInfo,
@@ -95,6 +98,7 @@ __all__ = [
     "PathResolverProtocol",
     "PdfRendererProtocol",
     "PdfTextExtractorProtocol",
+    "PodcastStorageProtocol",
     "PromptBuilder",
     "PromptInfo",
     "PromptRegistryProtocol",

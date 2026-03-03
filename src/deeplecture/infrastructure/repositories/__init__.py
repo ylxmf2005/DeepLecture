@@ -11,6 +11,7 @@ from deeplecture.infrastructure.repositories.fs_file_storage import FsFileStorag
 from deeplecture.infrastructure.repositories.fs_flashcard_storage import FsFlashcardStorage
 from deeplecture.infrastructure.repositories.fs_global_config_storage import FsGlobalConfigStorage
 from deeplecture.infrastructure.repositories.fs_note_storage import FsNoteStorage
+from deeplecture.infrastructure.repositories.fs_podcast_storage import FsPodcastStorage
 from deeplecture.infrastructure.repositories.fs_prompt_template_storage import FsPromptTemplateStorage
 from deeplecture.infrastructure.repositories.fs_quiz_storage import FsQuizStorage
 from deeplecture.infrastructure.repositories.fs_subtitle_storage import FsSubtitleStorage
@@ -37,6 +38,7 @@ __all__ = [
     "FsFlashcardStorage",
     "FsGlobalConfigStorage",
     "FsNoteStorage",
+    "FsPodcastStorage",
     "FsPromptTemplateStorage",
     "FsQuizStorage",
     "FsSubtitleStorage",

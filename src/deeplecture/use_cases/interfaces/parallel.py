@@ -17,6 +17,7 @@ ParallelGroup = Literal[
     "voiceover_tts",
     "slide_lecture_tts",
     "slide_lecture_video",
+    "podcast_tts",
 ]
 
 

@@ -29,6 +29,7 @@ from deeplecture.infrastructure import (
     FsFlashcardStorage,
     FsGlobalConfigStorage,
     FsNoteStorage,
+    FsPodcastStorage,
     FsPromptTemplateStorage,
     FsQuizStorage,
     FsSubtitleStorage,
@@ -61,6 +62,7 @@ from deeplecture.use_cases.explanation import ExplanationUseCase
 from deeplecture.use_cases.fact_verification import FactVerificationUseCase
 from deeplecture.use_cases.flashcard import FlashcardUseCase
 from deeplecture.use_cases.note import NoteUseCase
+from deeplecture.use_cases.podcast import PodcastUseCase
 from deeplecture.use_cases.prompts import create_default_registry
 from deeplecture.use_cases.quiz import QuizUseCase
 from deeplecture.use_cases.slide_lecture import SlideLectureUseCase
@@ -207,6 +209,13 @@ class Container:
         if "flashcard_storage" not in self._cache:
             self._cache["flashcard_storage"] = FsFlashcardStorage(self.path_resolver)
         return self._cache["flashcard_storage"]  # type: ignore[return-value]
+
+    @property
+    def podcast_storage(self) -> FsPodcastStorage:
+        """Filesystem-based podcast persistence."""
+        if "podcast_storage" not in self._cache:
+            self._cache["podcast_storage"] = FsPodcastStorage(self.path_resolver)
+        return self._cache["podcast_storage"]  # type: ignore[return-value]
 
     @property
     def test_paper_storage(self) -> FsTestPaperStorage:
@@ -640,6 +649,25 @@ class Container:
                 pdf_text_extractor=self.pdf_text_extractor,
             )
         return self._cache["test_paper_uc"]  # type: ignore[return-value]
+
+    @property
+    def podcast_usecase(self) -> PodcastUseCase:
+        """Podcast generation use case (dialogue + TTS + merge)."""
+        if "podcast_uc" not in self._cache:
+            self._cache["podcast_uc"] = PodcastUseCase(
+                podcast_storage=self.podcast_storage,
+                subtitle_storage=self.subtitle_storage,
+                llm_provider=self.llm_provider,
+                tts_provider=self.tts_provider,
+                audio_processor=self.audio_processor,
+                file_storage=self._file_storage,
+                path_resolver=self.path_resolver,
+                prompt_registry=self.prompt_registry,
+                parallel_runner=self.parallel_runner,
+                metadata_storage=self.metadata_storage,
+                pdf_text_extractor=self.pdf_text_extractor,
+            )
+        return self._cache["podcast_uc"]  # type: ignore[return-value]
 
     @property
     def slide_lecture_usecase(self) -> SlideLectureUseCase:

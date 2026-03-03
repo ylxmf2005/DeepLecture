@@ -507,6 +507,48 @@ class TestPaperGenerationBuilder(BasePromptBuilder):
         )
 
 
+class PodcastDialogueBuilder(BasePromptBuilder):
+    """Builder for podcast dialogue generation prompts (Stage 2)."""
+
+    def build(self, **kwargs) -> PromptSpec:
+        from deeplecture.use_cases.prompts.podcast import build_podcast_dialogue_prompts
+
+        system_prompt, user_prompt = build_podcast_dialogue_prompts(
+            knowledge_items_json=kwargs["knowledge_items_json"],
+            language=kwargs["language"],
+            host_role=kwargs.get("host_role", ""),
+            guest_role=kwargs.get("guest_role", ""),
+            user_instruction=kwargs.get("user_instruction", ""),
+        )
+        return PromptSpec(user_prompt=user_prompt, system_prompt=system_prompt)
+
+    def get_preview_text(self) -> str:
+        return (
+            "Generates a two-person podcast dialogue script from knowledge items. "
+            "Creates natural conversation flow between host and guest speakers."
+        )
+
+
+class PodcastDramatizeBuilder(BasePromptBuilder):
+    """Builder for podcast dialogue dramatization prompts (Stage 3)."""
+
+    def build(self, **kwargs) -> PromptSpec:
+        from deeplecture.use_cases.prompts.podcast import build_podcast_dramatize_prompts
+
+        system_prompt, user_prompt = build_podcast_dramatize_prompts(
+            dialogue_json=kwargs["dialogue_json"],
+            language=kwargs["language"],
+            user_instruction=kwargs.get("user_instruction", ""),
+        )
+        return PromptSpec(user_prompt=user_prompt, system_prompt=system_prompt)
+
+    def get_preview_text(self) -> str:
+        return (
+            "Rewrites podcast dialogue to sound natural for TTS delivery. "
+            "Adds filler words, reactions, and informal phrasing."
+        )
+
+
 class TemplateOverrideBuilder(BasePromptBuilder):
     """Builder that overrides default prompts with template-based rendering."""
 
@@ -683,6 +725,18 @@ def create_default_registry(custom_templates: Sequence[PromptTemplateDefinition]
     registry.register(
         "test_paper_generation",
         TestPaperGenerationBuilder("default", "Default", "Exam-style test paper generation"),
+        is_default=True,
+    )
+
+    # Podcast
+    registry.register(
+        "podcast_dialogue",
+        PodcastDialogueBuilder("default", "Default", "Two-person podcast dialogue generation"),
+        is_default=True,
+    )
+    registry.register(
+        "podcast_dramatize",
+        PodcastDramatizeBuilder("default", "Default", "Dialogue dramatization for TTS"),
         is_default=True,
     )
 

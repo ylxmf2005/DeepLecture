@@ -140,6 +140,14 @@ _FUNC_PLACEHOLDER_RULES: dict[str, dict[str, set[str]]] = {
         "allowed": {"knowledge_items_json", "language", "user_instruction"},
         "required": {"knowledge_items_json", "language"},
     },
+    "podcast_dialogue": {
+        "allowed": {"knowledge_items_json", "language", "host_role", "guest_role", "user_instruction"},
+        "required": {"knowledge_items_json", "language"},
+    },
+    "podcast_dramatize": {
+        "allowed": {"dialogue_json", "language", "user_instruction"},
+        "required": {"dialogue_json", "language"},
+    },
 }
 
 
