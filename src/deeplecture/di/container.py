@@ -411,9 +411,24 @@ class Container:
         return self._cache["prompt_registry"]  # type: ignore[return-value]
 
     def refresh_prompt_registry(self) -> None:
-        """Drop cached prompt registry to reload runtime templates."""
+        """Drop cached prompt registry and all dependent use cases."""
         with self._lock:
             self._cache.pop("prompt_registry", None)
+            # Invalidate all use cases that hold a reference to the registry
+            for key in (
+                "subtitle_uc",
+                "timeline_uc",
+                "explanation_uc",
+                "ask_uc",
+                "note_uc",
+                "cheatsheet_uc",
+                "quiz_uc",
+                "flashcard_uc",
+                "test_paper_uc",
+                "podcast_uc",
+                "slide_lecture_uc",
+            ):
+                self._cache.pop(key, None)
 
     @property
     def audio_processor(self) -> FFmpegAudioProcessor:

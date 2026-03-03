@@ -81,6 +81,10 @@ class PromptBuilder(Protocol):
         """
         ...
 
+    def get_raw_templates(self) -> dict[str, str]:
+        """Return raw system/user template strings for editor pre-filling."""
+        ...
+
 
 class PromptRegistryProtocol(Protocol):
     """Contract for prompt selection and discovery by func_id."""

@@ -5,6 +5,7 @@ from deeplecture.presentation.api.shared.rate_limiter import init_rate_limiter, 
 from deeplecture.presentation.api.shared.response import (
     accepted,
     bad_request,
+    conflict,
     created,
     error,
     not_found,
@@ -15,6 +16,7 @@ from deeplecture.presentation.api.shared.response import (
 __all__ = [
     "accepted",
     "bad_request",
+    "conflict",
     "created",
     "error",
     "handle_errors",

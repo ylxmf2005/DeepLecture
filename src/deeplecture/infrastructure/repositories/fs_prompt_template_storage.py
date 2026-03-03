@@ -48,6 +48,30 @@ class FsPromptTemplateStorage:
                 return template
         return None
 
+    def delete_template(self, func_id: str, impl_id: str) -> bool:
+        """Delete a template by (func_id, impl_id). Returns True if found and removed."""
+        payload = self._load_payload()
+        raw_templates = payload.get("templates")
+        if not isinstance(raw_templates, list):
+            return False
+
+        next_templates: list[dict[str, object]] = []
+        found = False
+        for item in raw_templates:
+            if not isinstance(item, dict):
+                continue
+            existing = PromptTemplateDefinition.from_dict(item)
+            if existing and existing.func_id == func_id and existing.impl_id == impl_id:
+                found = True
+            else:
+                next_templates.append(item)
+
+        if not found:
+            return False
+
+        self._write_payload({"version": 1, "templates": next_templates})
+        return True
+
     def upsert_template(self, template: PromptTemplateDefinition) -> PromptTemplateDefinition:
         """Insert or replace a template."""
         payload = self._load_payload()

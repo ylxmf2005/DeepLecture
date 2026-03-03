@@ -71,28 +71,28 @@ class PromptRegistry:
         """
         Get prompt builder by (func_id, impl_id).
 
-        Args:
-            func_id: Function identifier
-            impl_id: Implementation ID. None uses default.
-
-        Returns:
-            PromptBuilder instance.
-
-        Raises:
-            ValueError: If func_id or impl_id not found.
+        Falls back to default builder when impl_id is unknown (e.g. deleted template
+        still referenced in a per-video config). Raises ValueError only for unknown func_id.
         """
         if func_id not in self._builders:
             valid = ", ".join(self._builders.keys()) or "<none>"
             raise ValueError(f"Unknown func_id: {func_id!r}. Available: {valid}")
 
-        impl = impl_id if impl_id else self.get_default_impl_id(func_id)
         builders = self._builders[func_id]
+        impl = impl_id if impl_id else self.get_default_impl_id(func_id)
 
-        if impl not in builders:
-            valid = ", ".join(builders.keys()) or "<none>"
-            raise ValueError(f"Unknown impl_id {impl!r} for {func_id!r}. Available: {valid}")
+        if impl in builders:
+            return builders[impl]
 
-        return builders[impl]
+        # Graceful fallback: stale impl_id → use default instead of crashing
+        default_id = self._defaults.get(func_id, "default")
+        logger.warning(
+            "Unknown impl_id %r for func_id %r, falling back to default %r",
+            impl,
+            func_id,
+            default_id,
+        )
+        return builders[default_id]
 
     def get_default_impl_id(self, func_id: str) -> str:
         """Get default implementation ID for a function."""
@@ -126,6 +126,11 @@ class PromptRegistry:
         """Return preview text for UI display."""
         builder = self.get(func_id, impl_id)
         return builder.get_preview_text()
+
+    def get_template_texts(self, func_id: str, impl_id: str) -> dict[str, str]:
+        """Return raw system/user template strings for pre-filling the editor."""
+        builder = self.get(func_id, impl_id)
+        return builder.get_raw_templates()
 
     def get_all_defaults(self) -> Mapping[str, str]:
         """Return all func_id -> default_impl_id mappings."""
@@ -167,6 +172,13 @@ class BasePromptBuilder:
 
     def get_preview_text(self) -> str:
         raise NotImplementedError
+
+    def get_raw_templates(self) -> dict[str, str]:
+        """Return raw template strings. Default builders return preview text as guidance."""
+        return {
+            "system_template": "",
+            "user_template": "",
+        }
 
 
 # =============================================================================
@@ -588,6 +600,12 @@ class TemplateOverrideBuilder(BasePromptBuilder):
 
     def get_preview_text(self) -> str:
         return f"Template override for {self._func_id} (fallbacks to default on render error)."
+
+    def get_raw_templates(self) -> dict[str, str]:
+        return {
+            "system_template": self._system_template,
+            "user_template": self._user_template,
+        }
 
     def _render(self, template: str, context: dict[str, str], *, field_name: str) -> str | None:
         try:

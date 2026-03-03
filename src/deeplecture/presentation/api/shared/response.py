@@ -65,6 +65,11 @@ def bad_request(message: str, code: str = "INVALID_REQUEST") -> Response:
     return error(message, code=code, status=400)
 
 
+def conflict(message: str) -> Response:
+    """409 Conflict."""
+    return error(message, code="CONFLICT", status=409)
+
+
 def unauthorized(message: str = "Unauthorized") -> Response:
     """401 Unauthorized."""
     return error(message, code="UNAUTHORIZED", status=401)

@@ -150,10 +150,65 @@ _FUNC_PLACEHOLDER_RULES: dict[str, dict[str, set[str]]] = {
     },
 }
 
+_PLACEHOLDER_DESCRIPTIONS: dict[str, str] = {
+    "segments": "Subtitle segments data (timestamped text)",
+    "language": "Output language for generated content",
+    "learner_profile": "User's learning profile and preferences",
+    "chunk_start": "Start index of the current segment chunk",
+    "chunk_end": "End index of the current segment chunk",
+    "deck_id": "Unique identifier for the slide deck",
+    "page_index": "Current slide page number (0-based)",
+    "total_pages": "Total number of pages in the slide deck",
+    "source_language": "Original language of the source material",
+    "target_language": "Language to translate into",
+    "neighbor_images": "Adjacent slide images for context",
+    "previous_transcript": "Transcript from the previous slide",
+    "accumulated_summaries": "Running summaries from previous slides",
+    "question": "The user's question text",
+    "context_block": "Relevant subtitle/transcript context around the query",
+    "history_block": "Previous conversation history for multi-turn Q&A",
+    "transcript_text": "Raw transcript text from ASR",
+    "background": "Extracted background context (topic, keywords, tone)",
+    "output_language": "Language for the generated output",
+    "timestamp": "Specific video timestamp being explained",
+    "subtitle_context": "Subtitle text surrounding the timestamp",
+    "instruction": "User-provided custom instructions",
+    "profile": "Learner profile for personalized generation",
+    "max_parts": "Maximum number of note parts to generate",
+    "part": "Specific note part being expanded",
+    "outline": "Generated note outline structure",
+    "context": "Source content for knowledge extraction",
+    "subject_type": "Academic subject type (e.g., math, biology)",
+    "user_instruction": "Custom user instructions for generation",
+    "coverage_mode": "Knowledge coverage mode (exam_focused, comprehensive)",
+    "knowledge_items_json": "JSON array of extracted knowledge items",
+    "target_pages": "Target number of cheatsheet pages",
+    "min_criticality": "Minimum criticality level to include (low, medium, high)",
+    "question_count": "Number of quiz questions to generate",
+    "host_role": "Podcast host persona description",
+    "guest_role": "Podcast guest persona description",
+    "dialogue_json": "JSON dialogue script for dramatization",
+}
+
 
 def list_template_func_ids() -> tuple[str, ...]:
     """Return prompt func_ids that support custom templates."""
     return tuple(sorted(_FUNC_PLACEHOLDER_RULES.keys()))
+
+
+def get_placeholder_metadata() -> dict[str, dict[str, object]]:
+    """Return placeholder metadata for all func_ids (for frontend consumption)."""
+    result: dict[str, dict[str, object]] = {}
+    for func_id, rules in _FUNC_PLACEHOLDER_RULES.items():
+        descriptions: dict[str, str] = {}
+        for placeholder in sorted(rules["allowed"]):
+            descriptions[placeholder] = _PLACEHOLDER_DESCRIPTIONS.get(placeholder, "")
+        result[func_id] = {
+            "allowed": sorted(rules["allowed"]),
+            "required": sorted(rules["required"]),
+            "descriptions": descriptions,
+        }
+    return result
 
 
 def now_iso_utc() -> str:
