@@ -57,6 +57,7 @@ def _register_blueprints(app: Flask) -> None:
         conversation_bp,
         explanation_bp,
         fact_verification_bp,
+        flashcard_bp,
         generation_bp,
         global_config_bp,
         live2d_bp,
@@ -82,6 +83,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(conversation_bp, url_prefix="/api/conversations")
     app.register_blueprint(explanation_bp, url_prefix="/api/content")
     app.register_blueprint(fact_verification_bp, url_prefix="/api/fact-verification")
+    app.register_blueprint(flashcard_bp, url_prefix="/api/flashcard")
     app.register_blueprint(generation_bp, url_prefix="/api/content")
     app.register_blueprint(live2d_bp, url_prefix="/api/live2d")
     app.register_blueprint(media_bp, url_prefix="/api/content")

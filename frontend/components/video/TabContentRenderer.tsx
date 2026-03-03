@@ -56,6 +56,11 @@ const QuizTab = dynamic(
     { loading: LoadingSpinner }
 );
 
+const FlashcardTab = dynamic(
+    () => import("@/components/features/FlashcardTab").then((mod) => mod.FlashcardTab),
+    { loading: LoadingSpinner }
+);
+
 // Grouped prop interfaces for better organization (ISP)
 
 /** Subtitle-related props for the sidebar subtitle panel */
@@ -114,6 +119,7 @@ export interface TabContentProps extends SubtitleProps, ProcessingProps, Timelin
     refreshCheatsheet: number;
     refreshBookmarks: number;
     refreshQuiz: number;
+    refreshFlashcard: number;
 }
 
 // Shared placeholder for "no video yet" state
@@ -239,6 +245,7 @@ export function renderTabContent(tabId: TabId, props: TabContentProps): React.Re
         refreshCheatsheet,
         refreshBookmarks,
         refreshQuiz,
+        refreshFlashcard,
         askContext,
         learnerProfile,
         subtitleContextWindowSeconds,
@@ -392,9 +399,14 @@ export function renderTabContent(tabId: TabId, props: TabContentProps): React.Re
                 />
             );
 
-        // Placeholder tabs
         case "flashcard":
-            return <FeaturePlaceholder label="Flashcard" />;
+            return (
+                <FlashcardTab
+                    videoId={videoId}
+                    onSeek={onSeek}
+                    refreshTrigger={refreshFlashcard}
+                />
+            );
         case "quiz":
             return (
                 <QuizTab

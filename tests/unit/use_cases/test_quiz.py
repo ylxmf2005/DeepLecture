@@ -254,6 +254,22 @@ def mock_path_resolver() -> MagicMock:
 
 
 @pytest.fixture
+def mock_metadata_storage() -> MagicMock:
+    """Create mock metadata storage."""
+    storage = MagicMock()
+    storage.get.return_value = None
+    return storage
+
+
+@pytest.fixture
+def mock_pdf_text_extractor() -> MagicMock:
+    """Create mock PDF text extractor."""
+    extractor = MagicMock()
+    extractor.extract_text.return_value = ""
+    return extractor
+
+
+@pytest.fixture
 def mock_prompt_registry() -> MagicMock:
     """Create mock prompt registry."""
     registry = MagicMock()
@@ -273,6 +289,8 @@ def quiz_usecase(
     mock_llm_provider: MagicMock,
     mock_path_resolver: MagicMock,
     mock_prompt_registry: MagicMock,
+    mock_metadata_storage: MagicMock,
+    mock_pdf_text_extractor: MagicMock,
 ) -> QuizUseCase:
     """Create QuizUseCase with mocked dependencies."""
     return QuizUseCase(
@@ -281,6 +299,8 @@ def quiz_usecase(
         llm_provider=mock_llm_provider,
         path_resolver=mock_path_resolver,
         prompt_registry=mock_prompt_registry,
+        metadata_storage=mock_metadata_storage,
+        pdf_text_extractor=mock_pdf_text_extractor,
     )
 
 
@@ -341,12 +361,13 @@ class TestQuizUseCaseGenerate:
         self,
         quiz_usecase: QuizUseCase,
         mock_quiz_storage: MagicMock,
+        mock_pdf_text_extractor: MagicMock,
+        mock_prompt_registry: MagicMock,
     ) -> None:
         """generate() should create quiz from subtitles."""
         request = GenerateQuizRequest(
             content_id="test-content-id",
             language="en",
-            question_count=5,
         )
 
         result = quiz_usecase.generate(request)
@@ -354,6 +375,11 @@ class TestQuizUseCaseGenerate:
         assert result.content_id == "test-content-id"
         assert len(result.items) >= 1
         mock_quiz_storage.save.assert_called_once()
+        mock_pdf_text_extractor.extract_text.assert_called()
+
+        build_calls = mock_prompt_registry.get.return_value.build.call_args_list
+        assert any(call.kwargs.get("coverage_mode") == "comprehensive" for call in build_calls)
+        assert any(call.kwargs.get("question_count") == 6 for call in build_calls)
 
     @pytest.mark.unit
     def test_generate_filters_invalid_items(
@@ -393,7 +419,6 @@ class TestQuizUseCaseGenerate:
         request = GenerateQuizRequest(
             content_id="test-content-id",
             language="en",
-            question_count=3,
         )
 
         result = quiz_usecase.generate(request)
@@ -407,16 +432,66 @@ class TestQuizUseCaseGenerate:
         self,
         quiz_usecase: QuizUseCase,
         mock_subtitle_storage: MagicMock,
+        mock_pdf_text_extractor: MagicMock,
     ) -> None:
         """generate() should raise when no content available."""
         mock_subtitle_storage.list_languages.return_value = []
+        mock_pdf_text_extractor.extract_text.return_value = ""
 
         request = GenerateQuizRequest(
             content_id="empty-content-id",
             language="en",
         )
 
-        with pytest.raises(ValueError, match="No content available"):
+        with pytest.raises(ValueError, match="no transcript or slides"):
+            quiz_usecase.generate(request)
+
+    @pytest.mark.unit
+    def test_generate_uses_slide_context_when_requested(
+        self,
+        quiz_usecase: QuizUseCase,
+        mock_subtitle_storage: MagicMock,
+        mock_pdf_text_extractor: MagicMock,
+        mock_path_resolver: MagicMock,
+    ) -> None:
+        """Mode 'slide' should generate quiz from PDF text when subtitles are missing."""
+        mock_subtitle_storage.list_languages.return_value = []
+        mock_path_resolver.build_content_path.side_effect = (
+            lambda content_id, *parts: f"/tmp/{content_id}/{'/'.join(parts)}"
+        )
+        mock_pdf_text_extractor.extract_text.side_effect = (
+            lambda path: "Slide text content" if path.endswith("source.pdf") else ""
+        )
+
+        request = GenerateQuizRequest(
+            content_id="test-content-id",
+            language="en",
+            context_mode="slide",
+        )
+
+        result = quiz_usecase.generate(request)
+
+        assert result.used_sources == ["slide"]
+        assert len(result.items) >= 1
+
+    @pytest.mark.unit
+    def test_generate_raises_when_slide_requested_but_missing(
+        self,
+        quiz_usecase: QuizUseCase,
+        mock_subtitle_storage: MagicMock,
+        mock_pdf_text_extractor: MagicMock,
+    ) -> None:
+        """Mode 'slide' should fail when no readable slide text exists."""
+        mock_subtitle_storage.list_languages.return_value = []
+        mock_pdf_text_extractor.extract_text.return_value = ""
+
+        request = GenerateQuizRequest(
+            content_id="empty-content-id",
+            language="en",
+            context_mode="slide",
+        )
+
+        with pytest.raises(ValueError, match="Requested slide context"):
             quiz_usecase.generate(request)
 
 
@@ -437,3 +512,17 @@ class TestQuizStats:
         assert result["valid_items"] == 8
         assert result["filtered_items"] == 2
         assert result["by_category"]["formula"] == 3
+
+
+class TestQuizAutoQuestionCount:
+    """Tests for auto question count strategy."""
+
+    @pytest.mark.unit
+    def test_auto_question_count_has_minimum_floor(self) -> None:
+        assert QuizUseCase._resolve_auto_question_count(0) == 6
+        assert QuizUseCase._resolve_auto_question_count(3) == 6
+
+    @pytest.mark.unit
+    def test_auto_question_count_scales_and_caps(self) -> None:
+        assert QuizUseCase._resolve_auto_question_count(10) == 15
+        assert QuizUseCase._resolve_auto_question_count(100) == 40

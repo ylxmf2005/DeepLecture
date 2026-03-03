@@ -15,6 +15,7 @@ export function SidebarTabs(props: SidebarTabsProps) {
     const isHydrated = useTabLayoutHydrated();
     const tabs = useTabLayoutStore((state) => state.panels.sidebar);
     const activeTab = useTabLayoutStore((state) => state.activeTabs.sidebar);
+    const mountedTabs = useTabLayoutStore((state) => state.mountedTabs.sidebar);
     const setActiveTab = useTabLayoutStore((state) => state.setActiveTab);
 
     const handleTabClick = (id: TabId) => {
@@ -68,7 +69,15 @@ export function SidebarTabs(props: SidebarTabsProps) {
             />
 
             <div className="flex-1 overflow-hidden relative min-h-0">
-                {renderTabContent(activeTab, props)}
+                {mountedTabs.filter((tabId) => tabs.includes(tabId)).map((tabId) => (
+                    <div
+                        key={tabId}
+                        className={tabId === activeTab ? "absolute inset-0 min-h-0" : "absolute inset-0 min-h-0 hidden"}
+                        aria-hidden={tabId !== activeTab}
+                    >
+                        {renderTabContent(tabId, props)}
+                    </div>
+                ))}
             </div>
         </div>
     );

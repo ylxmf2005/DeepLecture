@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import { HelpCircle, RefreshCw, AlertCircle, Loader2, Sparkles, CheckCircle2, XCircle } from "lucide-react";
 import { getQuiz, generateQuiz } from "@/lib/api/quiz";
 import type { QuizItem } from "@/lib/api/quiz";
-import { useLanguageSettings } from "@/stores/useGlobalSettingsStore";
+import { useLanguageSettings, useNoteSettings } from "@/stores/useGlobalSettingsStore";
 import { logger } from "@/shared/infrastructure";
 import { useSSEGenerationRetry } from "@/hooks/useSSEGenerationRetry";
 
@@ -29,6 +29,7 @@ interface AnswerState {
 
 export function QuizTab({ videoId, onSeek, refreshTrigger }: QuizTabProps) {
     const { translated: language } = useLanguageSettings();
+    const noteSettings = useNoteSettings();
     const [answers, setAnswers] = useState<Record<number, AnswerState>>({});
 
     const fetchContent = useCallback(async (): Promise<QuizData | null> => {
@@ -43,12 +44,11 @@ export function QuizTab({ videoId, onSeek, refreshTrigger }: QuizTabProps) {
         return await generateQuiz({
             contentId: videoId,
             language: language || "en",
-            questionCount: 5,
-            contextMode: "auto",
-            minCriticality: "medium",
+            contextMode: noteSettings.contextMode,
+            minCriticality: "low",
             subjectType: "auto",
         });
-    }, [videoId, language]);
+    }, [videoId, language, noteSettings.contextMode]);
 
     const { data, loading, loadError, isGenerating, clearError, handleGenerate } =
         useSSEGenerationRetry<QuizData>({

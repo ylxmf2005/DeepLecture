@@ -65,10 +65,10 @@ class GenerateQuizRequest:
 
     content_id: str
     language: str  # Required: output language
-    question_count: int = 5  # Number of questions to generate
-    context_mode: str = "auto"  # auto | subtitle | slide | both
+    question_count: int = 0  # 0 = auto (derived from knowledge items count)
+    context_mode: str = "both"  # subtitle | slide | both
     user_instruction: str = ""
-    min_criticality: str = "medium"  # high | medium | low
+    min_criticality: str = "low"  # high | medium | low
     subject_type: str = "auto"  # stem | humanities | auto
     llm_model: str | None = None  # Optional model override
     prompts: dict[str, str] | None = None  # Optional prompt overrides

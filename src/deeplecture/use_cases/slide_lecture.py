@@ -10,10 +10,12 @@ from typing import TYPE_CHECKING
 
 from deeplecture.domain import FeatureStatus, FeatureType, Segment
 from deeplecture.use_cases.dto.slide import PageWorkPlan, SlideGenerationResult, TranscriptPage, TranscriptSegment
+from deeplecture.use_cases.shared.context import build_slide_context_pdf_candidates
 from deeplecture.use_cases.shared.llm_json import parse_llm_json
 
 if TYPE_CHECKING:
     from deeplecture.config.settings import SlideLectureConfig
+    from deeplecture.domain.entities.content import ContentMetadata
     from deeplecture.use_cases.dto.slide import SlideGenerationRequest
     from deeplecture.use_cases.interfaces.audio import AudioProcessorProtocol
     from deeplecture.use_cases.interfaces.llm_provider import LLMProviderProtocol
@@ -109,7 +111,6 @@ class SlideLectureUseCase:
         if metadata is None:
             raise ValueError(f"Content not found: {content_id}")
 
-        content_dir = self._paths.get_content_dir(content_id)
         output_dir = self._paths.ensure_content_dir(content_id, "slide_lecture")
         out_video = os.path.join(output_dir, f"{request.output_basename}.mp4")
 
@@ -126,7 +127,7 @@ class SlideLectureUseCase:
         self._metadata.save(metadata)
 
         try:
-            pdf_path = self._resolve_pdf_path(content_id, content_dir)
+            pdf_path = self._resolve_pdf_path(content_id, metadata=metadata)
             page_images = self._render_pdf_pages(pdf_path=pdf_path, pages_dir=pages_dir)
             if not page_images:
                 raise RuntimeError("No pages rendered")
@@ -251,8 +252,10 @@ class SlideLectureUseCase:
             # Generate subtitles from transcript data
             # Delete any existing subtitles first to avoid stale data on failure
             ordered_page_indices = [p.page_index for p in ordered]
+            source_enhanced_language = f"{request.source_language}_enhanced"
             with contextlib.suppress(Exception):
                 self._subtitle_storage.delete(content_id, request.source_language)
+                self._subtitle_storage.delete(content_id, source_enhanced_language)
                 self._subtitle_storage.delete(content_id, request.target_language)
 
             try:
@@ -262,12 +265,17 @@ class SlideLectureUseCase:
                     segment_durations_by_page=segment_durations_by_page,
                     page_durations=page_durations,
                 )
+                # Keep slide-lecture subtitle semantics aligned with enhance+translate:
+                # source, source_enhanced, and target are all available.
                 self._subtitle_storage.save(content_id, segments_source, request.source_language)
+                self._subtitle_storage.save(content_id, segments_source, source_enhanced_language)
                 self._subtitle_storage.save(content_id, segments_target, request.target_language)
                 metadata = metadata.with_status(FeatureType.SUBTITLE.value, FeatureStatus.READY)
+                metadata = metadata.with_status(FeatureType.ENHANCE_TRANSLATE.value, FeatureStatus.READY)
             except Exception:
                 logger.exception("Subtitle generation failed for content_id=%s", content_id)
                 metadata = metadata.with_status(FeatureType.SUBTITLE.value, FeatureStatus.ERROR)
+                metadata = metadata.with_status(FeatureType.ENHANCE_TRANSLATE.value, FeatureStatus.ERROR)
 
             metadata = replace(
                 metadata.with_status(FeatureType.VIDEO.value, FeatureStatus.READY),
@@ -293,11 +301,12 @@ class SlideLectureUseCase:
                 with contextlib.suppress(OSError):
                     self._file_storage.remove_dir(workspace_dir)
 
-    def _resolve_pdf_path(self, content_id: str, content_dir: str) -> str:
-        candidates = [
-            self._paths.build_content_path(content_id, "slide", "slide.pdf"),
-            os.path.join(content_dir, "source.pdf"),
-        ]
+    def _resolve_pdf_path(self, content_id: str, *, metadata: ContentMetadata | None = None) -> str:
+        candidates = build_slide_context_pdf_candidates(
+            content_id,
+            metadata=metadata,
+            path_resolver=self._paths,
+        )
         for p in candidates:
             if self._file_storage.file_exists(p):
                 return p

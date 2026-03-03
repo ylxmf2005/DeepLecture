@@ -2,7 +2,6 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { useEffect, useState } from "react";
 
 export type TabId =
     | "subtitles"
@@ -20,27 +19,25 @@ export type TabId =
     | "podcast";
 
 export type PanelId = "sidebar" | "bottom";
+type PanelTabs = {
+    sidebar: TabId[];
+    bottom: TabId[];
+};
+type ActiveTabs = {
+    sidebar: TabId;
+    bottom: TabId;
+};
 
 interface DragSnapshot {
-    panels: {
-        sidebar: TabId[];
-        bottom: TabId[];
-    };
-    activeTabs: {
-        sidebar: TabId;
-        bottom: TabId;
-    };
+    panels: PanelTabs;
+    activeTabs: ActiveTabs;
+    mountedTabs: PanelTabs;
 }
 
 interface TabLayoutState {
-    panels: {
-        sidebar: TabId[];
-        bottom: TabId[];
-    };
-    activeTabs: {
-        sidebar: TabId;
-        bottom: TabId;
-    };
+    panels: PanelTabs;
+    activeTabs: ActiveTabs;
+    mountedTabs: PanelTabs;
     _dragSnapshot: DragSnapshot | null;
     _hasHydrated: boolean;
     setHasHydrated: (value: boolean) => void;
@@ -56,6 +53,8 @@ interface TabLayoutState {
 const DEFAULT_SIDEBAR_TABS: TabId[] = ["subtitles", "explanations", "timeline", "ask"];
 const DEFAULT_BOTTOM_TABS: TabId[] = ["verify", "notes", "bookmarks", "flashcard", "quiz", "test", "report", "cheatsheet", "podcast"];
 const ALL_TABS = new Set<TabId>([...DEFAULT_SIDEBAR_TABS, ...DEFAULT_BOTTOM_TABS]);
+const DEFAULT_ACTIVE_TABS: ActiveTabs = { sidebar: "subtitles", bottom: "verify" };
+const DEFAULT_MOUNTED_TABS: PanelTabs = { sidebar: ["subtitles"], bottom: ["verify"] };
 
 export const LAYOUT_CONSTRAINTS = {
     MAX_SIDEBAR_TABS: 4,
@@ -65,22 +64,43 @@ export const LAYOUT_CONSTRAINTS = {
 const MAX_SIDEBAR_TABS = LAYOUT_CONSTRAINTS.MAX_SIDEBAR_TABS;
 const MAX_BOTTOM_TABS = LAYOUT_CONSTRAINTS.MAX_BOTTOM_TABS;
 
+function normalizeMountedTabs(panels: PanelTabs, activeTabs: ActiveTabs, mountedTabs: PanelTabs): PanelTabs {
+    const sidebar = mountedTabs.sidebar.filter((tabId) => panels.sidebar.includes(tabId));
+    const bottom = mountedTabs.bottom.filter((tabId) => panels.bottom.includes(tabId));
+
+    if (panels.sidebar.includes(activeTabs.sidebar) && !sidebar.includes(activeTabs.sidebar)) {
+        sidebar.push(activeTabs.sidebar);
+    }
+    if (panels.bottom.includes(activeTabs.bottom) && !bottom.includes(activeTabs.bottom)) {
+        bottom.push(activeTabs.bottom);
+    }
+
+    return { sidebar, bottom };
+}
+
+function normalizeActiveTabs(panels: PanelTabs, activeTabs: ActiveTabs): ActiveTabs {
+    const sidebar = panels.sidebar.includes(activeTabs.sidebar) ? activeTabs.sidebar : (panels.sidebar[0] ?? DEFAULT_ACTIVE_TABS.sidebar);
+    const bottom = panels.bottom.includes(activeTabs.bottom) ? activeTabs.bottom : (panels.bottom[0] ?? DEFAULT_ACTIVE_TABS.bottom);
+    return { sidebar, bottom };
+}
+
 export const useTabLayoutStore = create<TabLayoutState>()(
     persist(
         (set, get) => ({
             panels: {
-                sidebar: DEFAULT_SIDEBAR_TABS,
-                bottom: DEFAULT_BOTTOM_TABS,
+                sidebar: [...DEFAULT_SIDEBAR_TABS],
+                bottom: [...DEFAULT_BOTTOM_TABS],
             },
-            activeTabs: {
-                sidebar: "subtitles",
-                bottom: "verify",
+            activeTabs: { ...DEFAULT_ACTIVE_TABS },
+            mountedTabs: {
+                sidebar: [...DEFAULT_MOUNTED_TABS.sidebar],
+                bottom: [...DEFAULT_MOUNTED_TABS.bottom],
             },
             _dragSnapshot: null,
             _hasHydrated: false,
             setHasHydrated: (value) => set({ _hasHydrated: value }),
             startDrag: () => {
-                const { panels, activeTabs } = get();
+                const { panels, activeTabs, mountedTabs } = get();
                 set({
                     _dragSnapshot: {
                         panels: {
@@ -88,6 +108,10 @@ export const useTabLayoutStore = create<TabLayoutState>()(
                             bottom: [...panels.bottom],
                         },
                         activeTabs: { ...activeTabs },
+                        mountedTabs: {
+                            sidebar: [...mountedTabs.sidebar],
+                            bottom: [...mountedTabs.bottom],
+                        },
                     },
                 });
             },
@@ -100,12 +124,13 @@ export const useTabLayoutStore = create<TabLayoutState>()(
                     set({
                         panels: _dragSnapshot.panels,
                         activeTabs: _dragSnapshot.activeTabs,
+                        mountedTabs: _dragSnapshot.mountedTabs,
                         _dragSnapshot: null,
                     });
                 }
             },
             moveTab: (tabId, sourcePanel, targetPanel, newIndex) => {
-                const { panels, activeTabs } = get();
+                const { panels, activeTabs, mountedTabs } = get();
 
                 if (sourcePanel === targetPanel) {
                     const list = panels[sourcePanel];
@@ -133,20 +158,28 @@ export const useTabLayoutStore = create<TabLayoutState>()(
                 targetList.splice(safeIndex, 0, tabId);
 
                 const newActiveTabs = { ...activeTabs };
+                const nextPanels: PanelTabs = {
+                    ...panels,
+                    [sourcePanel]: sourceList,
+                    [targetPanel]: targetList,
+                };
 
                 if (activeTabs[sourcePanel] === tabId && sourceList.length > 0) {
                     newActiveTabs[sourcePanel] = sourceList[0];
                 }
 
                 newActiveTabs[targetPanel] = tabId;
+                const normalizedActiveTabs = normalizeActiveTabs(nextPanels, newActiveTabs);
+                const nextMountedTabs = normalizeMountedTabs(nextPanels, normalizedActiveTabs, {
+                    ...mountedTabs,
+                    [sourcePanel]: mountedTabs[sourcePanel].filter((id) => id !== tabId && sourceList.includes(id)),
+                    [targetPanel]: mountedTabs[targetPanel].filter((id) => targetList.includes(id)),
+                });
 
                 set({
-                    panels: {
-                        ...panels,
-                        [sourcePanel]: sourceList,
-                        [targetPanel]: targetList,
-                    },
-                    activeTabs: newActiveTabs,
+                    panels: nextPanels,
+                    activeTabs: normalizedActiveTabs,
+                    mountedTabs: nextMountedTabs,
                 });
             },
             reorderTab: (panel, oldIndex, newIndex) => {
@@ -173,21 +206,26 @@ export const useTabLayoutStore = create<TabLayoutState>()(
                 if (!panels[panel].includes(tabId)) return;
 
                 set((state) => ({
-                    activeTabs: {
+                    activeTabs: normalizeActiveTabs(state.panels, {
                         ...state.activeTabs,
                         [panel]: tabId,
-                    },
+                    }),
+                    mountedTabs: normalizeMountedTabs(state.panels, {
+                        ...state.activeTabs,
+                        [panel]: tabId,
+                    }, state.mountedTabs),
                 }));
             },
             resetLayout: () => {
                 set({
                     panels: {
-                        sidebar: DEFAULT_SIDEBAR_TABS,
-                        bottom: DEFAULT_BOTTOM_TABS,
+                        sidebar: [...DEFAULT_SIDEBAR_TABS],
+                        bottom: [...DEFAULT_BOTTOM_TABS],
                     },
-                    activeTabs: {
-                        sidebar: "subtitles",
-                        bottom: "verify",
+                    activeTabs: { ...DEFAULT_ACTIVE_TABS },
+                    mountedTabs: {
+                        sidebar: [...DEFAULT_MOUNTED_TABS.sidebar],
+                        bottom: [...DEFAULT_MOUNTED_TABS.bottom],
                     },
                 });
             },
@@ -230,13 +268,26 @@ export const useTabLayoutStore = create<TabLayoutState>()(
                     }
                 }
 
+                const mergedPanels: PanelTabs = {
+                    sidebar: mergedSidebar,
+                    bottom: mergedBottom,
+                };
+                const persistedActiveTabs: ActiveTabs = {
+                    sidebar: persisted.activeTabs?.sidebar ?? currentState.activeTabs.sidebar,
+                    bottom: persisted.activeTabs?.bottom ?? currentState.activeTabs.bottom,
+                };
+                const mergedActiveTabs = normalizeActiveTabs(mergedPanels, persistedActiveTabs);
+                const mergedMountedTabs = normalizeMountedTabs(
+                    mergedPanels,
+                    mergedActiveTabs,
+                    currentState.mountedTabs ?? DEFAULT_MOUNTED_TABS
+                );
+
                 return {
                     ...currentState,
-                    panels: {
-                        sidebar: mergedSidebar,
-                        bottom: mergedBottom,
-                    },
-                    activeTabs: persisted.activeTabs || currentState.activeTabs,
+                    panels: mergedPanels,
+                    activeTabs: mergedActiveTabs,
+                    mountedTabs: mergedMountedTabs,
                 };
             },
             onRehydrateStorage: () => (state) => {
@@ -252,21 +303,7 @@ export const useTabLayoutStore = create<TabLayoutState>()(
  */
 export function useTabLayoutHydrated(): boolean {
     const storeHydrated = useTabLayoutStore((state) => state._hasHydrated);
-    const [hydrated, setHydrated] = useState(false);
-
-    useEffect(() => {
-        // Also handle SSR: on client mount, check if already hydrated
-        const unsubFinishHydration = useTabLayoutStore.persist.onFinishHydration(() => {
-            setHydrated(true);
-        });
-        // If already hydrated (e.g., fast refresh), set immediately
-        if (useTabLayoutStore.persist.hasHydrated()) {
-            setHydrated(true);
-        }
-        return unsubFinishHydration;
-    }, []);
-
-    return hydrated || storeHydrated;
+    return storeHydrated || useTabLayoutStore.persist.hasHydrated();
 }
 
 export function findTabPanel(panels: TabLayoutState["panels"], tabId: TabId): PanelId | null {

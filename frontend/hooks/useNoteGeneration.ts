@@ -45,6 +45,7 @@ export function useNoteGeneration({
     confirm,
 }: UseNoteGenerationParams): UseNoteGenerationReturn {
     const noteEditorRef = useRef<CrepeEditor | null>(null);
+    const pendingGeneratedNoteRef = useRef<string | null>(null);
     const noteSettings = useNoteSettings();
     const { notifyTaskComplete, notifyOperation } = useTaskNotification();
     // Track if we triggered the generation (vs page load with existing task)
@@ -54,6 +55,10 @@ export function useNoteGeneration({
 
     const handleNoteEditorReady = useCallback((editor: CrepeEditor) => {
         noteEditorRef.current = editor;
+        if (pendingGeneratedNoteRef.current !== null) {
+            editor.setMarkdown(pendingGeneratedNoteRef.current);
+            pendingGeneratedNoteRef.current = null;
+        }
     }, []);
 
     // Load note content when generation completes (SSE updates generatingNote to false)
@@ -66,16 +71,16 @@ export function useNoteGeneration({
             didTriggerGenerationRef.current = false;
 
             const loadNote = async () => {
-                const editor = noteEditorRef.current;
-                if (!editor) {
-                    log.warn("Editor not ready when note generation completed", { videoId });
-                    notifyTaskComplete("note_generation", "error", "Notes editor is not ready");
-                    return;
-                }
-
                 try {
                     const note = await getVideoNote(videoId);
-                    editor.setMarkdown(note.content || "");
+                    const content = note.content || "";
+                    const editor = noteEditorRef.current;
+                    if (editor) {
+                        editor.setMarkdown(content);
+                    } else {
+                        log.info("Editor not ready when note generation completed, deferring note apply", { videoId });
+                        pendingGeneratedNoteRef.current = content;
+                    }
                 } catch (error) {
                     log.error("Failed to load note after generation", toError(error), { videoId });
                     notifyOperation("note_load", "error", toError(error).message);
@@ -84,16 +89,10 @@ export function useNoteGeneration({
 
             loadNote();
         }
-    }, [generatingNote, notifyOperation, notifyTaskComplete, videoId]);
+    }, [generatingNote, notifyOperation, videoId]);
 
     const handleGenerateNote = useCallback(async () => {
         if (!videoId || generatingNote) return;
-
-        const editor = noteEditorRef.current;
-        if (!editor) {
-            notifyOperation("note_editor_unavailable", "error");
-            return;
-        }
 
         const confirmed = await confirm({
             title: "Generate AI Note",
@@ -106,6 +105,7 @@ export function useNoteGeneration({
         if (!confirmed) return;
 
         try {
+            pendingGeneratedNoteRef.current = null;
             setGeneratingNote(true);
             didTriggerGenerationRef.current = true;
 
@@ -114,7 +114,13 @@ export function useNoteGeneration({
             // If already ready (cached result), load immediately
             if (start.status === "ready" || !start.taskId) {
                 const note = await getVideoNote(videoId);
-                editor.setMarkdown(note.content || "");
+                const content = note.content || "";
+                const editor = noteEditorRef.current;
+                if (editor) {
+                    editor.setMarkdown(content);
+                } else {
+                    pendingGeneratedNoteRef.current = content;
+                }
                 notifyTaskComplete("note_generation", "ready");
                 setGeneratingNote(false);
                 didTriggerGenerationRef.current = false;
@@ -138,7 +144,6 @@ export function useNoteGeneration({
         setGeneratingNote,
         confirm,
         noteSettings.contextMode,
-        notifyOperation,
         notifyTaskComplete,
     ]);
 

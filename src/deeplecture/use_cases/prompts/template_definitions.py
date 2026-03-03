@@ -121,7 +121,7 @@ _FUNC_PLACEHOLDER_RULES: dict[str, dict[str, set[str]]] = {
         "required": {"language", "context_block", "part"},
     },
     "cheatsheet_extraction": {
-        "allowed": {"context", "language", "subject_type", "user_instruction"},
+        "allowed": {"context", "language", "subject_type", "user_instruction", "coverage_mode"},
         "required": {"context", "language"},
     },
     "cheatsheet_rendering": {

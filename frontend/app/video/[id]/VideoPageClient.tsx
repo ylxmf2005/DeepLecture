@@ -125,6 +125,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         refreshVerification,
         refreshCheatsheet,
         refreshQuiz,
+        refreshFlashcard,
         subtitleRefreshVersion,
         askContext,
         setAskContext,
@@ -240,6 +241,58 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 resumeTickTimerRef.current = null;
             }
         };
+    }, []);
+
+    // Fullscreen should never be sticky across refresh.
+    // During reload boot, repeatedly enforce exitFullscreen in case browser restores it asynchronously.
+    useEffect(() => {
+        if (typeof window === "undefined" || typeof document === "undefined") return;
+
+        const navEntry = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+        const legacyNavigation = (performance as Performance & { navigation?: { type?: number } }).navigation;
+        const isReload = navEntry?.type === "reload" || legacyNavigation?.type === 1;
+        if (!isReload) return;
+
+        const enforceNoFullscreen = async () => {
+            if (document.fullscreenElement) {
+                try {
+                    await document.exitFullscreen();
+                } catch (error) {
+                    log.warn("Failed to exit fullscreen during reload guard", {
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
+            }
+        };
+
+        const handleFullscreenChange = () => {
+            void enforceNoFullscreen();
+        };
+        document.addEventListener("fullscreenchange", handleFullscreenChange);
+
+        void enforceNoFullscreen();
+        const intervalId = window.setInterval(() => {
+            void enforceNoFullscreen();
+        }, 200);
+        const timeoutId = window.setTimeout(() => {
+            window.clearInterval(intervalId);
+            document.removeEventListener("fullscreenchange", handleFullscreenChange);
+        }, 2500);
+
+        return () => {
+            window.clearInterval(intervalId);
+            window.clearTimeout(timeoutId);
+            document.removeEventListener("fullscreenchange", handleFullscreenChange);
+        };
+    }, [videoId]);
+
+    // Transient fullscreen view modes must never survive navigation/hydration.
+    // Only run on mount — the store's sanitizeHydratedViewMode handles the persistence case.
+    useEffect(() => {
+        if (viewMode === "web-fullscreen" || viewMode === "fullscreen") {
+            setViewMode("normal");
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Smart Skip hook
@@ -687,6 +740,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             refreshCheatsheet={refreshCheatsheet}
                             refreshBookmarks={refreshBookmarks}
                             refreshQuiz={refreshQuiz}
+                            refreshFlashcard={refreshFlashcard}
                             askContext={askContext}
                             learnerProfile={learnerProfile}
                             subtitleContextWindowSeconds={subtitleContextWindowSeconds}
@@ -725,6 +779,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                         refreshCheatsheet={refreshCheatsheet}
                         refreshBookmarks={refreshBookmarks}
                         refreshQuiz={refreshQuiz}
+                        refreshFlashcard={refreshFlashcard}
                         askContext={askContext}
                         learnerProfile={learnerProfile}
                         subtitleContextWindowSeconds={subtitleContextWindowSeconds}
@@ -764,6 +819,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             refreshCheatsheet={refreshCheatsheet}
                             refreshBookmarks={refreshBookmarks}
                             refreshQuiz={refreshQuiz}
+                            refreshFlashcard={refreshFlashcard}
                             askContext={askContext}
                             learnerProfile={learnerProfile}
                             subtitleContextWindowSeconds={subtitleContextWindowSeconds}
@@ -797,6 +853,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             refreshCheatsheet={refreshCheatsheet}
                             refreshBookmarks={refreshBookmarks}
                             refreshQuiz={refreshQuiz}
+                            refreshFlashcard={refreshFlashcard}
                             askContext={askContext}
                             learnerProfile={learnerProfile}
                             subtitleContextWindowSeconds={subtitleContextWindowSeconds}

@@ -1,20 +1,21 @@
-"""Cheatsheet generation use case.
+"""Flashcard generation use case.
 
-Two-stage LLM pipeline for creating high-density exam cheatsheets:
-1. Extraction: Parse content into structured KnowledgeItems
-2. Rendering: Convert items to scannable Markdown format
+Two-stage LLM pipeline for creating active-recall flashcards:
+1. Extraction: Reuse cheatsheet knowledge extraction (with timestamps)
+2. Generation: Generate front/back card pairs from knowledge items
 """
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from deeplecture.use_cases.dto.cheatsheet import (
-    CheatsheetResult,
-    CheatsheetStats,
-    GeneratedCheatsheetResult,
-    KnowledgeItem,
+from deeplecture.use_cases.dto.flashcard import (
+    FlashcardItem,
+    FlashcardResult,
+    FlashcardStats,
+    GeneratedFlashcardResult,
 )
 from deeplecture.use_cases.shared.context import extract_first_available_slide_text
 from deeplecture.use_cases.shared.llm_json import parse_llm_json
@@ -25,7 +26,8 @@ from deeplecture.use_cases.shared.subtitle import (
 )
 
 if TYPE_CHECKING:
-    from deeplecture.use_cases.dto.cheatsheet import GenerateCheatsheetRequest
+    from deeplecture.use_cases.dto.cheatsheet import KnowledgeItem
+    from deeplecture.use_cases.dto.flashcard import GenerateFlashcardRequest
     from deeplecture.use_cases.interfaces import (
         LLMProtocol,
         LLMProviderProtocol,
@@ -33,107 +35,115 @@ if TYPE_CHECKING:
         PathResolverProtocol,
         PdfTextExtractorProtocol,
     )
-    from deeplecture.use_cases.interfaces.cheatsheet import CheatsheetStorageProtocol
+    from deeplecture.use_cases.interfaces.flashcard import FlashcardStorageProtocol
     from deeplecture.use_cases.interfaces.prompt_registry import PromptRegistryProtocol
     from deeplecture.use_cases.interfaces.subtitle import SubtitleStorageProtocol
 
 logger = logging.getLogger(__name__)
 
 
-class CheatsheetUseCase:
+def validate_flashcard_item(item: dict[str, Any]) -> tuple[bool, str]:
+    """Validate a single flashcard item.
+
+    Args:
+        item: Flashcard item dictionary
+
+    Returns:
+        Tuple of (is_valid, error_message)
     """
-    Two-stage cheatsheet generation use case.
+    front = item.get("front")
+    if not front or not isinstance(front, str):
+        return False, "missing or empty 'front'"
 
-    Stage 1 (Extraction): LLM extracts structured KnowledgeItems from content
-    Stage 2 (Rendering): LLM renders items into scannable Markdown cheatsheet
+    back = item.get("back")
+    if not back or not isinstance(back, str):
+        return False, "missing or empty 'back'"
 
-    This approach balances:
-    - Information density (filtering by criticality)
-    - Scannable format (tables, formulas, bullet points)
-    - Cost control (two focused stages vs. one large prompt)
+    ts = item.get("source_timestamp")
+    if ts is not None and (not isinstance(ts, int | float) or ts < 0):
+        return False, "invalid source_timestamp"
+
+    return True, ""
+
+
+class FlashcardUseCase:
+    """
+    Two-stage flashcard generation use case.
+
+    Stage 1 (Extraction): Reuse cheatsheet's knowledge extraction
+    Stage 2 (Generation): Generate front/back flashcard pairs
+
+    Key difference from Quiz: no configurable card count —
+    the model decides based on content density.
     """
 
     def __init__(
         self,
         *,
-        cheatsheet_storage: CheatsheetStorageProtocol,
+        flashcard_storage: FlashcardStorageProtocol,
         subtitle_storage: SubtitleStorageProtocol,
-        path_resolver: PathResolverProtocol,
         llm_provider: LLMProviderProtocol,
+        path_resolver: PathResolverProtocol,
         prompt_registry: PromptRegistryProtocol,
         metadata_storage: MetadataStorageProtocol | None = None,
         pdf_text_extractor: PdfTextExtractorProtocol | None = None,
     ) -> None:
-        """Initialize CheatsheetUseCase.
+        """Initialize FlashcardUseCase.
 
         Args:
-            cheatsheet_storage: Storage for cheatsheet files
+            flashcard_storage: Storage for flashcard files
             subtitle_storage: Storage for subtitle files (context source)
-            path_resolver: Path resolution service
             llm_provider: LLM provider for generation
+            path_resolver: Path resolution service
             prompt_registry: Prompt registry for prompt selection
             metadata_storage: Content metadata storage for slide source resolution (optional)
             pdf_text_extractor: PDF text extraction service for slide context (optional)
         """
-        self._cheatsheets = cheatsheet_storage
+        self._flashcards = flashcard_storage
         self._subtitles = subtitle_storage
-        self._paths = path_resolver
         self._llm_provider = llm_provider
+        self._paths = path_resolver
         self._prompt_registry = prompt_registry
         self._metadata = metadata_storage
         self._pdf_text_extractor = pdf_text_extractor
 
-    def get(self, content_id: str) -> CheatsheetResult:
-        """Get existing cheatsheet.
+    def get(self, content_id: str, language: str | None = None) -> FlashcardResult:
+        """Get existing flashcards.
 
         Args:
             content_id: Content identifier
+            language: Language filter (optional)
 
         Returns:
-            CheatsheetResult with content and metadata
+            FlashcardResult with items and metadata
         """
-        result = self._cheatsheets.load(content_id)
+        result = self._flashcards.load(content_id, language)
         if result is None:
-            return CheatsheetResult(content_id=content_id, content="", updated_at=None)
+            return FlashcardResult(content_id=content_id, language=language or "", items=[])
 
-        content, updated_at = result
-        return CheatsheetResult(
+        data, updated_at = result
+        items = [FlashcardItem.from_dict(item) for item in data.get("items", [])]
+        return FlashcardResult(
             content_id=content_id,
-            content=content,
-            updated_at=updated_at,
-        )
-
-    def save(self, content_id: str, content: str) -> CheatsheetResult:
-        """Save cheatsheet content.
-
-        Args:
-            content_id: Content identifier
-            content: Markdown content to save
-
-        Returns:
-            CheatsheetResult with saved content and timestamp
-        """
-        updated_at = self._cheatsheets.save(content_id, content)
-        return CheatsheetResult(
-            content_id=content_id,
-            content=content,
+            language=data.get("language", language or ""),
+            items=items,
             updated_at=updated_at,
         )
 
     def generate(
         self,
-        request: GenerateCheatsheetRequest,
-    ) -> GeneratedCheatsheetResult:
-        """Generate cheatsheet using two-stage LLM pipeline.
+        request: GenerateFlashcardRequest,
+    ) -> GeneratedFlashcardResult:
+        """Generate flashcards using two-stage LLM pipeline.
 
-        Stage 1: Extract KnowledgeItems from content
-        Stage 2: Render items into scannable Markdown
+        Stage 1: Extract KnowledgeItems from content (reuses cheatsheet extraction)
+        Stage 2: Generate flashcard pairs from knowledge items
 
         Args:
             request: Generation request with parameters
 
         Returns:
-            Generated cheatsheet result
+            Generated flashcard result
 
         Raises:
             ValueError: If no content sources available
@@ -149,8 +159,8 @@ class CheatsheetUseCase:
         # Sanitize user instruction
         instruction = sanitize_question(request.user_instruction)
 
-        # Stage 1: Extract knowledge items
-        items = self._extract_knowledge_items(
+        # Stage 1: Extract knowledge items (reuses cheatsheet extraction)
+        knowledge_items = self._extract_knowledge_items(
             context=context,
             language=request.language,
             subject_type=request.subject_type,
@@ -160,27 +170,32 @@ class CheatsheetUseCase:
         )
 
         # Filter by criticality
-        filtered_items = self._filter_by_criticality(items, request.min_criticality)
+        filtered_items = self._filter_by_criticality(knowledge_items, request.min_criticality)
 
-        # Stage 2: Render to Markdown
-        cheatsheet_content = self._render_cheatsheet(
+        # Stage 2: Generate flashcards from knowledge items
+        raw_flashcard_items = self._generate_flashcards(
             items=filtered_items,
             language=request.language,
-            target_pages=request.target_pages,
-            min_criticality=request.min_criticality,
+            user_instruction=instruction,
             llm=llm,
             prompts=request.prompts,
         )
 
+        # Validate and filter flashcard items
+        valid_items, stats = self._validate_and_filter(raw_flashcard_items)
+
         # Save and return
-        updated_at = self._cheatsheets.save(request.content_id, cheatsheet_content)
+        data = {
+            "items": [item.to_dict() for item in valid_items],
+            "language": request.language,
+            "stats": stats.to_dict(),
+        }
+        updated_at = self._flashcards.save(request.content_id, request.language, data)
 
-        # Build stats
-        stats = self._build_stats(filtered_items)
-
-        return GeneratedCheatsheetResult(
+        return GeneratedFlashcardResult(
             content_id=request.content_id,
-            content=cheatsheet_content,
+            language=request.language,
+            items=valid_items,
             updated_at=updated_at,
             used_sources=used_sources,
             stats=stats,
@@ -188,9 +203,11 @@ class CheatsheetUseCase:
 
     def _load_context(
         self,
-        request: GenerateCheatsheetRequest,
+        request: GenerateFlashcardRequest,
     ) -> tuple[str, list[str]]:
         """Load content context from available sources.
+
+        Uses timestamped subtitle context when subtitle source is selected.
 
         Args:
             request: Generation request
@@ -202,7 +219,7 @@ class CheatsheetUseCase:
         used_sources: list[str] = []
         context_parts: list[str] = []
 
-        subtitle_text = self._load_subtitle_context(request.content_id)
+        subtitle_text = self._load_subtitle_context_with_timestamps(request.content_id)
         slide_text = self._load_slide_context(request.content_id)
 
         use_subtitle, use_slide = self._select_sources(
@@ -221,8 +238,13 @@ class CheatsheetUseCase:
 
         return "\n\n".join(context_parts), used_sources
 
-    def _load_subtitle_context(self, content_id: str) -> str:
-        """Load subtitle text from best available source."""
+    def _load_subtitle_context_with_timestamps(self, content_id: str) -> str:
+        """Load subtitle text with timestamp markers for knowledge extraction.
+
+        Unlike the plain-text version used by Quiz/Cheatsheet, this method
+        prefixes each segment with [HH:MM:SS] so the LLM can associate
+        knowledge items with specific video positions.
+        """
         candidate_languages = prioritize_subtitle_languages(
             self._subtitles.list_languages(content_id),
         )
@@ -234,7 +256,14 @@ class CheatsheetUseCase:
         )
         if loaded:
             _lang_used, segments = loaded
-            lines = [seg.text.replace("\n", " ").strip() for seg in segments if seg.text.strip()]
+            lines: list[str] = []
+            for seg in segments:
+                text = seg.text.replace("\n", " ").strip()
+                if text:
+                    total_secs = int(seg.start)
+                    hours, remainder = divmod(total_secs, 3600)
+                    minutes, secs = divmod(remainder, 60)
+                    lines.append(f"[{hours:02d}:{minutes:02d}:{secs:02d}] {text}")
             if lines:
                 return "\n".join(lines)
 
@@ -270,7 +299,7 @@ class CheatsheetUseCase:
 
         if mode == "both":
             if not has_subtitle and not has_slide:
-                raise ValueError("Cannot generate cheatsheet: no transcript or slides are available for this content.")
+                raise ValueError("Cannot generate flashcards: no transcript or slides are available for this content.")
             return has_subtitle, has_slide
 
         raise ValueError("Unsupported context_mode. Allowed values are 'subtitle', 'slide', or 'both'.")
@@ -286,8 +315,10 @@ class CheatsheetUseCase:
     ) -> list[KnowledgeItem]:
         """Stage 1: Extract structured knowledge items from content.
 
+        Reuses cheatsheet extraction prompts for DRY compliance.
+
         Args:
-            context: Source content text
+            context: Source content text (with timestamp markers)
             language: Output language
             subject_type: Subject type hint
             user_instruction: Additional user guidance (sanitized)
@@ -297,14 +328,23 @@ class CheatsheetUseCase:
         Returns:
             List of extracted KnowledgeItems
         """
+        from deeplecture.use_cases.dto.cheatsheet import KnowledgeItem
+
         impl_id = prompts.get("cheatsheet_extraction") if prompts else None
         prompt_builder = self._prompt_registry.get("cheatsheet_extraction", impl_id)
+        coverage_instruction = (
+            "Coverage priority: extract comprehensive knowledge points across the full lecture. "
+            "Do not limit to one item per module, and split compound concepts into separate items."
+        )
+        combined_instruction = (
+            f"{coverage_instruction}\n{user_instruction.strip()}" if user_instruction.strip() else coverage_instruction
+        )
         spec = prompt_builder.build(
             context=context,
             language=language,
             subject_type=subject_type,
-            user_instruction=user_instruction,
-            coverage_mode="exam_focused",
+            user_instruction=combined_instruction,
+            coverage_mode="comprehensive",
         )
 
         response = llm.complete(
@@ -313,7 +353,7 @@ class CheatsheetUseCase:
         )
 
         # Parse JSON response
-        items_data = parse_llm_json(response, default_type=list, context="cheatsheet extraction")
+        items_data = parse_llm_json(response, default_type=list, context="knowledge extraction")
 
         return [
             KnowledgeItem(
@@ -346,64 +386,81 @@ class CheatsheetUseCase:
 
         return [item for item in items if levels.get(item.criticality, 2) >= min_level]
 
-    def _render_cheatsheet(
+    def _generate_flashcards(
         self,
         items: list[KnowledgeItem],
         language: str,
-        target_pages: int,
-        min_criticality: str,
+        user_instruction: str,
         llm: LLMProtocol,
         prompts: dict[str, str] | None,
-    ) -> str:
-        """Stage 2: Render knowledge items into scannable Markdown.
+    ) -> list[dict[str, Any]]:
+        """Stage 2: Generate flashcard pairs from knowledge items.
 
         Args:
             items: Filtered knowledge items
             language: Output language
-            target_pages: Target length in pages
-            min_criticality: Criticality filter used
+            user_instruction: Additional user guidance (sanitized)
             llm: LLM instance to use
             prompts: Prompt selection mapping
 
         Returns:
-            Rendered Markdown cheatsheet
+            List of raw flashcard item dictionaries
         """
-        import json
-
         items_json = json.dumps(
             [item.to_dict() for item in items],
             ensure_ascii=False,
             indent=2,
         )
 
-        impl_id = prompts.get("cheatsheet_rendering") if prompts else None
-        prompt_builder = self._prompt_registry.get("cheatsheet_rendering", impl_id)
+        impl_id = prompts.get("flashcard_generation") if prompts else None
+        prompt_builder = self._prompt_registry.get("flashcard_generation", impl_id)
         spec = prompt_builder.build(
             knowledge_items_json=items_json,
             language=language,
-            target_pages=target_pages,
-            min_criticality=min_criticality,
+            user_instruction=user_instruction,
         )
 
-        return llm.complete(
+        response = llm.complete(
             spec.user_prompt,
             system_prompt=spec.system_prompt,
         )
 
-    def _build_stats(self, items: list[KnowledgeItem]) -> CheatsheetStats:
-        """Build statistics from knowledge items.
+        # Parse JSON response
+        flashcard_data = parse_llm_json(response, default_type=list, context="flashcard generation")
+        if not isinstance(flashcard_data, list):
+            return []
+        return flashcard_data
+
+    def _validate_and_filter(
+        self,
+        raw_items: list[dict[str, Any]],
+    ) -> tuple[list[FlashcardItem], FlashcardStats]:
+        """Validate and filter flashcard items.
 
         Args:
-            items: List of knowledge items
+            raw_items: Raw flashcard item dictionaries from LLM
 
         Returns:
-            Statistics about the items
+            Tuple of (valid_items, stats)
         """
+        valid_items: list[FlashcardItem] = []
         by_category: dict[str, int] = {}
-        for item in items:
-            by_category[item.category] = by_category.get(item.category, 0) + 1
 
-        return CheatsheetStats(
-            total_items=len(items),
+        for raw_item in raw_items:
+            is_valid, error = validate_flashcard_item(raw_item)
+            if is_valid:
+                item = FlashcardItem.from_dict(raw_item)
+                valid_items.append(item)
+                if item.source_category:
+                    by_category[item.source_category] = by_category.get(item.source_category, 0) + 1
+            else:
+                logger.debug("Filtered invalid flashcard item: %s", error)
+
+        stats = FlashcardStats(
+            total_items=len(raw_items),
+            valid_items=len(valid_items),
+            filtered_items=len(raw_items) - len(valid_items),
             by_category=by_category,
         )
+
+        return valid_items, stats

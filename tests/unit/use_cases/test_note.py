@@ -253,6 +253,50 @@ class TestNoteUseCaseGenerateNote:
 
         mock_note_storage.save.assert_not_called()
 
+    @pytest.mark.unit
+    def test_generate_note_uses_source_pdf_context_for_slide_content(
+        self,
+        usecase: NoteUseCase,
+        mock_metadata_storage: MagicMock,
+        mock_subtitle_storage: MagicMock,
+        mock_pdf_extractor: MagicMock,
+    ) -> None:
+        """Slide content should use source.pdf fallback paths when slide/slide.pdf is missing."""
+        metadata = ContentMetadata(
+            id="test-content-id",
+            type=ContentType.SLIDE,
+            original_filename="slides.pdf",
+            source_file="/abs/content/test-content-id/source.pdf",
+        )
+        mock_metadata_storage.get.return_value = metadata
+        mock_subtitle_storage.list_languages.return_value = []
+
+        def _extract(path: str) -> str:
+            if path == metadata.source_file:
+                return "Slide text from source.pdf"
+            raise FileNotFoundError(path)
+
+        mock_pdf_extractor.extract_text.side_effect = _extract
+
+        usecase._build_outline = MagicMock(  # type: ignore[method-assign]
+            return_value=[NotePart(id=1, title="Part 1", summary="", focus_points=[])]
+        )
+        usecase._generate_parts_parallel = MagicMock(  # type: ignore[method-assign]
+            return_value="## Part 1\n\nGenerated content."
+        )
+
+        request = GenerateNoteRequest(
+            content_id="test-content-id",
+            language="zh",
+            context_mode="both",
+        )
+
+        result = usecase.generate_note(request)
+
+        assert result.used_sources == ["slide"]
+        called_paths = [call.args[0] for call in mock_pdf_extractor.extract_text.call_args_list]
+        assert metadata.source_file in called_paths
+
 
 class TestNoteUseCaseSelectSources:
     """Tests for _select_sources() helper."""
@@ -265,11 +309,10 @@ class TestNoteUseCaseSelectSources:
         assert NoteUseCase._select_sources(mode="both", has_subtitle=True, has_slides=True) == (True, True)
 
     @pytest.mark.unit
-    def test_select_sources_auto_uses_available_sources(self) -> None:
-        """Mode 'auto' should behave like 'both' (use what's available)."""
-        assert NoteUseCase._select_sources(mode="auto", has_subtitle=True, has_slides=False) == (True, False)
-        assert NoteUseCase._select_sources(mode="auto", has_subtitle=False, has_slides=True) == (False, True)
-        assert NoteUseCase._select_sources(mode="auto", has_subtitle=True, has_slides=True) == (True, True)
+    def test_select_sources_rejects_unsupported_mode(self) -> None:
+        """Unsupported mode should raise ValueError."""
+        with pytest.raises(ValueError, match="Unsupported context_mode"):
+            NoteUseCase._select_sources(mode="auto", has_subtitle=True, has_slides=True)
 
     @pytest.mark.unit
     def test_select_sources_requires_any_source(self) -> None:

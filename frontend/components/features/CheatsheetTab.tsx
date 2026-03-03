@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { ScrollText, RefreshCw, AlertCircle, Loader2, Pencil, Save, X, Sparkles } from "lucide-react";
 import { getVideoCheatsheet, saveVideoCheatsheet, generateVideoCheatsheet } from "@/lib/api";
-import { useLanguageSettings } from "@/stores/useGlobalSettingsStore";
+import { useLanguageSettings, useNoteSettings } from "@/stores/useGlobalSettingsStore";
 import { MarkdownRenderer } from "@/components/editor/MarkdownRenderer";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
@@ -25,6 +25,7 @@ interface CheatsheetData {
 
 export function CheatsheetTab({ videoId, onSeek, refreshTrigger, onAddToNotes }: CheatsheetTabProps) {
     const { translated: language } = useLanguageSettings();
+    const noteSettings = useNoteSettings();
     const [isEditing, setIsEditing] = useState(false);
     const [editContent, setEditContent] = useState("");
     const [isSaving, setIsSaving] = useState(false);
@@ -41,12 +42,12 @@ export function CheatsheetTab({ videoId, onSeek, refreshTrigger, onAddToNotes }:
         return await generateVideoCheatsheet({
             contentId: videoId,
             language: language || "en",
-            contextMode: "auto",
+            contextMode: noteSettings.contextMode,
             minCriticality: "medium",
             targetPages: 2,
             subjectType: "auto",
         });
-    }, [videoId, language]);
+    }, [videoId, language, noteSettings.contextMode]);
 
     const { data, loading, loadError, isGenerating, clearError, handleGenerate } =
         useSSEGenerationRetry<CheatsheetData>({

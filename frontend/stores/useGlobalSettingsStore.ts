@@ -6,6 +6,7 @@ import {
     GlobalSettings,
     GlobalSettingsActions,
     DEFAULT_GLOBAL_SETTINGS,
+    ViewMode,
 } from "./types";
 import { getNoteDefaults, getAppConfig, getGlobalConfig, putGlobalConfig, deleteGlobalConfig } from "@/lib/api";
 import { logger } from "@/shared/infrastructure";
@@ -20,6 +21,19 @@ interface GlobalSettingsState extends GlobalSettings {
 }
 
 type GlobalSettingsStore = GlobalSettingsState & GlobalSettingsActions;
+
+const PERSISTABLE_VIEW_MODES = new Set<ViewMode>(["normal", "widescreen"]);
+
+function isPersistableViewMode(mode: ViewMode): boolean {
+    return PERSISTABLE_VIEW_MODES.has(mode);
+}
+
+function sanitizeHydratedViewMode(mode: ViewMode | undefined): ViewMode | undefined {
+    if (mode === "web-fullscreen" || mode === "fullscreen") {
+        return "normal";
+    }
+    return mode;
+}
 
 function normalizeTaskModelMap(
     value: Record<string, string | null> | undefined,
@@ -223,11 +237,22 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
             set({ _languageLoading: true });
             try {
                 const payload = await getGlobalConfig();
-                const merged = mergeSettings(payload, get());
+                const sanitizedViewMode = sanitizeHydratedViewMode(payload.viewMode);
+                const normalizedPayload = sanitizedViewMode === payload.viewMode
+                    ? payload
+                    : { ...payload, viewMode: sanitizedViewMode };
+                const merged = mergeSettings(normalizedPayload, get());
                 set({
                     ...merged,
                     _hydrated: true,
                 });
+
+                if (sanitizedViewMode !== payload.viewMode && sanitizedViewMode !== undefined) {
+                    // Clean up historical persisted fullscreen values.
+                    putGlobalConfig({ viewMode: sanitizedViewMode }).catch((e) => {
+                        log.error("Failed to normalize persisted viewMode", toError(e));
+                    });
+                }
             } catch (e) {
                 log.error("Failed to load global config from server", toError(e));
                 set({ _hydrated: true });
@@ -249,10 +274,13 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
         },
 
         setViewMode: (mode) => {
-            set({ viewMode: mode });
-            putGlobalConfig({ viewMode: mode }).catch((e) => {
-                log.error("Failed to save viewMode", toError(e));
-            });
+            const normalizedMode: ViewMode = mode === "fullscreen" ? "normal" : mode;
+            set({ viewMode: normalizedMode });
+            if (isPersistableViewMode(normalizedMode)) {
+                putGlobalConfig({ viewMode: normalizedMode }).catch((e) => {
+                    log.error("Failed to save viewMode", toError(e));
+                });
+            }
         },
 
         setBrowserNotificationsEnabled: (value) => {

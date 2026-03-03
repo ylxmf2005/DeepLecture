@@ -51,6 +51,9 @@ REQUIREMENTS:
 - answer_index is 0-based (0, 1, 2, or 3)
 - Output language: {language}
 - Preserve technical terms, formulas, and proper nouns in original language
+- Coverage priority: cover ALL knowledge items before repeating a topic
+- If question_count exceeds knowledge item count, generate extra questions from
+  different angles (definition, application, contrast, error diagnosis)
 
 DISTRACTOR GENERATION (CRITICAL):
 Each distractor MUST target a DIFFERENT misconception type:

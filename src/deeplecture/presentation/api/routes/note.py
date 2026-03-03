@@ -65,10 +65,14 @@ def generate_note() -> Response:
     if not language:
         return bad_request("language is required")
 
-    context_mode = data.get("context_mode", "auto")
+    context_mode = data.get("context_mode", "both")
     learner_profile = data.get("learner_profile", "")
     user_instruction = data.get("user_instruction") or data.get("instruction") or ""
     max_parts = validate_positive_int(data.get("max_parts"), field_name="max_parts", required=False, default=None)
+
+    valid_context_modes = {"subtitle", "slide", "both"}
+    if context_mode not in valid_context_modes:
+        return bad_request(f"context_mode must be one of: {', '.join(sorted(valid_context_modes))}")
 
     # Model and prompt selection (optional, None = use defaults)
     llm_model = data.get("llm_model") or None

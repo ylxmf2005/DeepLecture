@@ -58,7 +58,7 @@ def generate_cheatsheet() -> Response:
     Parameters:
         content_id: Content identifier (required)
         language: Output language (required)
-        context_mode: "auto" | "subtitle" | "slide" | "both" (default: "auto")
+        context_mode: "subtitle" | "slide" | "both" (default: "both")
         user_instruction: Additional generation guidance (optional)
         min_criticality: "high" | "medium" | "low" (default: "medium")
         target_pages: Target length in pages (default: 2)
@@ -71,16 +71,16 @@ def generate_cheatsheet() -> Response:
     if not language:
         return bad_request("language is required")
 
-    context_mode = data.get("context_mode", "auto")
+    context_mode = data.get("context_mode", "both")
     user_instruction = data.get("user_instruction") or data.get("instruction") or ""
     min_criticality = data.get("min_criticality", "medium")
     target_pages = validate_positive_int(data.get("target_pages"), field_name="target_pages", required=False, default=2)
     subject_type = data.get("subject_type", "auto")
 
     # Validate enum values
-    valid_context_modes = {"auto", "subtitle", "slide", "both"}
+    valid_context_modes = {"subtitle", "slide", "both"}
     if context_mode not in valid_context_modes:
-        return bad_request(f"context_mode must be one of: {', '.join(valid_context_modes)}")
+        return bad_request(f"context_mode must be one of: {', '.join(sorted(valid_context_modes))}")
 
     valid_criticality = {"high", "medium", "low"}
     if min_criticality not in valid_criticality:

@@ -414,6 +414,7 @@ class CheatsheetExtractionBuilder(BasePromptBuilder):
             language=kwargs["language"],
             subject_type=kwargs.get("subject_type", "auto"),
             user_instruction=kwargs.get("user_instruction", ""),
+            coverage_mode=kwargs.get("coverage_mode", "exam_focused"),
         )
         return PromptSpec(user_prompt=user_prompt, system_prompt=system_prompt)
 
@@ -454,7 +455,7 @@ class QuizGenerationBuilder(BasePromptBuilder):
         system_prompt, user_prompt = build_quiz_generation_prompts(
             knowledge_items_json=kwargs["knowledge_items_json"],
             language=kwargs["language"],
-            question_count=kwargs.get("question_count", 5),
+            question_count=kwargs["question_count"],
             user_instruction=kwargs.get("user_instruction", ""),
         )
         return PromptSpec(user_prompt=user_prompt, system_prompt=system_prompt)
@@ -463,6 +464,26 @@ class QuizGenerationBuilder(BasePromptBuilder):
         return (
             "Generates multiple-choice quiz questions from knowledge items. "
             "Uses misconception-based distractor generation strategy."
+        )
+
+
+class FlashcardGenerationBuilder(BasePromptBuilder):
+    """Builder for flashcard generation prompts."""
+
+    def build(self, **kwargs) -> PromptSpec:
+        from deeplecture.use_cases.prompts.flashcard import build_flashcard_generation_prompts
+
+        system_prompt, user_prompt = build_flashcard_generation_prompts(
+            knowledge_items_json=kwargs["knowledge_items_json"],
+            language=kwargs["language"],
+            user_instruction=kwargs.get("user_instruction", ""),
+        )
+        return PromptSpec(user_prompt=user_prompt, system_prompt=system_prompt)
+
+    def get_preview_text(self) -> str:
+        return (
+            "Generates front/back flashcard pairs from knowledge items. "
+            "Designed for active recall study with video timestamp linking."
         )
 
 
@@ -628,6 +649,13 @@ def create_default_registry(custom_templates: Sequence[PromptTemplateDefinition]
     registry.register(
         "quiz_generation",
         QuizGenerationBuilder("default", "Default", "Misconception-based MCQ generation"),
+        is_default=True,
+    )
+
+    # Flashcard
+    registry.register(
+        "flashcard_generation",
+        FlashcardGenerationBuilder("default", "Default", "Flashcard generation from knowledge items"),
         is_default=True,
     )
 

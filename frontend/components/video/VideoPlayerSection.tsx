@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useState, useRef, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { VideoPlayer, VideoPlayerRef, SubtitlePlayerMode } from "@/components/video/VideoPlayer";
 import { ContentItem, API_BASE_URL, SyncTimeline } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -15,42 +16,16 @@ import {
     Minimize,
     Minimize2,
 } from "lucide-react";
-import { Worker, Viewer, SpecialZoomLevel } from "@react-pdf-viewer/core";
-import { defaultLayoutPlugin } from "@react-pdf-viewer/default-layout";
 import type { SubtitleDisplayMode, ViewMode } from "@/stores/types";
 import { Subtitle } from "@/lib/srt";
 import { logger } from "@/shared/infrastructure";
 
+// Dynamically import PdfSlideViewer with SSR disabled to avoid React Compiler
+// hook-order mismatches between SSR and client hydration.  The PDF viewer
+// requires browser APIs anyway, so skipping SSR is the correct approach.
+const PdfSlideViewer = dynamic(() => import("./PdfSlideViewer"), { ssr: false });
+
 const log = logger.scope("VideoPlayerSection");
-const PDF_WORKER_URL = "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
-
-interface PdfSlideViewerProps {
-    fileUrl: string;
-}
-
-function PdfSlideViewer({ fileUrl }: PdfSlideViewerProps) {
-    const layoutPlugin = useMemo(
-        () =>
-            defaultLayoutPlugin({
-                // Remove the sidebar tabs to avoid oversized thumbnail/navigation panel.
-                sidebarTabs: () => [],
-            }),
-        []
-    );
-
-    return (
-        <div className="w-full h-full bg-[#111827] [&_.rpv-core__inner-page]:min-h-full [&_.rpv-core__viewer]:h-full">
-            <Worker workerUrl={PDF_WORKER_URL}>
-                <Viewer
-                    key={fileUrl}
-                    fileUrl={fileUrl}
-                    defaultScale={SpecialZoomLevel.PageWidth}
-                    plugins={[layoutPlugin]}
-                />
-            </Worker>
-        </div>
-    );
-}
 
 interface VideoPlayerSectionProps {
     content: ContentItem;
@@ -224,7 +199,7 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
 
         return (
             <div className={cn(
-                "relative group",
+                "relative group overflow-hidden",
                 viewMode === "web-fullscreen" ? "w-full h-full" : "shrink-0",
                 className
             )}>
@@ -263,8 +238,10 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                     </div>
                 </div>
 
+                {/* Use visibility:hidden + absolute positioning instead of display:none
+                    so the PDF viewer keeps its layout tree alive and preserves scroll position. */}
                 <div className={cn(
-                    playerTab === "player" ? "" : "hidden",
+                    playerTab === "player" ? "" : "invisible absolute inset-0 pointer-events-none",
                     viewMode === "web-fullscreen" && "h-full"
                 )}>
                     {content.type === "slide" && (content.videoStatus !== "ready" || generatingVideo) ? (
@@ -283,7 +260,9 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                                     className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
                                 >
                                     {generatingVideo && <Loader2 className="w-4 h-4 animate-spin" />}
-                                    {generatingVideo ? "Regenerating Video..." : "Generate Lecture Video"}
+                                    {generatingVideo
+                                        ? (content.videoStatus === "ready" ? "Regenerating Video..." : "Generating Video...")
+                                        : (content.videoStatus === "ready" ? "Regenerate Lecture Video" : "Generate Lecture Video")}
                                 </button>
                             </div>
                         </div>
@@ -339,7 +318,7 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                         currentViewMode === "web-fullscreen" || isSlideFullscreen
                             ? "h-full"
                             : "h-[72vh] min-h-[480px] max-h-[calc(100vh-180px)]",
-                        playerTab === "slide" ? "" : "hidden"
+                        playerTab === "slide" ? "" : "invisible absolute top-0 left-0 w-full pointer-events-none"
                     )}
                 >
                     {renderSlideTab()}

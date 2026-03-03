@@ -1,4 +1,4 @@
-"""Quiz routes."""
+"""Flashcard routes."""
 
 from __future__ import annotations
 
@@ -20,26 +20,26 @@ from deeplecture.presentation.api.shared.validation import (
     validate_content_id,
     validate_language,
 )
-from deeplecture.use_cases.dto.quiz import GenerateQuizRequest
+from deeplecture.use_cases.dto.flashcard import GenerateFlashcardRequest
 
 if TYPE_CHECKING:
     from flask import Response
 
-bp = Blueprint("quiz", __name__)
+bp = Blueprint("flashcard", __name__)
 
 
 @bp.route("/<content_id>", methods=["GET"])
 @handle_errors
-def get_quiz(content_id: str) -> Response:
-    """Get quiz for content."""
+def get_flashcards(content_id: str) -> Response:
+    """Get flashcards for content."""
     content_id = validate_content_id(content_id)
     language = validate_language(request.args.get("language"), field_name="language", default="") or None
 
     container = get_container()
-    result = container.quiz_usecase.get(content_id, language)
+    result = container.flashcard_usecase.get(content_id, language)
 
     if not result.items:
-        return not_found(f"Quiz not found for {content_id}")
+        return not_found(f"Flashcards not found for {content_id}")
 
     return success(result.to_dict())
 
@@ -47,8 +47,8 @@ def get_quiz(content_id: str) -> Response:
 @bp.route("/<content_id>/generate", methods=["POST"])
 @rate_limit("generate")
 @handle_errors
-def generate_quiz(content_id: str) -> Response:
-    """Generate quiz using LLM (async task)."""
+def generate_flashcards(content_id: str) -> Response:
+    """Generate flashcards using LLM (async task)."""
     content_id = validate_content_id(content_id)
     data = request.get_json() or {}
 
@@ -56,11 +56,6 @@ def generate_quiz(content_id: str) -> Response:
     language = validate_language(data.get("language"), field_name="language", default="")
     if not language:
         return bad_request("language is required")
-
-    # Optional parameters (0 = auto: derived from extracted knowledge items)
-    question_count = data.get("question_count", 0)
-    if not isinstance(question_count, int) or question_count < 0:
-        return bad_request("question_count must be a non-negative integer (0 = auto)")
 
     context_mode = data.get("context_mode", "both")
     user_instruction = data.get("user_instruction", "").strip()
@@ -87,14 +82,13 @@ def generate_quiz(content_id: str) -> Response:
     llm_model, _ = resolve_models_for_task(
         container=container,
         content_id=content_id,
-        task_key="quiz_generation",
+        task_key="flashcard_generation",
         llm_model=llm_model,
         tts_model=None,
     )
-    req = GenerateQuizRequest(
+    req = GenerateFlashcardRequest(
         content_id=content_id,
         language=language,
-        question_count=question_count,
         context_mode=context_mode,
         user_instruction=user_instruction,
         min_criticality=min_criticality,
@@ -103,17 +97,16 @@ def generate_quiz(content_id: str) -> Response:
         prompts=prompts,
     )
 
-    def _run_generation(ctx: object) -> dict:
-        result = container.quiz_usecase.generate(req)
+    def _run_generation(_ctx: object) -> dict:
+        result = container.flashcard_usecase.generate(req)
         return result.to_dict()
 
     task_id = container.task_manager.submit(
         content_id=content_id,
-        task_type="quiz_generation",
+        task_type="flashcard_generation",
         task=_run_generation,
         metadata={
             "language": language,
-            "question_count": question_count,
             "context_mode": context_mode,
         },
     )
@@ -123,6 +116,6 @@ def generate_quiz(content_id: str) -> Response:
             "content_id": content_id,
             "task_id": task_id,
             "status": "pending",
-            "message": "Quiz generation started",
+            "message": "Flashcard generation started",
         }
     )
