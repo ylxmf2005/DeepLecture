@@ -73,7 +73,7 @@ export function TemplateCard({
 
             {/* Action buttons — hidden in video scope */}
             {!isVideoScope && (
-                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                <div className="flex items-center gap-0.5 shrink-0">
                     {!isDefault && (
                         <button
                             type="button"
