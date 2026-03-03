@@ -71,6 +71,11 @@ const PodcastTab = dynamic(
     { loading: LoadingSpinner }
 );
 
+const ReadAloudTab = dynamic(
+    () => import("@/components/features/ReadAloudTab").then((mod) => mod.ReadAloudTab),
+    { loading: LoadingSpinner }
+);
+
 // Grouped prop interfaces for better organization (ISP)
 
 /** Subtitle-related props for the sidebar subtitle panel */
@@ -444,6 +449,8 @@ export function renderTabContent(tabId: TabId, props: TabContentProps): React.Re
                     refreshTrigger={refreshPodcast}
                 />
             );
+        case "readAloud":
+            return <ReadAloudTab videoId={videoId} />;
         case "notes":
         case "report":
             return <FeaturePlaceholder label={tabId.charAt(0).toUpperCase() + tabId.slice(1)} />;
