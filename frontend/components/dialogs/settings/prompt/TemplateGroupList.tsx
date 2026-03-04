@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, Folder, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TEMPLATE_CATEGORIES, FUNC_ID_LABELS } from "./constants";
 import { TemplateCard } from "./TemplateCard";
@@ -41,10 +41,21 @@ export function TemplateGroupList({
         (acc[t.funcId] ??= []).push(t);
         return acc;
     }, {});
+    const categorizedFuncIds = new Set(TEMPLATE_CATEGORIES.flatMap((category) => category.funcIds));
+    const uncategorizedFuncIds = Object.keys(templatesByFuncId)
+        .filter((funcId) => !categorizedFuncIds.has(funcId))
+        .sort();
+    const categories =
+        uncategorizedFuncIds.length > 0
+            ? [
+                  ...TEMPLATE_CATEGORIES,
+                  { label: "Uncategorized", icon: Folder, funcIds: uncategorizedFuncIds },
+              ]
+            : TEMPLATE_CATEGORIES;
 
     return (
         <div className="space-y-3">
-            {TEMPLATE_CATEGORIES.map((category) => {
+            {categories.map((category) => {
                 const Icon = category.icon;
                 const isCollapsed = collapsed[category.label] ?? false;
                 const categoryTemplates = category.funcIds.flatMap(
@@ -132,10 +143,6 @@ export function TemplateGroupList({
                                                                 key={`${t.funcId}-${t.implId}`}
                                                                 name={t.name}
                                                                 implId={t.implId}
-                                                                description={t.description}
-                                                                isDefault={
-                                                                    t.source !== "custom"
-                                                                }
                                                                 isActive={
                                                                     t.implId === activeImplId
                                                                 }

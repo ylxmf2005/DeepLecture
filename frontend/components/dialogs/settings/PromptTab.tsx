@@ -26,6 +26,52 @@ import type { DrawerState } from "./prompt/constants";
 
 const log = logger.scope("PromptTab");
 
+function mergeTemplatesForDisplay(
+    customTemplates: PromptTemplate[],
+    promptConfigs: Record<string, PromptFunctionConfig>,
+): PromptTemplate[] {
+    const customByKey = new Map<string, PromptTemplate>(
+        customTemplates.map((template): [string, PromptTemplate] => [
+            `${template.funcId}:${template.implId}`,
+            template,
+        ]),
+    );
+    const merged: PromptTemplate[] = [];
+
+    for (const [funcId, config] of Object.entries(promptConfigs)) {
+        for (const option of config.options) {
+            const key = `${funcId}:${option.id}`;
+            const customTemplate = customByKey.get(key);
+            if (customTemplate) {
+                merged.push(customTemplate);
+                customByKey.delete(key);
+                continue;
+            }
+
+            // Built-ins are returned by /config but not by /prompt-templates.
+            merged.push({
+                funcId,
+                implId: option.id,
+                name: option.name,
+                description: option.description,
+                systemTemplate: "",
+                userTemplate: "",
+                source: "builtin",
+                createdAt: null,
+                updatedAt: null,
+                active: true,
+            });
+        }
+    }
+
+    // Keep unknown leftovers visible instead of silently dropping them.
+    for (const template of customByKey.values()) {
+        merged.push(template);
+    }
+
+    return merged;
+}
+
 export function PromptTab({ scope, settings }: SettingsTabProps) {
     const isVideoScope = scope === "video";
     const { values } = settings;
@@ -38,24 +84,26 @@ export function PromptTab({ scope, settings }: SettingsTabProps) {
     const [drawer, setDrawer] = useState<DrawerState>(INITIAL_DRAWER_STATE);
 
     // Fetch both template list (for management) and app config (for active selections)
-    const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async (withLoading = false) => {
+        if (withLoading) setLoading(true);
         try {
             const [templatesRes, configRes] = await Promise.all([
                 listPromptTemplates(),
                 getAppConfig(),
             ]);
-            setTemplates(templatesRes.templates);
+            setTemplates(mergeTemplatesForDisplay(templatesRes.templates, configRes.prompts));
             setMetadata(templatesRes.metadata);
             setPromptConfigs(configRes.prompts);
         } catch (error) {
             log.error("Failed to fetch prompt data", toError(error));
             toast.error("Failed to load prompt templates");
+        } finally {
+            if (withLoading) setLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        setLoading(true);
-        fetchData().finally(() => setLoading(false));
+        void fetchData(true);
     }, [fetchData]);
 
     // Derive active template per funcId from settings + defaults
@@ -77,9 +125,11 @@ export function PromptTab({ scope, settings }: SettingsTabProps) {
     );
 
     const handleEdit = useCallback((t: PromptTemplate) => {
+        // Built-in templates can't be edited in place — open as duplicate instead
+        const isBuiltIn = t.source !== "custom";
         setDrawer({
             open: true,
-            mode: "edit",
+            mode: isBuiltIn ? "duplicate" : "edit",
             funcId: t.funcId,
             sourceTemplate: {
                 implId: t.implId,
@@ -117,6 +167,10 @@ export function PromptTab({ scope, settings }: SettingsTabProps) {
 
     const handleDelete = useCallback(
         async (t: PromptTemplate) => {
+            if (t.source !== "custom") {
+                toast.error("Built-in templates cannot be deleted");
+                return;
+            }
             if (!window.confirm(`Delete template "${t.name}"? This cannot be undone.`)) return;
             try {
                 await deletePromptTemplate(t.funcId, t.implId);
@@ -157,24 +211,26 @@ export function PromptTab({ scope, settings }: SettingsTabProps) {
     return (
         <SettingsSection icon={FileText} title="Prompt Templates" accentColor="orange">
             <SettingsCard>
-                {/* Use relative positioning so the TemplateDrawer can overlay as absolute */}
-                <div className="relative">
+                {/* Keep drawer height bounded so long template lists don't stretch it */}
+                <div className={drawer.open ? "relative h-[70vh] overflow-hidden" : "relative"}>
                     <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mb-4">
                         Manage AI prompt templates. Click a template to set it as active.
                         {!isVideoScope &&
                             " Use the edit, duplicate, and delete actions to customize."}
                     </p>
 
-                    <TemplateGroupList
-                        templates={templates}
-                        activeTemplates={activeTemplates}
-                        onEdit={handleEdit}
-                        onDuplicate={handleDuplicate}
-                        onDelete={handleDelete}
-                        onSelect={handleSelect}
-                        onCreate={handleCreate}
-                        isVideoScope={isVideoScope}
-                    />
+                    {!drawer.open && (
+                        <TemplateGroupList
+                            templates={templates}
+                            activeTemplates={activeTemplates}
+                            onEdit={handleEdit}
+                            onDuplicate={handleDuplicate}
+                            onDelete={handleDelete}
+                            onSelect={handleSelect}
+                            onCreate={handleCreate}
+                            isVideoScope={isVideoScope}
+                        />
+                    )}
 
                     <AnimatePresence>
                         {drawer.open && (

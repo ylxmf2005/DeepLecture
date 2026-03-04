@@ -6,8 +6,6 @@ import { cn } from "@/lib/utils";
 interface TemplateCardProps {
     name: string;
     implId: string;
-    description: string | null;
-    isDefault: boolean;
     isActive: boolean;
     onEdit: () => void;
     onDuplicate: () => void;
@@ -20,7 +18,6 @@ interface TemplateCardProps {
 export function TemplateCard({
     name,
     implId,
-    isDefault,
     isActive,
     onEdit,
     onDuplicate,
@@ -56,16 +53,9 @@ export function TemplateCard({
 
             {/* Template info */}
             <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">
-                        {name}
-                    </span>
-                    {isDefault && (
-                        <span className="shrink-0 text-[10px] font-medium text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
-                            Built-in
-                        </span>
-                    )}
-                </div>
+                <span className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate block">
+                    {name}
+                </span>
                 <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 truncate block">
                     {implId}
                 </span>
@@ -73,21 +63,19 @@ export function TemplateCard({
 
             {/* Action buttons — hidden in video scope */}
             {!isVideoScope && (
-                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    {!isDefault && (
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onEdit();
-                            }}
-                            className="p-1 rounded text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                            title="Edit template"
-                            aria-label={`Edit ${name}`}
-                        >
-                            <Edit2 className="w-3 h-3" />
-                        </button>
-                    )}
+                <div className="flex items-center gap-0.5 shrink-0">
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onEdit();
+                        }}
+                        className="p-1 rounded text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        title="Edit template"
+                        aria-label={`Edit ${name}`}
+                    >
+                        <Edit2 className="w-3 h-3" />
+                    </button>
                     <button
                         type="button"
                         onClick={(e) => {
@@ -100,20 +88,18 @@ export function TemplateCard({
                     >
                         <Copy className="w-3 h-3" />
                     </button>
-                    {!isDefault && (
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onDelete();
-                            }}
-                            className="p-1 rounded text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                            title="Delete template"
-                            aria-label={`Delete ${name}`}
-                        >
-                            <Trash2 className="w-3 h-3" />
-                        </button>
-                    )}
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete();
+                        }}
+                        className="p-1 rounded text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        title="Delete template"
+                        aria-label={`Delete ${name}`}
+                    >
+                        <Trash2 className="w-3 h-3" />
+                    </button>
                 </div>
             )}
         </div>
