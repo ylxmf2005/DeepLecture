@@ -125,11 +125,9 @@ export function PromptTab({ scope, settings }: SettingsTabProps) {
     );
 
     const handleEdit = useCallback((t: PromptTemplate) => {
-        // Built-in templates can't be edited in place — open as duplicate instead
-        const isBuiltIn = t.source !== "custom";
         setDrawer({
             open: true,
-            mode: isBuiltIn ? "duplicate" : "edit",
+            mode: "edit",
             funcId: t.funcId,
             sourceTemplate: {
                 implId: t.implId,
@@ -167,10 +165,6 @@ export function PromptTab({ scope, settings }: SettingsTabProps) {
 
     const handleDelete = useCallback(
         async (t: PromptTemplate) => {
-            if (t.source !== "custom") {
-                toast.error("Built-in templates cannot be deleted");
-                return;
-            }
             if (!window.confirm(`Delete template "${t.name}"? This cannot be undone.`)) return;
             try {
                 await deletePromptTemplate(t.funcId, t.implId);

@@ -797,7 +797,7 @@ def create_default_registry(custom_templates: Sequence[PromptTemplateDefinition]
 
     if custom_templates:
         for template in custom_templates:
-            if not template.active or template.impl_id == "default":
+            if not template.active:
                 continue
             try:
                 fallback = registry.get(template.func_id)
