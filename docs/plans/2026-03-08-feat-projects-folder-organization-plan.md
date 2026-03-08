@@ -310,24 +310,24 @@ export interface ProjectListResponse {
 
 ### Functional
 
-- [ ] User can create a project with name, description, color, and icon
-- [ ] User can view all projects in a collapsible sidebar
-- [ ] Clicking a project in the sidebar filters the content grid to that project only
-- [ ] "All" shows all content; "Ungrouped" shows content with no project
-- [ ] User can assign a project during any upload method (local, URL, YouTube/Bilibili)
-- [ ] User can move existing content to a project via card action menu
-- [ ] User can remove content from a project (back to ungrouped) via card action menu
-- [ ] User can edit project name, description, color, and icon
-- [ ] User can delete a project — its content becomes ungrouped
-- [ ] Project filter state is reflected in the URL (`?project=<id>`)
-- [ ] Sidebar collapse state persists across page loads (localStorage)
-- [ ] Sidebar renders as slide-over drawer on mobile screens
+- [x] User can create a project with name, description, color, and icon
+- [x] User can view all projects in a collapsible sidebar
+- [x] Clicking a project in the sidebar filters the content grid to that project only
+- [x] "All" shows all content; "Ungrouped" shows content with no project
+- [x] User can assign a project during any upload method (local, URL, YouTube/Bilibili)
+- [x] User can move existing content to a project via card action menu
+- [x] User can remove content from a project (back to ungrouped) via card action menu
+- [x] User can edit project name, description, color, and icon
+- [x] User can delete a project — its content becomes ungrouped
+- [x] Project filter state is reflected in the URL (`?project=<id>`)
+- [x] Sidebar collapse state persists across page loads (localStorage)
+- [x] Sidebar renders as slide-over drawer on mobile screens
 
 ### Non-Functional
 
-- [ ] Project list query is O(n) where n = number of projects (not content)
-- [ ] Content list filtering uses indexed `project_id` column
-- [ ] No breaking changes to existing API responses (backward compatible)
+- [x] Project list query is O(n) where n = number of projects (not content)
+- [x] Content list filtering uses indexed `project_id` column
+- [x] No breaking changes to existing API responses (backward compatible)
 
 ## Testing Strategy
 
