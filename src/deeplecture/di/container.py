@@ -44,6 +44,7 @@ from deeplecture.infrastructure import (
     RateLimiter,
     RetryConfig,
     SQLiteMetadataStorage,
+    SQLiteProjectStorage,
     SQLiteTaskStorage,
     TaskConfig,
     TaskManager,
@@ -63,6 +64,7 @@ from deeplecture.use_cases.fact_verification import FactVerificationUseCase
 from deeplecture.use_cases.flashcard import FlashcardUseCase
 from deeplecture.use_cases.note import NoteUseCase
 from deeplecture.use_cases.podcast import PodcastUseCase
+from deeplecture.use_cases.project import ProjectUseCase
 from deeplecture.use_cases.prompts import create_default_registry
 from deeplecture.use_cases.quiz import QuizUseCase
 from deeplecture.use_cases.read_aloud import ReadAloudUseCase
@@ -140,6 +142,13 @@ class Container:
         if "metadata" not in self._cache:
             self._cache["metadata"] = SQLiteMetadataStorage(self._data_dir() / "metadata.db")
         return self._cache["metadata"]  # type: ignore[return-value]
+
+    @property
+    def project_storage(self) -> SQLiteProjectStorage:
+        """SQLite-based project persistence (shares metadata.db)."""
+        if "project_storage" not in self._cache:
+            self._cache["project_storage"] = SQLiteProjectStorage(self._data_dir() / "metadata.db")
+        return self._cache["project_storage"]  # type: ignore[return-value]
 
     @property
     def task_storage(self) -> SQLiteTaskStorage:
@@ -512,6 +521,15 @@ class Container:
     # =========================================================================
     # 4. USE CASES (Application Logic)
     # =========================================================================
+
+    @property
+    def project_usecase(self) -> ProjectUseCase:
+        """Project management use case."""
+        if "project_uc" not in self._cache:
+            self._cache["project_uc"] = ProjectUseCase(
+                project_storage=self.project_storage,
+            )
+        return self._cache["project_uc"]  # type: ignore[return-value]
 
     @property
     def content_usecase(self) -> ContentUseCase:

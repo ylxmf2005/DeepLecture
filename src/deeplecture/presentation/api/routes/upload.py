@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import uuid
 from pathlib import Path
@@ -43,6 +44,13 @@ ALLOWED_PDF_EXT = {".pdf"}
 ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
+def _assign_project_if_needed(container: object, content_id: str, project_id: str | None) -> None:
+    """Best-effort project assignment after upload."""
+    if project_id:
+        with contextlib.suppress(Exception):
+            container.project_usecase.assign_content(content_id, project_id)  # type: ignore[attr-defined]
+
+
 @bp.route("/upload", methods=["POST"])
 @rate_limit("upload")
 @handle_errors
@@ -50,6 +58,9 @@ def upload_content() -> Response:
     """Upload video or PDF files (single or multiple)."""
     container = get_container()
     upload_uc = container.upload_usecase
+
+    # Optional project assignment for uploaded content
+    form_project_id = request.form.get("project_id") or request.form.get("projectId") or None
 
     video_files = [f for f in request.files.getlist("videos") if f.filename]
     if video_files:
@@ -59,6 +70,7 @@ def upload_content() -> Response:
             content_id = str(uuid.uuid4())
             req = UploadVideoRequest(content_id=content_id, filename=filename, file_data=file)
             result = upload_uc.upload_video(req)
+            _assign_project_if_needed(container, result.content_id, form_project_id)
             return created(_serialize_upload_result(result))
         else:
             for f in video_files:
@@ -68,6 +80,7 @@ def upload_content() -> Response:
             )
             req = MergeVideosRequest(file_data_list=video_files, custom_name=custom_name, async_mode=True)
             result = upload_uc.merge_videos(req)
+            _assign_project_if_needed(container, result.content_id, form_project_id)
             return created(_serialize_upload_result(result))
 
     pdf_files = [f for f in request.files.getlist("pdfs") if f.filename]
@@ -78,6 +91,7 @@ def upload_content() -> Response:
             content_id = str(uuid.uuid4())
             req = UploadPDFRequest(content_id=content_id, filename=filename, file_data=file)
             result = upload_uc.upload_pdf(req)
+            _assign_project_if_needed(container, result.content_id, form_project_id)
             return created(_serialize_upload_result(result))
         else:
             for f in pdf_files:
@@ -87,6 +101,7 @@ def upload_content() -> Response:
             )
             req = MergePDFsRequest(file_data_list=pdf_files, custom_name=custom_name, async_mode=True)
             result = upload_uc.merge_pdfs(req)
+            _assign_project_if_needed(container, result.content_id, form_project_id)
             return created(_serialize_upload_result(result))
 
     return bad_request("No file provided. Use 'videos' or 'pdfs' field.")
@@ -154,8 +169,10 @@ def import_from_url() -> Response:
     custom_name = validate_title(data.get("custom_name"), field_name="custom_name", default="") or None
 
     container = get_container()
+    project_id = data.get("project_id") or data.get("projectId") or None
     req = ImportVideoFromURLRequest(url=url, custom_name=custom_name)
     result = container.upload_usecase.start_import_video_from_url(req)
+    _assign_project_if_needed(container, result.content_id, project_id)
 
     return accepted(
         {
