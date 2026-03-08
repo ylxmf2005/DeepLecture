@@ -32,8 +32,13 @@ class MetadataStorageProtocol(Protocol):
         """Check if metadata exists."""
         ...
 
-    def list_all(self, include_deleted: bool = False) -> list[ContentMetadata]:
-        """List all content metadata."""
+    def list_all(
+        self,
+        include_deleted: bool = False,
+        *,
+        project_id: str | None = None,
+    ) -> list[ContentMetadata]:
+        """List content metadata, optionally filtered by project."""
         ...
 
 

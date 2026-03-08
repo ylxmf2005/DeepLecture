@@ -23,6 +23,7 @@ _OPTIONAL_COLUMNS: Final[dict[str, str]] = {
     "timeline_job_id": "TEXT",
     "enhance_translate_status": "TEXT DEFAULT 'none'",
     "enhance_translate_job_id": "TEXT",
+    "project_id": "TEXT",
 }
 
 
@@ -120,8 +121,9 @@ class SQLiteMetadataStorage:
                     created_at, updated_at, source_type, source_url,
                     video_status, subtitle_status, enhance_translate_status,
                     timeline_status, notes_status,
-                    video_job_id, subtitle_job_id, enhance_translate_job_id, timeline_job_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    video_job_id, subtitle_job_id, enhance_translate_job_id, timeline_job_id,
+                    project_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     metadata.id,
@@ -144,6 +146,7 @@ class SQLiteMetadataStorage:
                     metadata.subtitle_job_id,
                     metadata.enhance_translate_job_id,
                     metadata.timeline_job_id,
+                    metadata.project_id,
                 ),
             )
             conn.commit()
@@ -164,10 +167,30 @@ class SQLiteMetadataStorage:
             ).fetchone()
             return row is not None
 
-    def list_all(self, include_deleted: bool = False) -> list[ContentMetadata]:
-        """List all content metadata. include_deleted is ignored (no soft delete)."""
+    def list_all(
+        self,
+        include_deleted: bool = False,
+        *,
+        project_id: str | None = None,
+    ) -> list[ContentMetadata]:
+        """List content metadata, optionally filtered by project.
+
+        Args:
+            include_deleted: Ignored (no soft delete).
+            project_id: None → all content, "none" → ungrouped only,
+                         UUID string → content in that project.
+        """
+        if project_id is None:
+            query = "SELECT * FROM content_metadata ORDER BY created_at DESC"
+            params: tuple[str, ...] = ()
+        elif project_id == "none":
+            query = "SELECT * FROM content_metadata WHERE project_id IS NULL ORDER BY created_at DESC"
+            params = ()
+        else:
+            query = "SELECT * FROM content_metadata WHERE project_id = ? ORDER BY created_at DESC"
+            params = (project_id,)
         with self._connect() as conn:
-            rows = conn.execute("SELECT * FROM content_metadata ORDER BY created_at DESC").fetchall()
+            rows = conn.execute(query, params).fetchall()
             return [self._row_to_entity(row) for row in rows]
 
     def _row_to_entity(self, row: sqlite3.Row) -> ContentMetadata:
@@ -192,4 +215,5 @@ class SQLiteMetadataStorage:
             subtitle_job_id=row["subtitle_job_id"],
             enhance_translate_job_id=row["enhance_translate_job_id"],
             timeline_job_id=row["timeline_job_id"],
+            project_id=row["project_id"],
         )

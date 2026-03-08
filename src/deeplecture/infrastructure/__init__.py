@@ -45,6 +45,7 @@ from deeplecture.infrastructure.repositories import (
     FsVoiceoverStorage,
     PathResolver,
     SQLiteMetadataStorage,
+    SQLiteProjectStorage,
     SQLiteTaskStorage,
 )
 from deeplecture.infrastructure.shared import (
@@ -101,6 +102,7 @@ __all__ = [
     "RetryableLLM",
     "RetryableTTS",
     "SQLiteMetadataStorage",
+    "SQLiteProjectStorage",
     "SQLiteTaskStorage",
     "TTSProvider",
     "TaskConfig",

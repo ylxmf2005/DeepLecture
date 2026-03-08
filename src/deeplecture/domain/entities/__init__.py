@@ -10,6 +10,7 @@ from deeplecture.domain.entities.config import (
 from deeplecture.domain.entities.content import ContentMetadata, ContentType, FeatureName
 from deeplecture.domain.entities.feature import FeatureStatus, FeatureType
 from deeplecture.domain.entities.media import Segment
+from deeplecture.domain.entities.project import Project
 from deeplecture.domain.entities.task import Task, TaskStatus
 from deeplecture.domain.entities.voiceover import (
     # Constants
@@ -39,6 +40,7 @@ __all__ = [
     "FeatureStatus",
     "FeatureType",
     "NoteContextMode",
+    "Project",
     "Segment",
     "SubtitleSegment",
     "SyncSegment",

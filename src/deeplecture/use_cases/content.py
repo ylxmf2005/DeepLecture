@@ -66,14 +66,17 @@ class ContentUseCase:
     # PUBLIC API - Content CRUD Operations
     # =========================================================================
 
-    def list_content(self) -> list[ContentMetadata]:
+    def list_content(self, *, project_id: str | None = None) -> list[ContentMetadata]:
         """
-        List all content items.
+        List content items, optionally filtered by project.
+
+        Args:
+            project_id: None → all, "none" → ungrouped, UUID → specific project.
 
         Returns:
             List of content metadata objects
         """
-        return self._metadata.list_all()
+        return self._metadata.list_all(project_id=project_id)
 
     def get_content(self, content_id: str) -> ContentMetadata:
         """

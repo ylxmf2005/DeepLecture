@@ -116,6 +116,9 @@ class ContentMetadata:
     enhance_translate_job_id: str | None = None
     timeline_job_id: str | None = None
 
+    # Project grouping
+    project_id: str | None = None
+
     def __post_init__(self) -> None:
         if isinstance(self.type, str):
             object.__setattr__(self, "type", ContentType(self.type))
