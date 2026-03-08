@@ -1,7 +1,7 @@
 """Filesystem implementation of ReadAloudCacheProtocol.
 
 Stores MP3 audio segments at:
-    content/{content_id}/read_aloud_cache/{sentence_key}.mp3
+    content/{content_id}/read_aloud_cache/{variant_key}/{sentence_key}.mp3
 """
 
 from __future__ import annotations
@@ -31,19 +31,21 @@ class FsReadAloudCache:
     def __init__(self, path_resolver: PathResolverProtocol) -> None:
         self._paths = path_resolver
 
-    def save_audio(self, content_id: str, sentence_key: str, audio_data: bytes) -> None:
+    def save_audio(self, content_id: str, variant_key: str, sentence_key: str, audio_data: bytes) -> None:
         validate_segment(content_id, "content_id")
+        validate_segment(variant_key, "variant_key")
         self._validate_key(sentence_key)
 
-        path = self._audio_path(content_id, sentence_key)
+        path = self._audio_path(content_id, variant_key, sentence_key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(audio_data)
 
-    def load_audio(self, content_id: str, sentence_key: str) -> bytes | None:
+    def load_audio(self, content_id: str, variant_key: str, sentence_key: str) -> bytes | None:
         validate_segment(content_id, "content_id")
+        validate_segment(variant_key, "variant_key")
         self._validate_key(sentence_key)
 
-        path = self._audio_path(content_id, sentence_key)
+        path = self._audio_path(content_id, variant_key, sentence_key)
         if not path.exists():
             return None
 
@@ -53,16 +55,22 @@ class FsReadAloudCache:
             logger.warning("Failed to read cached audio %s: %s", path, exc)
             return None
 
-    def clear(self, content_id: str) -> None:
+    def clear(self, content_id: str, variant_key: str | None = None) -> None:
         validate_segment(content_id, "content_id")
-        cache_dir = Path(self._paths.build_content_path(content_id, self._NAMESPACE))
+        base_cache_dir = Path(self._paths.build_content_path(content_id, self._NAMESPACE))
+        if variant_key:
+            validate_segment(variant_key, "variant_key")
+            cache_dir = base_cache_dir / variant_key
+        else:
+            cache_dir = base_cache_dir
         if cache_dir.exists():
             with contextlib.suppress(OSError):
                 shutil.rmtree(cache_dir)
                 logger.debug("Cleared read-aloud cache for %s", content_id)
 
-    def _audio_path(self, content_id: str, sentence_key: str) -> Path:
-        return Path(self._paths.build_content_path(content_id, self._NAMESPACE, f"{sentence_key}.mp3"))
+    def _audio_path(self, content_id: str, variant_key: str, sentence_key: str) -> Path:
+        base_cache_dir = Path(self._paths.build_content_path(content_id, self._NAMESPACE))
+        return base_cache_dir / variant_key / f"{sentence_key}.mp3"
 
     @staticmethod
     def _validate_key(key: str) -> None:

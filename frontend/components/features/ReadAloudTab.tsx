@@ -232,7 +232,9 @@ function SentenceList({ meta, sentences, currentIndex, state, onJumpToParagraph 
 
     // Group sentences by paragraph
     const paragraphMap = new Map<number, typeof sentences>();
+    const sentenceIndexByKey = new Map<string, number>();
     for (const s of sentences) {
+        sentenceIndexByKey.set(s.sentenceKey, sentenceIndexByKey.size);
         const group = paragraphMap.get(s.paragraphIndex) ?? [];
         group.push(s);
         paragraphMap.set(s.paragraphIndex, group);
@@ -265,7 +267,7 @@ function SentenceList({ meta, sentences, currentIndex, state, onJumpToParagraph 
                         {/* Sentences */}
                         <div className="px-4 py-1">
                             {paraSentences.map((sentence) => {
-                                const globalIndex = sentences.indexOf(sentence);
+                                const globalIndex = sentenceIndexByKey.get(sentence.sentenceKey) ?? -1;
                                 const isActive = globalIndex === currentIndex;
                                 const isPast = globalIndex < currentIndex;
 

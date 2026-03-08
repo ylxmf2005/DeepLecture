@@ -43,6 +43,8 @@ _MULTI_NEWLINES = re.compile(r"\n{2,}")
 _SENTENCE_SPLIT = re.compile(
     r"(?<=[.!?。！？\u2026])\s+"  # split after sentence-enders followed by whitespace
 )
+# Insert a split boundary for CJK text that has no spaces between sentences.
+_CJK_NO_SPACE_BOUNDARY = re.compile(r"([。！？\u2026])(?=[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af])")
 
 # Non-speakable residual characters
 _NON_SPEAKABLE = re.compile(r"[#*_~`|<>{}[\]\\]")
@@ -156,7 +158,8 @@ class MarkdownTextFilter:
 
     def _split_sentences(self, text: str) -> list[str]:
         """Split text into sentences, filtering short/empty ones."""
-        parts = _SENTENCE_SPLIT.split(text)
+        normalized = _CJK_NO_SPACE_BOUNDARY.sub(r"\1 ", text)
+        parts = _SENTENCE_SPLIT.split(normalized)
         result: list[str] = []
         for part in parts:
             sentence = part.strip()

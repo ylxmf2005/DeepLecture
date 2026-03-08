@@ -914,6 +914,8 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                 handleGenerateSlideLecture={handlers.handleGenerateSlideLecture}
                 handleGenerateNote={handleGenerateNote}
                 generatingNote={generatingNote}
+                originalLanguage={originalLanguage}
+                targetLanguage={targetLanguage}
             />
 
             <FocusModeHandler

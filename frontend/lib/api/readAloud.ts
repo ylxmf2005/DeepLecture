@@ -6,11 +6,12 @@
  * individual sentence MP3 files via REST.
  */
 
-import { API_BASE_URL } from "./client";
+import { api, API_BASE_URL } from "./client";
 
 // ─── SSE Event Types ─────────────────────────────────────────
 
 export interface ReadAloudMeta {
+    sessionId: string;
     totalParagraphs: number;
     totalSentences: number;
     paragraphs: Array<{
@@ -21,11 +22,14 @@ export interface ReadAloudMeta {
 }
 
 export interface SentenceReady {
+    sessionId: string;
+    variantKey: string;
     paragraphIndex: number;
     sentenceIndex: number;
     sentenceKey: string;
     originalText: string;
     spokenText: string;
+    cached?: boolean;
 }
 
 export interface ParagraphStart {
@@ -35,9 +39,11 @@ export interface ParagraphStart {
 }
 
 export interface ReadAloudComplete {
+    sessionId: string;
     totalParagraphs: number;
     totalSentences: number;
     totalErrors: number;
+    cancelled?: boolean;
 }
 
 export interface ReadAloudError {
@@ -84,6 +90,19 @@ export function createReadAloudEventSource(params: ReadAloudStreamParams): Event
 /**
  * Build the URL for fetching a single sentence's MP3 audio.
  */
-export function getSentenceAudioUrl(contentId: string, sentenceKey: string): string {
-    return `${API_BASE_URL}/api/read-aloud/audio/${encodeURIComponent(contentId)}/${encodeURIComponent(sentenceKey)}`;
+export function getSentenceAudioUrl(contentId: string, sentenceKey: string, variantKey: string): string {
+    const url = new URL(
+        `${API_BASE_URL}/api/read-aloud/audio/${encodeURIComponent(contentId)}/${encodeURIComponent(sentenceKey)}`
+    );
+    url.searchParams.set("variant_key", variantKey);
+    return url.toString();
+}
+
+/**
+ * Request cancellation for an active read-aloud session.
+ */
+export async function cancelReadAloud(contentId: string, sessionId: string): Promise<void> {
+    await api.post(`/read-aloud/cancel/${encodeURIComponent(contentId)}`, {
+        sessionId,
+    });
 }

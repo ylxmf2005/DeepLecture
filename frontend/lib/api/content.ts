@@ -2,7 +2,7 @@
  * Content APIs - Upload, import, rename, delete content
  */
 
-import { api } from "./client";
+import { api, API_BASE_URL } from "./client";
 import { withAIOverrides } from "./ai-overrides";
 import type {
     ContentItem,
@@ -13,6 +13,14 @@ import type {
     DeleteContentResponse,
     SlideLectureGenerationResponse,
 } from "./types";
+
+export interface DownloadVideoOptions {
+    audioTrack?: string | null;
+    burnSourceSubtitle?: boolean;
+    burnTargetSubtitle?: boolean;
+    sourceLanguage?: string;
+    targetLanguage?: string;
+}
 
 export const uploadContent = async (file: File): Promise<UploadResponse> => {
     const formData = new FormData();
@@ -106,4 +114,25 @@ export const listContent = async (): Promise<ContentListResponse> => {
 export const deleteContent = async (contentId: string): Promise<DeleteContentResponse> => {
     const response = await api.delete<DeleteContentResponse>(`/content/${contentId}`);
     return response.data;
+};
+
+export const buildVideoDownloadUrl = (
+    contentId: string,
+    options: DownloadVideoOptions = {}
+): string => {
+    const params = new URLSearchParams();
+    const audioTrack = options.audioTrack && options.audioTrack.trim() ? options.audioTrack.trim() : "original";
+
+    params.set("audio_track", audioTrack);
+    params.set("burn_source_subtitle", options.burnSourceSubtitle ? "1" : "0");
+    params.set("burn_target_subtitle", options.burnTargetSubtitle ? "1" : "0");
+
+    if (options.sourceLanguage && options.sourceLanguage.trim()) {
+        params.set("source_language", options.sourceLanguage.trim());
+    }
+    if (options.targetLanguage && options.targetLanguage.trim()) {
+        params.set("target_language", options.targetLanguage.trim());
+    }
+
+    return `${API_BASE_URL}/api/content/${encodeURIComponent(contentId)}/video/download?${params.toString()}`;
 };

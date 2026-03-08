@@ -20,7 +20,7 @@ class KnowledgeItem:
     Used internally between extraction and rendering stages.
     """
 
-    category: str  # formula | definition | condition | algorithm | constant | example
+    category: str  # formula | definition | condition | algorithm | constant | example | explanation | derivation | comparison | application | pitfall | relationship
     content: str  # The actual content
     criticality: str  # high | medium | low
     tags: list[str] = field(default_factory=list)

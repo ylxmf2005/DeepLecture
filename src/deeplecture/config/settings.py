@@ -62,7 +62,7 @@ class LLMModelConfig(BaseModel):
     model: str
     api_key: str
     base_url: str | None = None
-    max_tokens: int = 2000
+    max_tokens: int = 65536
     temperature: float = 0.7
 
 

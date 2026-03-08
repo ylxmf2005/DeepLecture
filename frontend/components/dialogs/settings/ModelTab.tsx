@@ -55,6 +55,15 @@ const TASK_MODEL_META: Record<string, { label: string; llmHint?: string; ttsHint
         label: "Video Q&A",
         llmHint: "Used when answering questions about the video.",
     },
+    podcast_generation: {
+        label: "Podcast Generation",
+        llmHint: "Used when generating podcast dialogue scripts.",
+        ttsHint: "Used for TTS audio synthesis in generated podcast episodes.",
+    },
+    note_read_aloud: {
+        label: "Note Read Aloud",
+        ttsHint: "Used for text-to-speech when reading notes aloud.",
+    },
 };
 
 function buildModelOptions(models: ModelOption[], defaultModel: string) {

@@ -15,6 +15,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import {
+    cancelReadAloud,
     createReadAloudEventSource,
     getSentenceAudioUrl,
     type ReadAloudMeta,
@@ -97,9 +98,13 @@ export function useReadAloud(): UseReadAloudReturn {
     const eventSourceRef = useRef<EventSource | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const isPausedRef = useRef(false);
+    const activeContentIdRef = useRef<string | null>(null);
+    const sessionIdRef = useRef<string | null>(null);
     // Track the latest sentences for use in audio callbacks
     const sentencesRef = useRef<SentenceItem[]>([]);
     const currentIndexRef = useRef(-1);
+    const streamClosedRef = useRef(false);
+    const streamFailedRef = useRef(false);
     // Ref to break the self-reference in playSentenceAt (avoids react-hooks/immutability)
     const playSentenceAtRef = useRef<(index: number, list: SentenceItem[]) => void>(() => {});
 
@@ -111,16 +116,31 @@ export function useReadAloud(): UseReadAloudReturn {
         currentIndexRef.current = currentIndex;
     }, [currentIndex]);
 
+    const cancelActiveSession = useCallback(() => {
+        const sessionId = sessionIdRef.current;
+        const contentId = activeContentIdRef.current;
+        if (!sessionId || !contentId) return;
+
+        void cancelReadAloud(contentId, sessionId).catch((err) => {
+            log.debug("Failed to cancel read-aloud session", {
+                contentId,
+                sessionId,
+                error: err,
+            });
+        });
+    }, []);
+
     // Cleanup on unmount
     useEffect(() => {
         return () => {
+            cancelActiveSession();
             eventSourceRef.current?.close();
             if (audioRef.current) {
                 audioRef.current.pause();
                 audioRef.current.src = "";
             }
         };
-    }, []);
+    }, [cancelActiveSession]);
 
     const closeSSE = useCallback(() => {
         if (eventSourceRef.current) {
@@ -150,16 +170,25 @@ export function useReadAloud(): UseReadAloudReturn {
         audio.onended = () => {
             const nextIndex = currentIndexRef.current + 1;
             const latestSentences = sentencesRef.current;
+            const expectedTotal = meta?.totalSentences ?? latestSentences.length;
 
             if (nextIndex < latestSentences.length) {
                 // Play next available sentence
                 setCurrentIndex(nextIndex);
                 currentIndexRef.current = nextIndex;
                 playSentenceAtRef.current(nextIndex, latestSentences);
-            } else if (nextIndex >= (meta?.totalSentences ?? latestSentences.length)) {
-                // All sentences done
+            } else if (nextIndex >= expectedTotal || streamClosedRef.current) {
+                // Queue drained after normal completion, or stream closed/disconnected.
                 setState("idle");
-                log.info("Read-aloud completed");
+                if (streamFailedRef.current && latestSentences.length < expectedTotal) {
+                    setError("Connection lost before all sentences were generated");
+                }
+                log.info("Read-aloud completed", {
+                    expectedTotal,
+                    ready: latestSentences.length,
+                    streamClosed: streamClosedRef.current,
+                    streamFailed: streamFailedRef.current,
+                });
             } else {
                 // Next sentence not yet received from SSE — wait for it
                 // The SSE handler will trigger playback when it arrives
@@ -200,12 +229,22 @@ export function useReadAloud(): UseReadAloudReturn {
                 const eventType = extractEventType(event);
 
                 switch (eventType) {
+                    case "read_aloud_session": {
+                        const data = parseSSEData<{ sessionId?: string }>(event);
+                        if (data?.sessionId) {
+                            sessionIdRef.current = data.sessionId;
+                        }
+                        break;
+                    }
+
                     case "read_aloud_meta": {
                         const data = parseSSEData<ReadAloudMeta>(event);
                         if (data) {
+                            sessionIdRef.current = data.sessionId;
                             setMeta(data);
                             setTotalSentences(data.totalSentences);
                             log.info("Read-aloud meta received", {
+                                sessionId: data.sessionId,
                                 paragraphs: data.totalParagraphs,
                                 sentences: data.totalSentences,
                             });
@@ -217,8 +256,12 @@ export function useReadAloud(): UseReadAloudReturn {
                         const data = parseSSEData<SentenceReady>(event);
                         if (data) {
                             const item: SentenceItem = {
-                                ...data,
-                                audioUrl: getSentenceAudioUrl(contentId, data.sentenceKey),
+                                paragraphIndex: data.paragraphIndex,
+                                sentenceIndex: data.sentenceIndex,
+                                sentenceKey: data.sentenceKey,
+                                originalText: data.originalText,
+                                spokenText: data.spokenText,
+                                audioUrl: getSentenceAudioUrl(contentId, data.sentenceKey, data.variantKey),
                             };
 
                             setSentences((prev) => {
@@ -251,13 +294,29 @@ export function useReadAloud(): UseReadAloudReturn {
                     }
 
                     case "read_aloud_complete": {
-                        log.info("SSE: read_aloud_complete");
+                        const data = parseSSEData<{ cancelled?: boolean; sessionId?: string }>(event);
+                        log.info("SSE: read_aloud_complete", {
+                            sessionId: data?.sessionId ?? sessionIdRef.current,
+                            cancelled: data?.cancelled ?? false,
+                        });
+                        streamClosedRef.current = true;
+                        streamFailedRef.current = false;
+                        sessionIdRef.current = null;
                         closeSSE();
+                        // If nothing is currently playing, finalize immediately.
+                        const latestSentences = sentencesRef.current;
+                        const hasActivePlayback =
+                            audioRef.current !== null && !audioRef.current.paused && !audioRef.current.ended;
+                        if (!hasActivePlayback && latestSentences.length <= currentIndexRef.current + 1) {
+                            setState("idle");
+                        }
                         break;
                     }
 
                     case "read_aloud_error": {
                         const data = parseSSEData<{ error: string }>(event);
+                        streamClosedRef.current = true;
+                        streamFailedRef.current = true;
                         setError(data?.error ?? "Unknown error");
                         setState("idle");
                         closeSSE();
@@ -277,12 +336,17 @@ export function useReadAloud(): UseReadAloudReturn {
 
             es.onerror = () => {
                 log.warn("SSE connection error");
+                streamClosedRef.current = true;
+                streamFailedRef.current = true;
                 closeSSE();
                 // Don't set error state if we already have sentences playing
                 if (sentencesRef.current.length === 0) {
                     setError("Connection lost");
                     setState("idle");
+                    sessionIdRef.current = null;
+                    return;
                 }
+                setError((prev) => prev ?? "Connection lost");
             };
         },
         [closeSSE, playSentenceAt]
@@ -292,21 +356,27 @@ export function useReadAloud(): UseReadAloudReturn {
 
     const play = useCallback(
         (params: ReadAloudStreamParams) => {
+            cancelActiveSession();
+
             // Reset state
             setError(null);
             setMeta(null);
             setSentences([]);
             sentencesRef.current = [];
+            sessionIdRef.current = null;
             setCurrentIndex(-1);
             currentIndexRef.current = -1;
             setTotalSentences(0);
             isPausedRef.current = false;
+            streamClosedRef.current = false;
+            streamFailedRef.current = false;
+            activeContentIdRef.current = params.contentId;
             stopAudio();
 
             setState("loading");
             startSSE(params, params.contentId);
         },
-        [startSSE, stopAudio]
+        [cancelActiveSession, startSSE, stopAudio]
     );
 
     const pause = useCallback(() => {
@@ -326,13 +396,18 @@ export function useReadAloud(): UseReadAloudReturn {
     }, [state]);
 
     const stop = useCallback(() => {
+        cancelActiveSession();
         closeSSE();
         stopAudio();
         isPausedRef.current = false;
+        sessionIdRef.current = null;
+        streamClosedRef.current = true;
+        streamFailedRef.current = false;
+        activeContentIdRef.current = null;
         setState("idle");
         setCurrentIndex(-1);
         currentIndexRef.current = -1;
-    }, [closeSSE, stopAudio]);
+    }, [cancelActiveSession, closeSSE, stopAudio]);
 
     const jumpToParagraph = useCallback(
         (params: ReadAloudStreamParams, paragraphIndex: number) => {

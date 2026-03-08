@@ -520,6 +520,8 @@ class Container:
             self._cache["content_uc"] = ContentUseCase(
                 metadata_storage=self.metadata_storage,
                 artifact_storage=self.artifact_storage,
+                file_storage=self.file_storage,
+                path_resolver=self.path_resolver,
             )
         return self._cache["content_uc"]  # type: ignore[return-value]
 

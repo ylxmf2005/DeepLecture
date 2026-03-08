@@ -27,6 +27,7 @@ TTS_TASK_KEYS: tuple[str, ...] = (
     "video_generation",
     "voiceover_generation",
     "podcast_generation",
+    "note_read_aloud",
 )
 
 # Canonical task keys exposed to frontend settings UI
