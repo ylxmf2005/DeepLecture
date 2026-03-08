@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Play, FileText, Globe, Clock, Loader2, FileVideo, Trash2, Edit2, Youtube, MonitorPlay } from "lucide-react";
-import { listContent, ContentItem, deleteContent, renameContent } from "@/lib/api";
+import { Play, FileText, Globe, Clock, Loader2, FileVideo, Trash2, Edit2, Youtube, MonitorPlay, FolderOpen } from "lucide-react";
+import { listContent, ContentItem, deleteContent, renameContent, listProjects, assignContentToProject } from "@/lib/api";
+import type { Project } from "@/lib/api/types";
 import { useConfirmDialog } from "@/contexts/ConfirmDialogContext";
 import { useVideoStateStore } from "@/stores/useVideoStateStore";
 
@@ -31,6 +32,10 @@ export function VideoList({ refreshTrigger, projectId }: VideoListProps) {
 
     // Rename state
     const [renameItem, setRenameItem] = useState<ContentItem | null>(null);
+
+    // Move-to-project state
+    const [moveItemId, setMoveItemId] = useState<string | null>(null);
+    const [allProjects, setAllProjects] = useState<Project[]>([]);
 
     const { confirm } = useConfirmDialog();
     const { notifyOperation } = useTaskNotification();
@@ -97,9 +102,13 @@ export function VideoList({ refreshTrigger, projectId }: VideoListProps) {
                 const opts = projectId !== undefined && projectId !== null
                     ? { projectId }
                     : undefined;
-                const data = await listContent(opts);
+                const [data, projectData] = await Promise.all([
+                    listContent(opts),
+                    listProjects().catch(() => ({ projects: [] })),
+                ]);
                 cleanupStaleLocalContentData(new Set(data.content.map((item) => item.id)));
-                setItems(data.content);  // Unified API returns content array
+                setItems(data.content);
+                setAllProjects(projectData.projects);
                 setError(null);
             } catch (err) {
                 log.error("Failed to load content", toError(err));
@@ -162,6 +171,47 @@ export function VideoList({ refreshTrigger, projectId }: VideoListProps) {
             notifyOperation("content_rename", "error", toError(err).message);
         }
     };
+
+    const openMoveMenu = async (itemId: string, event: React.MouseEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        try {
+            const data = await listProjects();
+            setAllProjects(data.projects);
+        } catch {
+            // ignore
+        }
+        setMoveItemId(moveItemId === itemId ? null : itemId);
+    };
+
+    const handleMoveToProject = async (contentId: string, targetProjectId: string | null) => {
+        setMoveItemId(null);
+        try {
+            await assignContentToProject(contentId, targetProjectId);
+            // Update local state
+            setItems(prev => prev.map(item =>
+                item.id === contentId ? { ...item, projectId: targetProjectId } : item
+            ));
+            // If filtering by project and item moved out, remove from list
+            if (projectId && projectId !== "none" && targetProjectId !== projectId) {
+                setItems(prev => prev.filter(item => item.id !== contentId));
+            } else if (projectId === "none" && targetProjectId !== null) {
+                setItems(prev => prev.filter(item => item.id !== contentId));
+            }
+            notifyOperation("content_move", "success");
+        } catch (err) {
+            log.error("Failed to move content", toError(err));
+            notifyOperation("content_move", "error", toError(err).message);
+        }
+    };
+
+    // Close move menu on outside click
+    useEffect(() => {
+        if (!moveItemId) return;
+        const handler = () => setMoveItemId(null);
+        document.addEventListener("click", handler);
+        return () => document.removeEventListener("click", handler);
+    }, [moveItemId]);
 
     const getSourceIcon = (type: string, sourceType?: string) => {
         if (type === "slide") return FileVideo;
@@ -241,8 +291,18 @@ export function VideoList({ refreshTrigger, projectId }: VideoListProps) {
                                         <h3 className="font-semibold text-foreground mb-1 line-clamp-2 pr-16" title={item.filename}>
                                             {item.filename}
                                         </h3>
-                                        <div className="text-xs text-muted-foreground">
-                                            {getSourceLabel(item.type, item.sourceType)}
+                                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                            <span>{getSourceLabel(item.type, item.sourceType)}</span>
+                                            {item.projectId && !projectId && (() => {
+                                                const proj = allProjects.find(p => p.id === item.projectId);
+                                                if (!proj) return null;
+                                                return (
+                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-[10px]">
+                                                        {proj.color && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: proj.color }} />}
+                                                        {proj.icon ? `${proj.icon} ` : ""}{proj.name}
+                                                    </span>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
                                 </div>
@@ -296,6 +356,49 @@ export function VideoList({ refreshTrigger, projectId }: VideoListProps) {
 
                             {/* Action Buttons */}
                             <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="relative">
+                                    <button
+                                        onClick={(e) => openMoveMenu(item.id, e)}
+                                        className="p-2 rounded-lg bg-white/90 dark:bg-gray-800/90 text-gray-500 dark:text-gray-400 hover:text-purple-500 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 border border-gray-200 dark:border-gray-700 shadow-sm"
+                                        title="Move to project"
+                                    >
+                                        <FolderOpen className="w-4 h-4" />
+                                    </button>
+                                    {moveItemId === item.id && (
+                                        <div
+                                            className="absolute right-0 top-full z-50 mt-1 w-48 bg-popover border border-border rounded-lg shadow-lg py-1 max-h-64 overflow-y-auto"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            {allProjects.map((p) => (
+                                                <button
+                                                    key={p.id}
+                                                    onClick={() => handleMoveToProject(item.id, p.id)}
+                                                    className={`flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-muted ${
+                                                        item.projectId === p.id ? "text-primary font-medium" : "text-foreground"
+                                                    }`}
+                                                >
+                                                    {p.color ? (
+                                                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                                                    ) : (
+                                                        <FolderOpen className="w-3.5 h-3.5 shrink-0" />
+                                                    )}
+                                                    <span className="truncate">{p.icon ? `${p.icon} ` : ""}{p.name}</span>
+                                                </button>
+                                            ))}
+                                            {item.projectId && (
+                                                <>
+                                                    <div className="border-t border-border my-1" />
+                                                    <button
+                                                        onClick={() => handleMoveToProject(item.id, null)}
+                                                        className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+                                                    >
+                                                        Remove from project
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                                 <button
                                     onClick={(e) => openRenameDialog(item, e)}
                                     className="p-2 rounded-lg bg-white/90 dark:bg-gray-800/90 text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 border border-gray-200 dark:border-gray-700 shadow-sm"
