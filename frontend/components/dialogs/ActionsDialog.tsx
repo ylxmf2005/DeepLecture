@@ -1,6 +1,20 @@
-import { X, FileText, Globe, Volume2, Loader2, Sparkles, MessageSquare, Video, Trash2, Pencil, Check, ArrowLeftRight } from "lucide-react";
+import {
+    X,
+    FileText,
+    Globe,
+    Volume2,
+    Loader2,
+    Sparkles,
+    MessageSquare,
+    Video,
+    Trash2,
+    Pencil,
+    Check,
+    ArrowLeftRight,
+    Download,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { ContentItem, SubtitleSource, VoiceoverEntry } from "@/lib/api";
+import { ContentItem, SubtitleSource, VoiceoverEntry, buildVideoDownloadUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { ProcessingAction } from "@/hooks/useVideoPageState";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
@@ -52,6 +66,9 @@ export interface ActionsDialogProps {
     // Note generation
     handleGenerateNote: () => void;
     generatingNote: boolean;
+    // Language context for subtitle export
+    originalLanguage: string;
+    targetLanguage: string;
 }
 
 export function ActionsDialog({
@@ -83,6 +100,8 @@ export function ActionsDialog({
     handleGenerateSlideLecture,
     handleGenerateNote,
     generatingNote,
+    originalLanguage,
+    targetLanguage,
 }: ActionsDialogProps) {
     const hasSubtitles = video?.subtitleStatus === "ready";
     const isSlideMode = video?.type === "slide";
@@ -95,10 +114,37 @@ export function ActionsDialog({
         { value: "", label: "Not set" },
         ...completedVoiceovers.map((vo) => ({ value: vo.id, label: vo.name })),
     ];
+    const downloadAudioOptions = [
+        { value: "__video_original__", label: "Video Original Audio" },
+        ...completedVoiceovers.map((vo) => ({ value: vo.id, label: vo.name })),
+    ];
+    const sourceSubtitleAvailable = video?.subtitleStatus === "ready";
+    const targetSubtitleAvailable = video?.enhancedStatus === "ready";
 
     // Inline edit state
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState("");
+    const [downloadAudioTrackId, setDownloadAudioTrackId] = useState<string | null>(selectedVoiceoverId);
+    const [downloadBurnSourceSubtitle, setDownloadBurnSourceSubtitle] = useState(false);
+    const [downloadBurnTargetSubtitle, setDownloadBurnTargetSubtitle] = useState(false);
+    const effectiveDownloadBurnSourceSubtitle = sourceSubtitleAvailable ? downloadBurnSourceSubtitle : false;
+    const effectiveDownloadBurnTargetSubtitle = targetSubtitleAvailable ? downloadBurnTargetSubtitle : false;
+
+    const handleDownloadVideo = () => {
+        const url = buildVideoDownloadUrl(video.id, {
+            audioTrack: downloadAudioTrackId,
+            burnSourceSubtitle: effectiveDownloadBurnSourceSubtitle,
+            burnTargetSubtitle: effectiveDownloadBurnTargetSubtitle,
+            sourceLanguage: originalLanguage,
+            targetLanguage: targetLanguage,
+        });
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.rel = "noopener";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+    };
 
     const handleStartEdit = (e: React.MouseEvent, vo: VoiceoverEntry) => {
         e.preventDefault();
@@ -510,6 +556,92 @@ export function ActionsDialog({
                                             </div>
                                         </section>
                                     )}
+
+                    {/* Download MP4 Section */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 text-cyan-600 dark:text-cyan-400">
+                            <Download className="w-5 h-5" />
+                            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Download MP4</h3>
+                        </div>
+
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Audio Track</label>
+                                <CustomSelect
+                                    value={downloadAudioTrackId ?? "__video_original__"}
+                                    onChange={(value) => setDownloadAudioTrackId(value === "__video_original__" ? null : value)}
+                                    options={downloadAudioOptions}
+                                    accent="cyan"
+                                />
+                            </div>
+
+                            <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Hard Subtitles (2^2)</label>
+                                <div className="space-y-2">
+                                    <label
+                                        className={cn(
+                                            "flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+                                            sourceSubtitleAvailable
+                                                ? "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                                : "border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-900/60 opacity-70"
+                                        )}
+                                    >
+                                        <div className="flex flex-col min-w-0">
+                                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">Source Subtitle</span>
+                                            <span className="text-xs text-gray-500 dark:text-gray-400">Hard embed original-language subtitle</span>
+                                        </div>
+                                        <input
+                                            type="checkbox"
+                                            checked={effectiveDownloadBurnSourceSubtitle}
+                                            disabled={!sourceSubtitleAvailable}
+                                            onChange={(e) => setDownloadBurnSourceSubtitle(e.target.checked)}
+                                            className="rounded border-gray-300 text-cyan-600 focus:ring-cyan-500 disabled:opacity-50"
+                                        />
+                                    </label>
+                                    <label
+                                        className={cn(
+                                            "flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+                                            targetSubtitleAvailable
+                                                ? "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                                : "border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-900/60 opacity-70"
+                                        )}
+                                    >
+                                        <div className="flex flex-col min-w-0">
+                                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">Target Subtitle</span>
+                                            <span className="text-xs text-gray-500 dark:text-gray-400">Hard embed translated subtitle</span>
+                                        </div>
+                                        <input
+                                            type="checkbox"
+                                            checked={effectiveDownloadBurnTargetSubtitle}
+                                            disabled={!targetSubtitleAvailable}
+                                            onChange={(e) => setDownloadBurnTargetSubtitle(e.target.checked)}
+                                            className="rounded border-gray-300 text-cyan-600 focus:ring-cyan-500 disabled:opacity-50"
+                                        />
+                                    </label>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    Source and target toggles are independent, with 4 export combinations in total.
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={handleDownloadVideo}
+                                className="group relative flex items-center justify-between p-4 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:border-cyan-500 dark:hover:border-cyan-500 hover:shadow-md transition-all text-left"
+                            >
+                                <div className="flex items-center gap-3 z-10">
+                                    <div className="p-2 rounded-lg bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-300 group-hover:scale-110 transition-transform">
+                                        <Download className="w-5 h-5" />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="font-medium text-gray-900 dark:text-gray-100">Download MP4</span>
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                            Export with the selected audio track and subtitle settings.
+                                        </span>
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
+                    </section>
 
                     {/* Timeline Section */}
                     <section className="space-y-4">

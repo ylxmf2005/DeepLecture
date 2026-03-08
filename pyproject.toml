@@ -24,6 +24,9 @@ dependencies = [
     "tomli>=2.0.0;python_version<'3.11'",
     "rq>=2.6.1",
     "anthropic>=0.77.1",
+    "markdown>=3.5",
+    "beautifulsoup4>=4.12",
+    "deepl>=1.18",
 ]
 
 [project.optional-dependencies]

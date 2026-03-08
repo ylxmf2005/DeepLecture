@@ -45,7 +45,14 @@ COVERAGE REQUIREMENTS:
 - Cover ALL major topics and subtopics present in the input.
 - Do NOT cap output to one item per module/section.
 - For each major topic, include multiple distinct items when the content supports it.
-- Prioritize complete coverage first, then concise phrasing."""
+- Prioritize complete coverage first, then concise phrasing.
+
+DEPTH REQUIREMENTS:
+- For important concepts, extract not only the definition but also the WHY (rationale) and HOW (mechanism).
+- For content with derivations or proofs, extract the step-by-step reasoning as separate items.
+- For easily confused concepts, extract comparison items highlighting differences and similarities.
+- For practical topics, extract application scenarios and worked examples.
+- For tricky topics, extract common pitfalls, edge cases, and misconceptions."""
         exclusion_rules = """DO NOT extract:
 - Pure filler, repetition, or off-topic chatter
 - Verbatim long narrative paragraphs when a concise knowledge item is possible"""
@@ -74,7 +81,7 @@ Output language: {language}
 Output ONLY valid JSON array with this structure:
 [
   {{
-    "category": "formula|definition|condition|algorithm|constant|example",
+    "category": "formula|definition|condition|algorithm|constant|example|explanation|derivation|comparison|application|pitfall|relationship",
     "content": "The actual knowledge item content",
     "criticality": "high|medium|low",
     "tags": ["topic1", "topic2"],

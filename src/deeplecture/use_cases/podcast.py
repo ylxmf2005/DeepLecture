@@ -55,7 +55,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Maximum dialogue turns to prevent runaway LLM output
-MAX_DIALOGUE_ITEMS = 100
+MAX_DIALOGUE_ITEMS = 500
 # TTS failure threshold — abort if more than this fraction fails
 TTS_FAILURE_THRESHOLD = 0.5
 # Target sample rate for all WAV intermediates

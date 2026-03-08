@@ -250,7 +250,9 @@ def validate_prompt_template_definition(template: PromptTemplateDefinition) -> l
     if unknown:
         errors.append(f"Unknown placeholders for {template.func_id}: {', '.join(sorted(unknown))}")
 
-    if template.system_template.strip() and template.user_template.strip():
+    # Required placeholders are only enforced when overriding the user template.
+    # If user_template is empty, runtime falls back to the default user prompt.
+    if template.user_template.strip():
         missing = rules["required"] - placeholders
         if missing:
             errors.append(f"Missing required placeholders for {template.func_id}: {', '.join(sorted(missing))}")

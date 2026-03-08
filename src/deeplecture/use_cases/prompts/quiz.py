@@ -40,7 +40,7 @@ Output ONLY a JSON array:
     "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
     "answer_index": 0,
     "explanation": "Why correct + why each distractor is wrong",
-    "source_category": "formula|definition|condition|algorithm|constant|example",
+    "source_category": "formula|definition|condition|algorithm|constant|example|explanation|derivation|comparison|application|pitfall|relationship",
     "source_tags": ["tag1", "tag2"]
   }}
 ]
@@ -74,6 +74,12 @@ CATEGORY-SPECIFIC HINTS:
 - algorithm: Test step order, termination. Distractors: swapped steps, off-by-one
 - constant: Test exact values, units. Distractors: magnitude errors, wrong units
 - example: Test pattern recognition. Distractors: similar but incorrect scenarios
+- explanation: Test understanding of WHY/HOW. Distractors: cause-effect reversal, wrong mechanism
+- derivation: Test reasoning steps. Distractors: skipped steps, wrong intermediate results
+- comparison: Test distinguishing similar concepts. Distractors: swapped properties
+- application: Test real-world usage. Distractors: wrong context, misapplied rules
+- pitfall: Test awareness of common mistakes. Distractors: the mistake itself as correct
+- relationship: Test concept connections. Distractors: wrong dependency direction
 
 EXPLANATION FORMAT:
 "[Correct answer explanation]. A/B/C/D is wrong because [specific misconception]."

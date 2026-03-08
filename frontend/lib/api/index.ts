@@ -23,6 +23,7 @@ export {
     getContentMetadata,
     listContent,
     deleteContent,
+    buildVideoDownloadUrl,
 } from "./content";
 
 // Subtitle APIs

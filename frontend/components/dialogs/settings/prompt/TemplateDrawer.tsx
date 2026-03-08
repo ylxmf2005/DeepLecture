@@ -32,6 +32,22 @@ interface TemplateDrawerProps {
     onSaved: () => void;
 }
 
+interface TemplateFormState {
+    name: string;
+    implId: string;
+    description: string;
+    systemTemplate: string;
+    userTemplate: string;
+}
+
+const EMPTY_FORM_STATE: TemplateFormState = {
+    name: "",
+    implId: "",
+    description: "",
+    systemTemplate: "",
+    userTemplate: "",
+};
+
 export function TemplateDrawer({ state, metadata, onClose, onSaved }: TemplateDrawerProps) {
     const { mode, funcId, sourceTemplate } = state;
     const funcMeta = metadata[funcId];
@@ -46,6 +62,7 @@ export function TemplateDrawer({ state, metadata, onClose, onSaved }: TemplateDr
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [initialForm, setInitialForm] = useState<TemplateFormState>(EMPTY_FORM_STATE);
 
     const systemRef = useRef<HTMLTextAreaElement>(null);
     const userRef = useRef<HTMLTextAreaElement>(null);
@@ -54,52 +71,115 @@ export function TemplateDrawer({ state, metadata, onClose, onSaved }: TemplateDr
 
     // Load initial values based on mode
     useEffect(() => {
+        let cancelled = false;
         setError(null);
         setImplIdManual(false);
 
+        const applyFormState = (next: TemplateFormState) => {
+            if (cancelled) return;
+            setName(next.name);
+            setImplId(next.implId);
+            setDescription(next.description);
+            setSystemTemplate(next.systemTemplate);
+            setUserTemplate(next.userTemplate);
+            setInitialForm(next);
+        };
+
         if (mode === "edit" && sourceTemplate) {
-            setName(sourceTemplate.name);
-            setImplId(sourceTemplate.implId);
-            setDescription(sourceTemplate.description || "");
-            setSystemTemplate(sourceTemplate.systemTemplate);
-            setUserTemplate(sourceTemplate.userTemplate);
+            const base: TemplateFormState = {
+                name: sourceTemplate.name,
+                implId: sourceTemplate.implId,
+                description: sourceTemplate.description || "",
+                systemTemplate: sourceTemplate.systemTemplate,
+                userTemplate: sourceTemplate.userTemplate,
+            };
+
+            // If template text is empty (built-in), fetch from the API
+            if (!base.systemTemplate && !base.userTemplate) {
+                setLoading(true);
+                getPromptTemplateText(funcId, sourceTemplate.implId)
+                    .then((texts) => {
+                        applyFormState({
+                            ...base,
+                            systemTemplate: texts.systemTemplate || "",
+                            userTemplate: texts.userTemplate || "",
+                        });
+                    })
+                    .catch(() => {
+                        applyFormState(base);
+                    })
+                    .finally(() => {
+                        if (!cancelled) setLoading(false);
+                    });
+            } else {
+                setLoading(false);
+                applyFormState(base);
+            }
         } else if (mode === "duplicate" && sourceTemplate) {
-            setName(`${sourceTemplate.name} (Copy)`);
-            setImplId(`${sourceTemplate.implId}_copy`);
-            setDescription(sourceTemplate.description || "");
-            setSystemTemplate(sourceTemplate.systemTemplate);
-            setUserTemplate(sourceTemplate.userTemplate);
+            const base: TemplateFormState = {
+                name: `${sourceTemplate.name} (Copy)`,
+                implId: `${sourceTemplate.implId}_copy`,
+                description: sourceTemplate.description || "",
+                systemTemplate: sourceTemplate.systemTemplate,
+                userTemplate: sourceTemplate.userTemplate,
+            };
+
+            // Built-ins are synthesized from config, so duplicate may need a text fetch.
+            if (!base.systemTemplate && !base.userTemplate) {
+                setLoading(true);
+                getPromptTemplateText(funcId, sourceTemplate.implId)
+                    .then((texts) => {
+                        applyFormState({
+                            ...base,
+                            systemTemplate: texts.systemTemplate || "",
+                            userTemplate: texts.userTemplate || "",
+                        });
+                    })
+                    .catch(() => {
+                        applyFormState(base);
+                    })
+                    .finally(() => {
+                        if (!cancelled) setLoading(false);
+                    });
+            } else {
+                setLoading(false);
+                applyFormState(base);
+            }
         } else {
             // Create mode: fetch default template text for pre-filling
-            setName("");
-            setImplId("");
-            setDescription("");
             setLoading(true);
             getPromptTemplateText(funcId, "default")
                 .then((texts) => {
-                    setSystemTemplate(texts.systemTemplate || "");
-                    setUserTemplate(texts.userTemplate || "");
+                    applyFormState({
+                        ...EMPTY_FORM_STATE,
+                        systemTemplate: texts.systemTemplate || "",
+                        userTemplate: texts.userTemplate || "",
+                    });
                 })
                 .catch(() => {
                     // Default builders may return empty strings — that's fine
-                    setSystemTemplate("");
-                    setUserTemplate("");
+                    applyFormState(EMPTY_FORM_STATE);
                 })
-                .finally(() => setLoading(false));
+                .finally(() => {
+                    if (!cancelled) setLoading(false);
+                });
         }
+
+        return () => {
+            cancelled = true;
+        };
     }, [mode, funcId, sourceTemplate]);
 
     const isDirty = useMemo(() => {
-        if (mode === "edit" && sourceTemplate) {
-            return (
-                name !== sourceTemplate.name ||
-                description !== (sourceTemplate.description || "") ||
-                systemTemplate !== sourceTemplate.systemTemplate ||
-                userTemplate !== sourceTemplate.userTemplate
-            );
-        }
-        return name.trim() !== "" || systemTemplate.trim() !== "" || userTemplate.trim() !== "";
-    }, [mode, sourceTemplate, name, description, systemTemplate, userTemplate]);
+        if (loading) return false;
+        return (
+            name !== initialForm.name ||
+            implId !== initialForm.implId ||
+            description !== initialForm.description ||
+            systemTemplate !== initialForm.systemTemplate ||
+            userTemplate !== initialForm.userTemplate
+        );
+    }, [loading, initialForm, name, implId, description, systemTemplate, userTemplate]);
 
     const handleClose = useCallback(() => {
         if (isDirty) {
@@ -158,7 +238,8 @@ export function TemplateDrawer({ state, metadata, onClose, onSaved }: TemplateDr
             if (mode === "edit") {
                 await updatePromptTemplate(funcId, implId, {
                     name: name.trim(),
-                    description: description.trim() || undefined,
+                    // Send explicit empty string so backend can clear description.
+                    description: description.trim(),
                     systemTemplate,
                     userTemplate,
                 });

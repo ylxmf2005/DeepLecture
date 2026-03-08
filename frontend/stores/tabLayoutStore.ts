@@ -16,7 +16,8 @@ export type TabId =
     | "report"
     | "cheatsheet"
     | "quiz"
-    | "podcast";
+    | "podcast"
+    | "readAloud";
 
 export type PanelId = "sidebar" | "bottom";
 type PanelTabs = {
@@ -51,14 +52,14 @@ interface TabLayoutState {
 }
 
 const DEFAULT_SIDEBAR_TABS: TabId[] = ["subtitles", "explanations", "timeline", "ask"];
-const DEFAULT_BOTTOM_TABS: TabId[] = ["verify", "notes", "bookmarks", "flashcard", "quiz", "test", "report", "cheatsheet", "podcast"];
+const DEFAULT_BOTTOM_TABS: TabId[] = ["verify", "notes", "readAloud", "bookmarks", "flashcard", "quiz", "test", "report", "cheatsheet", "podcast"];
 const ALL_TABS = new Set<TabId>([...DEFAULT_SIDEBAR_TABS, ...DEFAULT_BOTTOM_TABS]);
 const DEFAULT_ACTIVE_TABS: ActiveTabs = { sidebar: "subtitles", bottom: "verify" };
 const DEFAULT_MOUNTED_TABS: PanelTabs = { sidebar: ["subtitles"], bottom: ["verify"] };
 
 export const LAYOUT_CONSTRAINTS = {
     MAX_SIDEBAR_TABS: 4,
-    MAX_BOTTOM_TABS: 10,
+    MAX_BOTTOM_TABS: 11,
 } as const;
 
 const MAX_SIDEBAR_TABS = LAYOUT_CONSTRAINTS.MAX_SIDEBAR_TABS;

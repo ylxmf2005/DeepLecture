@@ -84,28 +84,48 @@ def create_prompt_template() -> Response:
 @bp.route("/prompt-templates/<func_id>/<impl_id>", methods=["PUT"])
 @handle_errors
 def update_prompt_template(func_id: str, impl_id: str) -> Response:
-    """Update an existing custom prompt template."""
-    if impl_id == "default":
-        return bad_request("Cannot edit built-in default templates")
-
+    """Update a prompt template (custom or built-in override via upsert)."""
     container = get_container()
+
+    if func_id not in container.prompt_registry.list_func_ids():
+        return bad_request(f"Unknown func_id: {func_id}")
+
     existing = container.prompt_template_storage.get_template(func_id, impl_id)
-    if not existing:
-        return not_found(f"Template not found: {func_id}/{impl_id}")
 
     data = request.get_json(silent=True) or {}
     if not isinstance(data, dict):
         return bad_request("Request body must be a JSON object")
 
+    # For existing custom templates, merge with existing values.
+    # For built-in templates (no storage entry), all fields are required.
+    if existing:
+        name = str(data.get("name") or "").strip() if "name" in data else existing.name
+        description = (
+            str(data.get("description") or "").strip() or None if "description" in data else existing.description
+        )
+        system_template = (
+            str(data.get("system_template") or "") if "system_template" in data else existing.system_template
+        )
+        user_template = str(data.get("user_template") or "") if "user_template" in data else existing.user_template
+        source = existing.source
+        created_at = existing.created_at
+    else:
+        name = str(data.get("name") or "").strip()
+        description = str(data.get("description") or "").strip() or None
+        system_template = str(data.get("system_template") or "")
+        user_template = str(data.get("user_template") or "")
+        source = "custom"
+        created_at = now_iso_utc()
+
     updated = PromptTemplateDefinition(
         func_id=func_id,
         impl_id=impl_id,
-        name=str(data.get("name") or existing.name).strip(),
-        description=str(data.get("description") or "").strip() or existing.description,
-        system_template=str(data.get("system_template")) if "system_template" in data else existing.system_template,
-        user_template=str(data.get("user_template")) if "user_template" in data else existing.user_template,
-        source=existing.source,
-        created_at=existing.created_at,
+        name=name,
+        description=description,
+        system_template=system_template,
+        user_template=user_template,
+        source=source,
+        created_at=created_at,
         updated_at=now_iso_utc(),
         active=True,
     )
@@ -122,9 +142,7 @@ def update_prompt_template(func_id: str, impl_id: str) -> Response:
 @bp.route("/prompt-templates/<func_id>/<impl_id>", methods=["DELETE"])
 @handle_errors
 def delete_prompt_template(func_id: str, impl_id: str) -> Response:
-    """Delete a custom prompt template."""
-    if impl_id == "default":
-        return bad_request("Cannot delete built-in default templates")
+    """Delete a custom prompt template (or a custom override of a built-in)."""
 
     container = get_container()
 
@@ -153,9 +171,10 @@ def get_prompt_template_text(func_id: str, impl_id: str) -> Response:
     if func_id not in container.prompt_registry.list_func_ids():
         return not_found(f"Unknown func_id: {func_id}")
 
-    try:
-        texts = container.prompt_registry.get_template_texts(func_id, impl_id)
-    except ValueError as exc:
-        return not_found(str(exc))
+    impl_ids = {impl.impl_id for impl in container.prompt_registry.list_implementations(func_id)}
+    if impl_id not in impl_ids:
+        return not_found(f"Template not found: {func_id}/{impl_id}")
+
+    texts = container.prompt_registry.get_template_texts(func_id, impl_id)
 
     return success(texts)

@@ -20,6 +20,7 @@ import {
     ShieldCheck,
     Bookmark,
     HelpCircle,
+    Volume2,
 } from "lucide-react";
 import type { TabId, PanelId } from "@/stores/tabLayoutStore";
 
@@ -38,6 +39,7 @@ export const TAB_CONFIG: Record<TabId, { label: string; icon: React.ReactNode }>
     bookmarks: { label: "Bookmarks", icon: <Bookmark className="w-4 h-4" /> },
     quiz: { label: "Quiz", icon: <HelpCircle className="w-4 h-4" /> },
     podcast: { label: "Podcast", icon: <Mic className="w-4 h-4" /> },
+    readAloud: { label: "Read Aloud", icon: <Volume2 className="w-4 h-4" /> },
 };
 
 interface SortableTabProps {

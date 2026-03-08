@@ -50,3 +50,31 @@ class TestPromptTemplateValidation:
 
         errors = validate_prompt_template_definition(template)
         assert any("Missing required placeholders" in err for err in errors)
+
+    @pytest.mark.unit
+    def test_user_only_template_without_required_placeholder_fails(self) -> None:
+        template = PromptTemplateDefinition(
+            func_id="ask_video",
+            impl_id="concise_v1",
+            name="Concise",
+            description=None,
+            system_template="",
+            user_template="Only context: {context_block}",
+        )
+
+        errors = validate_prompt_template_definition(template)
+        assert any("Missing required placeholders" in err for err in errors)
+
+    @pytest.mark.unit
+    def test_system_only_template_allows_required_placeholder_to_come_from_default_user_prompt(self) -> None:
+        template = PromptTemplateDefinition(
+            func_id="ask_video",
+            impl_id="concise_v1",
+            name="Concise",
+            description=None,
+            system_template="You are concise.",
+            user_template="",
+        )
+
+        errors = validate_prompt_template_definition(template)
+        assert errors == []

@@ -11,7 +11,9 @@ from deeplecture.domain.errors import ContentNotFoundError
 from deeplecture.use_cases.content import ContentUseCase
 from deeplecture.use_cases.interfaces import (
     ArtifactStorageProtocol,
+    FileStorageProtocol,
     MetadataStorageProtocol,
+    PathResolverProtocol,
 )
 
 UTC = timezone.utc
@@ -31,15 +33,31 @@ class TestContentUseCase:
         return create_autospec(ArtifactStorageProtocol, instance=True)
 
     @pytest.fixture
+    def mock_file_storage(self) -> MagicMock:
+        """Create mock file storage."""
+        return create_autospec(FileStorageProtocol, instance=True)
+
+    @pytest.fixture
+    def mock_path_resolver(self) -> MagicMock:
+        """Create mock path resolver."""
+        mock = create_autospec(PathResolverProtocol, instance=True)
+        mock.get_content_dir.return_value = "/data/content/content-123"
+        return mock
+
+    @pytest.fixture
     def usecase(
         self,
         mock_metadata_storage: MagicMock,
         mock_artifact_storage: MagicMock,
+        mock_file_storage: MagicMock,
+        mock_path_resolver: MagicMock,
     ) -> ContentUseCase:
         """Create ContentUseCase with mocked dependencies."""
         return ContentUseCase(
             metadata_storage=mock_metadata_storage,
             artifact_storage=mock_artifact_storage,
+            file_storage=mock_file_storage,
+            path_resolver=mock_path_resolver,
         )
 
     @pytest.fixture
@@ -141,6 +159,8 @@ class TestContentUseCase:
         usecase: ContentUseCase,
         mock_metadata_storage: MagicMock,
         mock_artifact_storage: MagicMock,
+        mock_file_storage: MagicMock,
+        mock_path_resolver: MagicMock,
     ) -> None:
         """delete_content should delete metadata and cleanup artifacts."""
         mock_metadata_storage.exists.return_value = True
@@ -151,6 +171,8 @@ class TestContentUseCase:
         assert result is True
         mock_metadata_storage.delete.assert_called_once_with("content-123")
         mock_artifact_storage.remove_content.assert_called_once_with("content-123", delete_files=True)
+        mock_path_resolver.get_content_dir.assert_called_once_with("content-123")
+        mock_file_storage.remove_dir.assert_called_once_with("/data/content/content-123")
 
     @pytest.mark.unit
     def test_delete_content_not_found(
@@ -172,6 +194,8 @@ class TestContentUseCase:
         usecase: ContentUseCase,
         mock_metadata_storage: MagicMock,
         mock_artifact_storage: MagicMock,
+        mock_file_storage: MagicMock,
+        mock_path_resolver: MagicMock,
     ) -> None:
         """delete_content should succeed even if artifact cleanup fails."""
         mock_metadata_storage.exists.return_value = True
@@ -182,6 +206,8 @@ class TestContentUseCase:
 
         # Should still return True because metadata deletion succeeded
         assert result is True
+        mock_path_resolver.get_content_dir.assert_called_once_with("content-123")
+        mock_file_storage.remove_dir.assert_called_once_with("/data/content/content-123")
 
     # =========================================================================
     # update_feature_status tests

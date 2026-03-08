@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import { Settings } from "lucide-react";
+import { usePathname } from "next/navigation";
 
 const SettingsDialog = dynamic(
     () => import("@/components/dialogs/SettingsDialog").then((mod) => mod.SettingsDialog),
@@ -10,7 +11,11 @@ const SettingsDialog = dynamic(
 );
 
 export function GlobalSettingsButton() {
+    const pathname = usePathname();
     const [isOpen, setIsOpen] = useState(false);
+
+    // Video page already injects a dedicated settings button into header actions.
+    if (pathname?.startsWith("/video/")) return null;
 
     return (
         <>

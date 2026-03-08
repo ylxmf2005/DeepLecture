@@ -128,9 +128,46 @@ class PromptRegistry:
         return builder.get_preview_text()
 
     def get_template_texts(self, func_id: str, impl_id: str) -> dict[str, str]:
-        """Return raw system/user template strings for pre-filling the editor."""
+        """Return raw system/user template strings for pre-filling the editor.
+
+        For custom templates (TemplateOverrideBuilder), returns the stored
+        template strings directly. For built-in builders whose
+        ``get_raw_templates`` returns empty strings, attempts to render the
+        prompt by calling ``build()`` with ``{placeholder}`` markers so users
+        get a meaningful starting point when duplicating.
+        """
         builder = self.get(func_id, impl_id)
-        return builder.get_raw_templates()
+        result = builder.get_raw_templates()
+
+        if result.get("system_template") or result.get("user_template"):
+            return result
+
+        # Built-in builder — try to extract templates via build()
+        from deeplecture.use_cases.prompts.template_definitions import (
+            get_placeholder_metadata,
+        )
+
+        meta = get_placeholder_metadata()
+        func_meta = meta.get(func_id)
+        if not func_meta:
+            return result
+
+        allowed: list[str] = func_meta.get("allowed", [])  # type: ignore[assignment]
+        placeholder_kwargs = {name: "{" + name + "}" for name in allowed}
+        try:
+            spec = builder.build(**placeholder_kwargs)
+            return {
+                "system_template": spec.system_prompt or "",
+                "user_template": spec.user_prompt or "",
+            }
+        except Exception:
+            logger.debug(
+                "Could not extract templates for %s/%s via build()",
+                func_id,
+                impl_id,
+                exc_info=True,
+            )
+            return result
 
     def get_all_defaults(self) -> Mapping[str, str]:
         """Return all func_id -> default_impl_id mappings."""
@@ -760,7 +797,7 @@ def create_default_registry(custom_templates: Sequence[PromptTemplateDefinition]
 
     if custom_templates:
         for template in custom_templates:
-            if not template.active or template.impl_id == "default":
+            if not template.active:
                 continue
             try:
                 fallback = registry.get(template.func_id)

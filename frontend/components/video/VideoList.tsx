@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { Play, FileText, Globe, Clock, Loader2, FileVideo, Trash2, Edit2, Youtube, MonitorPlay } from "lucide-react";
 import { listContent, ContentItem, deleteContent, renameContent } from "@/lib/api";
 import { useConfirmDialog } from "@/contexts/ConfirmDialogContext";
+import { useVideoStateStore } from "@/stores/useVideoStateStore";
 
 const RenameDialog = dynamic(
     () => import("@/components/dialogs/RenameDialog").then((mod) => mod.RenameDialog),
@@ -33,11 +34,67 @@ export function VideoList({ refreshTrigger }: VideoListProps) {
     const { confirm } = useConfirmDialog();
     const { notifyOperation } = useTaskNotification();
 
+    const cleanupLocalContentData = (contentId: string) => {
+        // Clean persisted Zustand state for this content.
+        useVideoStateStore.getState().clearVideoState(contentId);
+
+        if (typeof window === "undefined") return;
+
+        // Clean direct localStorage keys (including legacy keys).
+        window.localStorage.removeItem(`note-${contentId}`);
+        window.localStorage.removeItem(`courseSubtitle:subtitle-mode:sidebar:${contentId}`);
+        window.localStorage.removeItem(`courseSubtitle:video-deck:${contentId}`);
+    };
+
+    const cleanupStaleLocalContentData = (activeContentIds: Set<string>) => {
+        // Remove stale per-video Zustand entries.
+        const videosState = useVideoStateStore.getState().videos;
+        for (const videoId of Object.keys(videosState)) {
+            if (!activeContentIds.has(videoId)) {
+                useVideoStateStore.getState().clearVideoState(videoId);
+            }
+        }
+
+        if (typeof window === "undefined") return;
+
+        // Remove stale direct localStorage keys for deleted videos.
+        const SIDEBAR_PREFIX = "courseSubtitle:subtitle-mode:sidebar:";
+        const DECK_PREFIX = "courseSubtitle:video-deck:";
+        const staleKeys: string[] = [];
+
+        for (let i = 0; i < window.localStorage.length; i += 1) {
+            const key = window.localStorage.key(i);
+            if (!key) continue;
+
+            if (key.startsWith("note-")) {
+                const videoId = key.slice("note-".length);
+                if (videoId && !activeContentIds.has(videoId)) staleKeys.push(key);
+                continue;
+            }
+
+            if (key.startsWith(SIDEBAR_PREFIX)) {
+                const videoId = key.slice(SIDEBAR_PREFIX.length);
+                if (videoId && !activeContentIds.has(videoId)) staleKeys.push(key);
+                continue;
+            }
+
+            if (key.startsWith(DECK_PREFIX)) {
+                const videoId = key.slice(DECK_PREFIX.length);
+                if (videoId && !activeContentIds.has(videoId)) staleKeys.push(key);
+            }
+        }
+
+        for (const key of staleKeys) {
+            window.localStorage.removeItem(key);
+        }
+    };
+
     useEffect(() => {
         const fetchContent = async () => {
             try {
                 setLoading(true);
                 const data = await listContent();
+                cleanupStaleLocalContentData(new Set(data.content.map((item) => item.id)));
                 setItems(data.content);  // Unified API returns content array
                 setError(null);
             } catch (err) {
@@ -68,6 +125,7 @@ export function VideoList({ refreshTrigger }: VideoListProps) {
         try {
             setDeletingId(contentId);
             await deleteContent(contentId);
+            cleanupLocalContentData(contentId);
             setItems(prevItems => prevItems.filter(item => item.id !== contentId));
             notifyOperation("content_delete", "success");
         } catch (err) {

@@ -62,7 +62,7 @@ class LLMModelConfig(BaseModel):
     model: str
     api_key: str
     base_url: str | None = None
-    max_tokens: int = 2000
+    max_tokens: int = 65536
     temperature: float = 0.7
 
 
@@ -393,6 +393,43 @@ class AskConfig(BaseModel):
 
 
 # =============================================================================
+# READ-ALOUD CONFIGURATION
+# =============================================================================
+
+
+class ReadAloudVoiceConfig(BaseModel):
+    """Mapping from language code to Edge TTS voice identifier."""
+
+    language: str  # ISO 639-1, e.g. "en", "zh"
+    voice: str  # Edge TTS voice ID, e.g. "en-US-AriaNeural"
+
+
+class DeepLConfig(BaseModel):
+    """DeepL translation API configuration."""
+
+    auth_key: str = ""  # Empty = not configured
+
+
+class ReadAloudConfig(BaseModel):
+    """Note read-aloud feature configuration."""
+
+    voices: list[ReadAloudVoiceConfig] = Field(default_factory=list)
+    default_voice: str = "en-US-AriaNeural"
+    tts_model: str = "edge-default"
+    min_sentence_length: int = 2
+    max_concurrent_tts: int = 3
+    deepl: DeepLConfig = Field(default_factory=DeepLConfig)
+
+    def get_voice(self, language: str) -> str:
+        """Get TTS voice for a language, falling back to default."""
+        lang = language.lower().split("-")[0]  # "en-US" → "en"
+        for v in self.voices:
+            if v.language.lower() == lang:
+                return v.voice
+        return self.default_voice
+
+
+# =============================================================================
 # NOTE CONFIGURATION
 # =============================================================================
 
@@ -436,6 +473,7 @@ class Settings(BaseSettings):
     voiceover: VoiceoverConfig = Field(default_factory=VoiceoverConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)
     note: NoteConfig = Field(default_factory=NoteConfig)
+    read_aloud: ReadAloudConfig = Field(default_factory=ReadAloudConfig)
 
     @classmethod
     def settings_customise_sources(

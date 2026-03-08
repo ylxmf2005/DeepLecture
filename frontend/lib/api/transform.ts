@@ -8,6 +8,12 @@
 type PlainObject = Record<string, unknown>;
 
 const UNSAFE_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+const MAP_KEY_CONTAINERS = new Set([
+    "prompts",
+    "taskModelDefaults",
+    "metadata",
+    "descriptions",
+]);
 
 const toCamel = (s: string): string =>
     s.replace(/([-_][a-z])/gi, ($1) => $1.toUpperCase().replace("-", "").replace("_", ""));
@@ -18,26 +24,40 @@ const toSnake = (s: string): string =>
 const isPlainObject = (obj: unknown): obj is PlainObject =>
     Object.prototype.toString.call(obj) === "[object Object]";
 
+interface CamelizeOptions {
+    preserveCurrentLevelKeys?: boolean;
+}
+
 /**
  * Recursively convert object keys to camelCase.
  * Returns a normal plain object so Next.js RSC can serialize it.
  * Filters unsafe keys to reduce prototype-pollution risk.
+ *
+ * For map-like containers (e.g. prompts/taskModelDefaults), preserve map keys
+ * because they are stable identifiers, not schema field names.
  */
-export function camelizeKeys(obj: unknown): unknown {
+function camelizeKeysInternal(obj: unknown, options: CamelizeOptions = {}): unknown {
     if (Array.isArray(obj)) {
-        return obj.map((v) => camelizeKeys(v));
+        return obj.map((v) => camelizeKeysInternal(v));
     }
     if (isPlainObject(obj)) {
         const result: PlainObject = {};
         for (const key of Object.keys(obj)) {
             if (UNSAFE_KEYS.has(key)) continue;
-            const nextKey = toCamel(key);
+            const nextKey = options.preserveCurrentLevelKeys ? key : toCamel(key);
             if (UNSAFE_KEYS.has(nextKey)) continue;
-            result[nextKey] = camelizeKeys(obj[key]);
+            const preserveChildLevelKeys = MAP_KEY_CONTAINERS.has(nextKey);
+            result[nextKey] = camelizeKeysInternal(obj[key], {
+                preserveCurrentLevelKeys: preserveChildLevelKeys,
+            });
         }
         return result;
     }
     return obj;
+}
+
+export function camelizeKeys(obj: unknown): unknown {
+    return camelizeKeysInternal(obj);
 }
 
 /**

@@ -65,6 +65,7 @@ from deeplecture.use_cases.note import NoteUseCase
 from deeplecture.use_cases.podcast import PodcastUseCase
 from deeplecture.use_cases.prompts import create_default_registry
 from deeplecture.use_cases.quiz import QuizUseCase
+from deeplecture.use_cases.read_aloud import ReadAloudUseCase
 from deeplecture.use_cases.slide_lecture import SlideLectureUseCase
 from deeplecture.use_cases.subtitle import SubtitleUseCase
 from deeplecture.use_cases.task_modeling import TaskModelResolver
@@ -519,6 +520,8 @@ class Container:
             self._cache["content_uc"] = ContentUseCase(
                 metadata_storage=self.metadata_storage,
                 artifact_storage=self.artifact_storage,
+                file_storage=self.file_storage,
+                path_resolver=self.path_resolver,
             )
         return self._cache["content_uc"]  # type: ignore[return-value]
 
@@ -744,6 +747,54 @@ class Container:
                 claude_code=self.claude_code,
             )
         return self._cache["fact_verification_uc"]  # type: ignore[return-value]
+
+    # =========================================================================
+    # READ-ALOUD COMPONENTS
+    # =========================================================================
+
+    @property
+    def deepl_translator(self) -> object:
+        """DeepL translation gateway."""
+        if "deepl_translator" not in self._cache:
+            from deeplecture.infrastructure.gateways.deepl_translation import DeepLTranslator
+
+            self._cache["deepl_translator"] = DeepLTranslator(config=self._settings.read_aloud.deepl)
+        return self._cache["deepl_translator"]
+
+    @property
+    def markdown_text_filter(self) -> object:
+        """Markdown → speakable text filter."""
+        if "markdown_text_filter" not in self._cache:
+            from deeplecture.infrastructure.shared.markdown_text_filter import MarkdownTextFilter
+
+            self._cache["markdown_text_filter"] = MarkdownTextFilter(
+                min_sentence_length=self._settings.read_aloud.min_sentence_length
+            )
+        return self._cache["markdown_text_filter"]
+
+    @property
+    def read_aloud_cache(self) -> object:
+        """Filesystem-backed read-aloud audio cache."""
+        if "read_aloud_cache" not in self._cache:
+            from deeplecture.infrastructure.repositories.fs_read_aloud_cache import FsReadAloudCache
+
+            self._cache["read_aloud_cache"] = FsReadAloudCache(self.path_resolver)
+        return self._cache["read_aloud_cache"]
+
+    @property
+    def read_aloud_usecase(self) -> ReadAloudUseCase:
+        """Note read-aloud streaming use case."""
+        if "read_aloud_uc" not in self._cache:
+            self._cache["read_aloud_uc"] = ReadAloudUseCase(
+                note_storage=self.note_storage,
+                text_filter=self.markdown_text_filter,
+                translation_provider=self.deepl_translator,
+                tts_provider=self.tts_provider,
+                cache=self.read_aloud_cache,
+                event_publisher=self.event_publisher,
+                config=self._settings.read_aloud,
+            )
+        return self._cache["read_aloud_uc"]  # type: ignore[return-value]
 
     @property
     def _file_storage(self) -> FileStorageProtocol:

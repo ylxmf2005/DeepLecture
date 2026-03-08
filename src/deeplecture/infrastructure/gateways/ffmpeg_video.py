@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 ALLOWED_AUDIO_EXT = {".wav", ".mp3", ".m4a", ".aac"}
 ALLOWED_VIDEO_EXT = {".mp4", ".mov", ".mkv", ".webm", ".avi"}
+ALLOWED_SUBTITLE_EXT = {".srt"}
 
 
 def _is_under(path: Path, root: Path) -> bool:
@@ -175,6 +176,70 @@ class FFmpegVideoProcessor:
         ]
         self._run(cmd, f"mux_audio -> {out_path}")
 
+    def export_mp4(
+        self,
+        video_path: str,
+        output_path: str,
+        *,
+        audio_path: str | None = None,
+        subtitle_path: str | None = None,
+    ) -> None:
+        """
+        Export an MP4 with optional audio replacement and optional hard subtitles.
+
+        - If `subtitle_path` is provided, video must be re-encoded (subtitle burn-in).
+        - If no subtitles are requested, we first try stream-copy for speed and
+          fall back to re-encode for compatibility.
+        """
+        v = _validate_media_path(
+            video_path,
+            ALLOWED_VIDEO_EXT,
+            must_exist=True,
+            allowed_roots=self._allowed_roots,
+        )
+        out_path = _validate_media_path(
+            output_path,
+            {".mp4"},
+            must_exist=False,
+            allowed_roots=self._allowed_roots,
+        )
+        a = (
+            _validate_media_path(
+                audio_path,
+                ALLOWED_AUDIO_EXT,
+                must_exist=True,
+                allowed_roots=self._allowed_roots,
+            )
+            if audio_path
+            else None
+        )
+        s = (
+            _validate_media_path(
+                subtitle_path,
+                ALLOWED_SUBTITLE_EXT,
+                must_exist=True,
+                allowed_roots=self._allowed_roots,
+            )
+            if subtitle_path
+            else None
+        )
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if s is None:
+            fast_cmd = self._build_export_command(v, out_path, audio=a, subtitle=None, reencode_video=False)
+            try:
+                self._run(fast_cmd, f"export_mp4(copy) -> {out_path}")
+                return
+            except RuntimeError as exc:
+                logger.warning(
+                    "Fast export failed, retrying with re-encode. output=%s error=%s",
+                    out_path,
+                    exc,
+                )
+
+        cmd = self._build_export_command(v, out_path, audio=a, subtitle=s, reencode_video=True)
+        self._run(cmd, f"export_mp4(reencode) -> {out_path}")
+
     def probe_duration(self, path: str) -> float:
         p = _validate_media_path(
             path,
@@ -237,6 +302,64 @@ class FFmpegVideoProcessor:
     @staticmethod
     def _escape(path: str) -> str:
         return path.replace("'", "\\'")
+
+    @staticmethod
+    def _escape_subtitle_filter_path(path: str) -> str:
+        """
+        Escape path for ffmpeg subtitles= filter argument.
+
+        This is filter-level escaping (not shell escaping).
+        """
+        return path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace(",", "\\,")
+
+    def _build_export_command(
+        self,
+        video: Path,
+        output: Path,
+        *,
+        audio: Path | None,
+        subtitle: Path | None,
+        reencode_video: bool,
+    ) -> list[str]:
+        cmd = [
+            self._ffmpeg,
+            "-y",
+            "-i",
+            str(video),
+        ]
+        if audio is not None:
+            cmd.extend(["-i", str(audio)])
+
+        if subtitle is not None:
+            subtitle_filter_arg = self._escape_subtitle_filter_path(str(subtitle))
+            cmd.extend(["-vf", f"subtitles={subtitle_filter_arg}"])
+
+        cmd.extend(["-map", "0:v:0"])
+        if audio is not None:
+            cmd.extend(["-map", "1:a:0"])
+        else:
+            cmd.extend(["-map", "0:a:0?"])
+
+        if reencode_video or subtitle is not None:
+            cmd.extend(
+                [
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "medium",
+                    "-crf",
+                    "20",
+                    "-pix_fmt",
+                    "yuv420p",
+                ]
+            )
+        else:
+            cmd.extend(["-c:v", "copy"])
+
+        # Always normalize audio to AAC for mp4 compatibility.
+        cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+        cmd.extend(["-movflags", "+faststart", str(output)])
+        return cmd
 
     def _run(self, cmd: list[str], operation: str, *, timeout: float = 600) -> None:
         try:

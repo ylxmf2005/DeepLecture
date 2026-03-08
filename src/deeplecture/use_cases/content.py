@@ -12,7 +12,9 @@ if TYPE_CHECKING:
     from deeplecture.domain import ContentMetadata
     from deeplecture.use_cases.interfaces import (
         ArtifactStorageProtocol,
+        FileStorageProtocol,
         MetadataStorageProtocol,
+        PathResolverProtocol,
     )
 
 UTC = getattr(datetime, "UTC", timezone.utc)
@@ -43,6 +45,8 @@ class ContentUseCase:
         *,
         metadata_storage: MetadataStorageProtocol,
         artifact_storage: ArtifactStorageProtocol,
+        file_storage: FileStorageProtocol,
+        path_resolver: PathResolverProtocol,
     ) -> None:
         """
         Initialize ContentUseCase with injected dependencies.
@@ -50,9 +54,13 @@ class ContentUseCase:
         Args:
             metadata_storage: Storage for content metadata
             artifact_storage: Storage for artifact tracking
+            file_storage: Storage for file operations
+            path_resolver: Path resolution service
         """
         self._metadata = metadata_storage
         self._artifacts = artifact_storage
+        self._files = file_storage
+        self._paths = path_resolver
 
     # =========================================================================
     # PUBLIC API - Content CRUD Operations
@@ -149,6 +157,17 @@ class ContentUseCase:
         except Exception:
             logger.exception(
                 "Artifact cleanup failed for content %s (metadata already deleted)",
+                content_id,
+            )
+
+        # BEST-EFFORT: Remove the entire content directory.
+        # This guarantees cleanup even when files were never registered in artifacts.json.
+        try:
+            content_dir = self._paths.get_content_dir(content_id)
+            self._files.remove_dir(content_dir)
+        except Exception:
+            logger.exception(
+                "Content directory cleanup failed for content %s",
                 content_id,
             )
 
