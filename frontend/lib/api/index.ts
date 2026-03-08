@@ -95,3 +95,6 @@ export type { GenerateFactVerificationParams, GenerateFactVerificationResponse }
 // Bookmark APIs
 export { listBookmarks, createBookmark, updateBookmark, deleteBookmark } from "./bookmarks";
 export type { BookmarkItem, BookmarkListResponse } from "./bookmarks";
+
+// Project APIs
+export { listProjects, createProject, updateProject, deleteProject, assignContentToProject } from "./project";

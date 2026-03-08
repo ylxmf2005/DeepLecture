@@ -34,6 +34,7 @@ export interface ContentItem {
     pageCount?: number;
     sourceType?: string;
     sourceUrl?: string;
+    projectId?: string | null;
 }
 
 export interface ContentListResponse {
@@ -65,6 +66,40 @@ export interface RenameResponse {
 export interface DeleteContentResponse {
     deleted: boolean;
     message?: string;
+}
+
+// =============================================================================
+// PROJECT TYPES
+// =============================================================================
+
+export interface Project {
+    id: string;
+    name: string;
+    description: string;
+    color: string;
+    icon: string;
+    contentCount: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ProjectListResponse {
+    projects: Project[];
+    count: number;
+}
+
+export interface CreateProjectPayload {
+    name: string;
+    description?: string;
+    color?: string;
+    icon?: string;
+}
+
+export interface UpdateProjectPayload {
+    name?: string;
+    description?: string;
+    color?: string;
+    icon?: string;
 }
 
 // =============================================================================

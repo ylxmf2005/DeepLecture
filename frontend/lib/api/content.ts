@@ -22,7 +22,10 @@ export interface DownloadVideoOptions {
     targetLanguage?: string;
 }
 
-export const uploadContent = async (file: File): Promise<UploadResponse> => {
+export const uploadContent = async (
+    file: File,
+    options?: { projectId?: string | null }
+): Promise<UploadResponse> => {
     const formData = new FormData();
     const isVideo = file.type.startsWith("video/");
     const isPdf = file.type === "application/pdf";
@@ -33,6 +36,11 @@ export const uploadContent = async (file: File): Promise<UploadResponse> => {
         formData.append("pdfs", file);
     } else {
         throw new Error("Unsupported file type");
+    }
+
+    // NOTE: FormData bypasses our snake_case interceptor; send wire-format field name.
+    if (options?.projectId) {
+        formData.append("project_id", options.projectId);
     }
 
     const response = await api.post<UploadResponse>("/content/upload", formData);
@@ -59,11 +67,13 @@ export const uploadNoteImage = async (
 
 export const importVideoFromUrl = async (
     url: string,
-    customName?: string
+    customName?: string,
+    options?: { projectId?: string | null }
 ): Promise<ImportResponse> => {
     const response = await api.post<ImportResponse>("/content/import-url", {
         url,
         customName,
+        ...(options?.projectId ? { projectId: options.projectId } : {}),
     });
     return response.data;
 };
@@ -106,8 +116,17 @@ export const getContentMetadata = async (contentId: string): Promise<ContentItem
     return response.data;
 };
 
-export const listContent = async (): Promise<ContentListResponse> => {
-    const response = await api.get<ContentListResponse>("/content/list");
+export const listContent = async (
+    options?: { projectId?: string | null }
+): Promise<ContentListResponse> => {
+    const params = new URLSearchParams();
+    if (options?.projectId !== undefined && options.projectId !== null) {
+        // NOTE: URLSearchParams bypasses our camelCase interceptor; send wire-format key.
+        params.set("project_id", options.projectId);
+    }
+    const query = params.toString();
+    const url = query ? `/content/list?${query}` : "/content/list";
+    const response = await api.get<ContentListResponse>(url);
     return response.data;
 };
 
