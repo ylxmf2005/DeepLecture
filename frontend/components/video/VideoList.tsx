@@ -20,9 +20,10 @@ const log = logger.scope("VideoList");
 
 interface VideoListProps {
     refreshTrigger: number;
+    projectId?: string | null;
 }
 
-export function VideoList({ refreshTrigger }: VideoListProps) {
+export function VideoList({ refreshTrigger, projectId }: VideoListProps) {
     const [items, setItems] = useState<ContentItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -93,7 +94,10 @@ export function VideoList({ refreshTrigger }: VideoListProps) {
         const fetchContent = async () => {
             try {
                 setLoading(true);
-                const data = await listContent();
+                const opts = projectId !== undefined && projectId !== null
+                    ? { projectId }
+                    : undefined;
+                const data = await listContent(opts);
                 cleanupStaleLocalContentData(new Set(data.content.map((item) => item.id)));
                 setItems(data.content);  // Unified API returns content array
                 setError(null);
@@ -106,7 +110,7 @@ export function VideoList({ refreshTrigger }: VideoListProps) {
         };
 
         fetchContent();
-    }, [refreshTrigger]);
+    }, [refreshTrigger, projectId]);
 
     const handleDelete = async (contentId: string, event: React.MouseEvent) => {
         event.preventDefault();
