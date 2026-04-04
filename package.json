@@ -1,0 +1,10 @@
+{
+  "name": "deeplecture",
+  "private": true,
+  "scripts": {
+    "start": "node scripts/run-app.mjs",
+    "app": "node scripts/run-app.mjs",
+    "setup": "node scripts/run-app.mjs --setup-only",
+    "frontend": "npm --prefix frontend run dev"
+  }
+}

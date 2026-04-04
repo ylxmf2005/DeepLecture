@@ -177,6 +177,7 @@ def validate_language(
     *,
     field_name: str = "language",
     default: str = "en",
+    allow_auto: bool = False,
 ) -> str:
     """Validate language code.
 
@@ -187,6 +188,8 @@ def validate_language(
     if not language:
         return default
     language = language.strip().lower()
+    if allow_auto and language == "auto":
+        return language
     if not re.match(r"^[a-z]{2,3}(_[a-z]+)?$", language):
         raise ValidationError(f"{field_name} must be a valid language code")
     return language

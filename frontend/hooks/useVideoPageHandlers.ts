@@ -24,6 +24,7 @@ import {
 export interface UseVideoPageHandlersOptions {
     videoId: string;
     originalLanguage: string;
+    detectedSourceLanguage?: string | null;
     /** Target language for all AI outputs (translations, timelines, explanations, notes) */
     targetLanguage: string;
     learnerProfile: string;
@@ -77,6 +78,7 @@ export function useVideoPageHandlers(options: UseVideoPageHandlersOptions): UseV
     const {
         videoId,
         originalLanguage,
+        detectedSourceLanguage,
         targetLanguage,
         learnerProfile,
         subtitleContextWindowSeconds,
@@ -114,6 +116,7 @@ export function useVideoPageHandlers(options: UseVideoPageHandlersOptions): UseV
     const { handleGenerateTimeline } = useTimelineHandlers({
         videoId,
         originalLanguage,
+        detectedSourceLanguage,
         targetLanguage,
         learnerProfile,
         hasSubtitles,
@@ -127,6 +130,7 @@ export function useVideoPageHandlers(options: UseVideoPageHandlersOptions): UseV
     const { handleCapture, handleGenerateSlideLecture, handleUploadSlide } = useSlideHandlers({
         videoId,
         sourceLanguage: originalLanguage,
+        detectedSourceLanguage,
         targetLanguage,
         learnerProfile,
         subtitleContextWindowSeconds,
@@ -141,6 +145,7 @@ export function useVideoPageHandlers(options: UseVideoPageHandlersOptions): UseV
         videoId,
         voiceoverName,
         originalLanguage,
+        detectedSourceLanguage,
         translatedLanguage: targetLanguage,
         selectedVoiceoverId,
         setVoiceoverProcessing,

@@ -25,6 +25,14 @@ class GenerateSubtitleRequest:
     language: str
 
 
+@dataclass(frozen=True)
+class ASRTranscriptionResult:
+    """Normalized ASR output with resolved language information."""
+
+    segments: list[Segment]
+    resolved_language: str
+
+
 @dataclass
 class EnhanceTranslateRequest:
     """Request to enhance and translate subtitles.

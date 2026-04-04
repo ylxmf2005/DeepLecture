@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import VideoPageClient from "./VideoPageClient";
 import { getContentMetadataServer, listVoiceoversServer } from "./data";
 import Loading from "./loading";
+import { VideoConfigProvider } from "@/contexts/VideoConfigContext";
 
 interface VideoPageProps {
     params: Promise<{ id: string }>;
@@ -19,11 +20,13 @@ async function VideoPageContent({ videoId }: { videoId: string }) {
     ]);
 
     return (
-        <VideoPageClient
-            videoId={videoId}
-            initialContent={initialContent}
-            initialVoiceovers={initialVoiceovers}
-        />
+        <VideoConfigProvider contentId={videoId}>
+            <VideoPageClient
+                videoId={videoId}
+                initialContent={initialContent}
+                initialVoiceovers={initialVoiceovers}
+            />
+        </VideoConfigProvider>
     );
 }
 

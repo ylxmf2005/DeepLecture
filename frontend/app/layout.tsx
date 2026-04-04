@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import { Header } from "@/components/layout/Header";
 import { LearnerProfileProvider } from "@/components/providers/LearnerProfileProvider";
 import { ConfirmDialogProvider } from "@/contexts/ConfirmDialogContext";
@@ -11,8 +10,6 @@ import "./globals.css";
 import "@react-pdf-viewer/core/lib/styles/index.css";
 import "@react-pdf-viewer/default-layout/lib/styles/index.css";
 import { cn } from "@/lib/utils";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "CourseSubtitle",
@@ -26,7 +23,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={cn(inter.className, "min-h-screen bg-gray-50 dark:bg-gray-900 antialiased")}>
+      <body className={cn("min-h-screen bg-gray-50 dark:bg-gray-900 antialiased")}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

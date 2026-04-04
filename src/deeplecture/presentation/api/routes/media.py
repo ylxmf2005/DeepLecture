@@ -16,6 +16,10 @@ from deeplecture.presentation.api.shared.validation import (
     validate_filename,
     validate_language,
 )
+from deeplecture.use_cases.shared.source_language import (
+    SourceLanguageResolutionError,
+    resolve_source_language,
+)
 from deeplecture.use_cases.shared.subtitle import load_subtitle_segments_with_fallback
 
 if TYPE_CHECKING:
@@ -83,7 +87,12 @@ def download_content_video(content_id: str) -> Response:
         default=False,
     )
 
-    source_language = validate_language(request.args.get("source_language"), field_name="source_language", default="")
+    source_language = validate_language(
+        request.args.get("source_language"),
+        field_name="source_language",
+        default="",
+        allow_auto=True,
+    )
     target_language = validate_language(request.args.get("target_language"), field_name="target_language", default="")
 
     subtitle_path: Path | None = None
@@ -99,13 +108,21 @@ def download_content_video(content_id: str) -> Response:
     if burn_source:
         if not source_language:
             return bad_request("source_language is required when burn_source_subtitle=true")
+        try:
+            resolved_source_language = resolve_source_language(
+                source_language,
+                metadata=metadata,
+                field_name="source_language",
+            )
+        except SourceLanguageResolutionError as exc:
+            return bad_request(str(exc))
         source_loaded = load_subtitle_segments_with_fallback(
             container.subtitle_storage,
             content_id=content_id,
-            base_language=source_language,
+            base_language=resolved_source_language,
         )
         if source_loaded is None:
-            return not_found(f"Source subtitles not found for language: {source_language}")
+            return not_found(f"Source subtitles not found for language: {resolved_source_language}")
 
     if burn_target:
         if not target_language:

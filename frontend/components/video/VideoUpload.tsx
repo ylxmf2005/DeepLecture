@@ -18,56 +18,50 @@ export function VideoUpload({ onUploadSuccess }: VideoUploadProps) {
     const clearError = useUploadQueueStore((s) => s.clearError);
 
     return (
-        <div className="w-full max-w-2xl mx-auto mb-8">
+        <div className="w-full">
             {/* Tab Switcher */}
-            <div className="flex gap-4 mb-4">
+            <div className="flex gap-2 mb-3">
                 <button
                     type="button"
                     onClick={() => setActiveTab("local")}
                     aria-pressed={activeTab === "local"}
                     className={cn(
-                        "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors",
+                        "inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-sm font-medium transition-colors",
                         activeTab === "local"
-                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
-                            : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                 >
-                    <div className="flex items-center justify-center gap-2">
-                        <Upload className="w-4 h-4" />
-                        Local Upload
-                    </div>
+                    <Upload className="w-3.5 h-3.5" />
+                    Upload
                 </button>
                 <button
                     type="button"
                     onClick={() => setActiveTab("url")}
                     aria-pressed={activeTab === "url"}
                     className={cn(
-                        "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors",
+                        "inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-sm font-medium transition-colors",
                         activeTab === "url"
-                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
-                            : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                 >
-                    <div className="flex items-center justify-center gap-2">
-                        <LinkIcon className="w-4 h-4" />
-                        Import from URL
-                    </div>
+                    <LinkIcon className="w-3.5 h-3.5" />
+                    URL
                 </button>
                 <button
                     type="button"
                     onClick={() => setActiveTab("record")}
                     aria-pressed={activeTab === "record"}
                     className={cn(
-                        "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors",
+                        "inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-sm font-medium transition-colors",
                         activeTab === "record"
-                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
-                            : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                 >
-                    <div className="flex items-center justify-center gap-2">
-                        <Mic className="w-4 h-4" />
-                        Record Audio
-                    </div>
+                    <Mic className="w-3.5 h-3.5" />
+                    Record
                 </button>
             </div>
 

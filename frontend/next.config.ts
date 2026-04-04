@@ -8,6 +8,7 @@ const CANVAS_SHIM_TURBOPACK = "./lib/shims/canvas.js";
 const nextConfig: NextConfig = {
   reactCompiler: true,
   turbopack: {
+    root: __dirname,
     resolveAlias: {
       canvas: CANVAS_SHIM_TURBOPACK,
     },

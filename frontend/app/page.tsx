@@ -4,14 +4,14 @@ import { useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { VideoUpload } from "@/components/video/VideoUpload";
 import { VideoList } from "@/components/video/VideoList";
-import { ProjectSidebar } from "@/components/projects/ProjectSidebar";
+import { ProjectFilter } from "@/components/projects/ProjectFilter";
 
 export default function Home() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [sidebarRefresh, setSidebarRefresh] = useState(0);
+  const [filterRefresh, setFilterRefresh] = useState(0);
 
   // Read project from URL, null = "All"
   const selectedProjectId = searchParams.get("project") || null;
@@ -32,39 +32,23 @@ export default function Home() {
 
   const handleUploadSuccess = () => {
     setRefreshTrigger((prev) => prev + 1);
-    setSidebarRefresh((prev) => prev + 1);
+    setFilterRefresh((prev) => prev + 1);
   };
 
   return (
-    <div className="flex gap-6 items-start">
-      <ProjectSidebar
+    <div className="space-y-6">
+      <ProjectFilter
         selectedProjectId={selectedProjectId}
         onSelectProject={handleSelectProject}
-        refreshTrigger={sidebarRefresh}
+        refreshTrigger={filterRefresh}
       />
 
-      <div className="flex-1 min-w-0 space-y-8">
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Course Subtitle & Notes
-          </h1>
-          <p className="text-muted-foreground">
-            Upload your course videos to generate subtitles and AI-powered notes.
-          </p>
-        </div>
+      <VideoUpload onUploadSuccess={handleUploadSuccess} />
 
-        <VideoUpload onUploadSuccess={handleUploadSuccess} />
-
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold text-foreground">
-            Your Videos
-          </h2>
-          <VideoList
-            refreshTrigger={refreshTrigger}
-            projectId={selectedProjectId}
-          />
-        </div>
-      </div>
+      <VideoList
+        refreshTrigger={refreshTrigger}
+        projectId={selectedProjectId}
+      />
     </div>
   );
 }

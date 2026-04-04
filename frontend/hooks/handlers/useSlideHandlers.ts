@@ -7,12 +7,14 @@ import type { ProcessingAction } from "../useVideoPageState";
 import { useTabLayoutStore, findTabPanel, type TabId } from "@/stores/tabLayoutStore";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
+import { isUnresolvedAutoSourceLanguage } from "@/lib/sourceLanguage";
 
 const log = logger.scope("SlideHandlers");
 
 export interface UseSlideHandlersOptions {
     videoId: string;
     sourceLanguage: string;
+    detectedSourceLanguage?: string | null;
     targetLanguage: string;
     ttsLanguage?: "source" | "target";
     learnerProfile: string;
@@ -35,6 +37,7 @@ export interface UseSlideHandlersReturn {
 export function useSlideHandlers({
     videoId,
     sourceLanguage,
+    detectedSourceLanguage,
     targetLanguage,
     ttsLanguage,
     learnerProfile,
@@ -54,6 +57,14 @@ export function useSlideHandlers({
 
     const handleCapture = useCallback(
         async (timestamp: number, imagePath: string) => {
+            if (isUnresolvedAutoSourceLanguage(sourceLanguage, detectedSourceLanguage)) {
+                notifyOperation(
+                    "slide_explain",
+                    "error",
+                    "Source language is set to Auto. Generate subtitles first or choose a specific source language before creating explanations."
+                );
+                return;
+            }
             try {
                 // Submit explanation task first (saves pending entry on backend)
                 await explainSlide({
@@ -77,6 +88,7 @@ export function useSlideHandlers({
         [
             videoId,
             sourceLanguage,
+            detectedSourceLanguage,
             targetLanguage,
             learnerProfile,
             subtitleContextWindowSeconds,
@@ -88,6 +100,14 @@ export function useSlideHandlers({
 
     const handleGenerateSlideLecture = useCallback(
         async (force: boolean = false) => {
+            if (isUnresolvedAutoSourceLanguage(sourceLanguage, detectedSourceLanguage)) {
+                notifyOperation(
+                    "video_generation",
+                    "error",
+                    "Slide video generation needs a concrete source language. Choose a specific language before starting."
+                );
+                return;
+            }
             try {
                 setProcessing(true);
                 setProcessingAction("video");
@@ -112,7 +132,17 @@ export function useSlideHandlers({
                 setProcessingAction(null);
             }
         },
-        [videoId, sourceLanguage, targetLanguage, ttsLanguage, setProcessing, setProcessingAction, notifyTaskComplete]
+        [
+            videoId,
+            sourceLanguage,
+            detectedSourceLanguage,
+            targetLanguage,
+            ttsLanguage,
+            setProcessing,
+            setProcessingAction,
+            notifyOperation,
+            notifyTaskComplete,
+        ]
     );
 
     const handleUploadSlide = useCallback(

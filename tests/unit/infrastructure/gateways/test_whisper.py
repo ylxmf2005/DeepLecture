@@ -71,6 +71,23 @@ Second line
         assert asr._parse_time("00:00:00,500") == 0.5
         assert asr._parse_time("01:30:45,250") == 5445.25
 
+    @pytest.mark.unit
+    def test_parse_resolved_language_from_json(self, asr: WhisperASR, test_data_dir: Path) -> None:
+        """Whisper JSON output should expose the resolved language."""
+        json_path = test_data_dir / "whisper.json"
+        json_path.write_text('{"result": {"language": "ja"}}', encoding="utf-8")
+
+        assert asr._parse_resolved_language(json_path) == "ja"
+
+    @pytest.mark.unit
+    def test_parse_resolved_language_requires_value(self, asr: WhisperASR, test_data_dir: Path) -> None:
+        """Missing language in whisper JSON should raise a runtime error."""
+        json_path = test_data_dir / "whisper-empty.json"
+        json_path.write_text('{"result": {}}', encoding="utf-8")
+
+        with pytest.raises(RuntimeError, match="did not return a language"):
+            asr._parse_resolved_language(json_path)
+
 
 class TestWhisperHardwareDetection:
     """Tests for hardware detection."""

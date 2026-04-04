@@ -69,6 +69,22 @@ describe("API payload overrides", () => {
         });
     });
 
+    it("preserves auto source language in timeline payloads", async () => {
+        vi.mocked(api.post).mockResolvedValue({
+            data: { contentId: "c1", taskId: "t1", status: "pending", message: "ok" },
+        } as never);
+
+        await generateTimeline("c1", {
+            subtitleLanguage: "auto",
+            outputLanguage: "zh",
+        });
+
+        const call = vi.mocked(api.post).mock.calls[0];
+        const payload = call[1] as Record<string, unknown>;
+
+        expect(payload.subtitle_language).toBe("auto");
+    });
+
     it("does not inject tts_model for TTS tasks by default", async () => {
         vi.mocked(api.post).mockResolvedValue({
             data: { voiceover: { id: "v1" }, message: "ok", taskId: "t2" },
@@ -102,5 +118,21 @@ describe("API payload overrides", () => {
             timeline_generation: "timeline-default",
             note_generation: "note-video",
         });
+    });
+
+    it("preserves auto source language in slide lecture payloads", async () => {
+        vi.mocked(api.post).mockResolvedValue({
+            data: { deckId: "c1", status: "pending", message: "ok", taskId: "t3" },
+        } as never);
+
+        await generateSlideLecture("c1", {
+            sourceLanguage: "auto",
+            targetLanguage: "zh",
+        });
+
+        const call = vi.mocked(api.post).mock.calls[0];
+        const payload = call[1] as Record<string, unknown>;
+
+        expect(payload.source_language).toBe("auto");
     });
 });

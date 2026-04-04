@@ -64,10 +64,10 @@ export function FileDropZone({ isDragging, setIsDragging }: FileDropZoneProps) {
     return (
         <div
             className={cn(
-                "border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 cursor-pointer",
+                "border-2 border-dashed rounded-lg px-6 py-4 text-center transition-all duration-200 cursor-pointer",
                 isDragging
-                    ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-                    : "border-gray-300 dark:border-gray-700 hover:border-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800/50",
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/40 hover:bg-muted/50",
                 isUploading && "pointer-events-none opacity-50"
             )}
             onDragOver={handleDragOver}
@@ -84,18 +84,13 @@ export function FileDropZone({ isDragging, setIsDragging }: FileDropZoneProps) {
                 onChange={handleFileSelect}
                 className="hidden"
             />
-            <div className="flex flex-col items-center gap-3">
-                <div className="p-3 rounded-full bg-blue-100 dark:bg-blue-900/40">
-                    <Upload className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                    <p className="font-medium text-gray-700 dark:text-gray-200">
-                        Drop files here or click to browse
-                    </p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                        Videos (MP4, WebM, MOV) or PDFs
-                    </p>
-                </div>
+            <div className="flex items-center justify-center gap-3">
+                <Upload className="w-5 h-5 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">Drop files</span>
+                    {" "}or click to browse
+                    <span className="hidden sm:inline"> &mdash; MP4, WebM, MOV, PDF</span>
+                </p>
             </div>
         </div>
     );

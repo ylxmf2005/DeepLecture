@@ -70,6 +70,14 @@ class TestContentMetadata:
         assert sample_video_content.enhance_translate_status == "none"
         assert sample_video_content.timeline_status == "none"
         assert sample_video_content.notes_status == "none"
+        assert sample_video_content.detected_source_language is None
+
+    @pytest.mark.unit
+    def test_detected_source_language_can_be_persisted(self, sample_video_content: ContentMetadata) -> None:
+        """Detected source language should be stored on the entity."""
+        sample_video_content.detected_source_language = "ja"
+
+        assert sample_video_content.detected_source_language == "ja"
 
     @pytest.mark.unit
     def test_timestamps_are_utc(self, sample_video_content: ContentMetadata) -> None:

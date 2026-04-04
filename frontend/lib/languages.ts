@@ -1,3 +1,5 @@
+export const AUTO_LANGUAGE = "auto";
+
 export const WHISPER_LANGUAGES = [
   { value: "en", label: "English" },
   { value: "zh", label: "Chinese" },
@@ -99,3 +101,18 @@ export const WHISPER_LANGUAGES = [
   { value: "yi", label: "Yiddish" },
   { value: "yo", label: "Yoruba" },
 ];
+
+export const SOURCE_LANGUAGE_OPTIONS = [
+  { value: AUTO_LANGUAGE, label: "Auto" },
+  ...WHISPER_LANGUAGES,
+];
+
+export function getLanguageLabel(value: string | null | undefined): string {
+  const normalized = (value || "").trim().toLowerCase();
+  if (!normalized) return "Unknown";
+  if (normalized === AUTO_LANGUAGE) return "Auto";
+
+  const baseLanguage = normalized.replace(/_enhanced$/, "");
+  const match = WHISPER_LANGUAGES.find((language) => language.value === baseLanguage);
+  return match?.label ?? baseLanguage.toUpperCase();
+}

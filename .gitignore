@@ -82,7 +82,11 @@ _archive/
 AGENTS.md
 CLAUDE.md
 GEMINI.md
+*.local.md
 
-# Claude generated docs
+# Internal dev artifacts (do not commit)
+todos/
 claudedocs/
 .tmp/
+.worktrees
+.context/

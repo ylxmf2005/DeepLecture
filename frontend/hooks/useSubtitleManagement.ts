@@ -8,6 +8,10 @@ import { SubtitleDisplayMode } from "@/stores/types";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
 import { useTaskNotification } from "@/hooks/useTaskNotification";
+import {
+    isUnresolvedAutoSourceLanguage,
+    resolveConfiguredSourceLanguage,
+} from "@/lib/sourceLanguage";
 
 const log = logger.scope("SubtitleManagement");
 
@@ -63,10 +67,18 @@ export function useSubtitleManagement({
     const hasSubtitles = content?.subtitleStatus === "ready";
     const hasEnhancedSubtitles = content?.enhancedStatus === "ready";
     const shouldLoadTargetSubtitles = hasEnhancedSubtitles || content?.type === "slide";
+    const resolvedSourceLanguage = resolveConfiguredSourceLanguage(
+        originalLanguage,
+        content?.detectedSourceLanguage
+    );
+    const unresolvedAutoSourceLanguage = isUnresolvedAutoSourceLanguage(
+        originalLanguage,
+        content?.detectedSourceLanguage
+    );
 
     // Create a stable key based on subtitle state - changes trigger reload
     // subtitleRefreshVersion acts as cache invalidation token for SSE-triggered regeneration
-    const subtitleStateKey = `${videoId}:${originalLanguage}:${targetLanguage}:${hasSubtitles}:${hasEnhancedSubtitles}:${subtitleRefreshVersion}`;
+    const subtitleStateKey = `${videoId}:${originalLanguage}:${resolvedSourceLanguage ?? ""}:${targetLanguage}:${hasSubtitles}:${hasEnhancedSubtitles}:${subtitleRefreshVersion}`;
 
     // Load subtitles when subtitle state changes
     // Using subtitleStateKey instead of content to prevent unnecessary reloads
@@ -85,14 +97,17 @@ export function useSubtitleManagement({
         if (!hasSubtitles && !hasEnhancedSubtitles) {
             return;
         }
+        if (unresolvedAutoSourceLanguage || !resolvedSourceLanguage) {
+            return;
+        }
 
         const loadSubtitles = async () => {
             try {
                 setSubtitlesLoading(true);
 
                 const sourceLang = hasEnhancedSubtitles
-                    ? `${originalLanguage}_enhanced`
-                    : originalLanguage;
+                    ? `${resolvedSourceLanguage}_enhanced`
+                    : resolvedSourceLanguage;
 
                 // Load source subtitles (JSON segments)
                 const sourceData = await getSubtitles(videoId, sourceLang);
@@ -161,10 +176,12 @@ export function useSubtitleManagement({
         subtitleStateKey,
         videoId,
         originalLanguage,
+        resolvedSourceLanguage,
         targetLanguage,
         hasSubtitles,
         hasEnhancedSubtitles,
         shouldLoadTargetSubtitles,
+        unresolvedAutoSourceLanguage,
         notifyOperation,
     ]);
 

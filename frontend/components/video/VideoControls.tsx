@@ -88,13 +88,11 @@ export function VideoControls({
     const [isMuted, setIsMuted] = useState(false);
     const [previousVolume, setPreviousVolume] = useState(1);
     const [playbackRate, setPlaybackRate] = useState(1);
-    const [showVolumeSlider, setShowVolumeSlider] = useState(false);
     const [showSpeedMenu, setShowSpeedMenu] = useState(false);
     const [isDraggingVolume, setIsDraggingVolume] = useState(false);
     const [isInitialized, setIsInitialized] = useState(false);
 
     const volumeSliderRef = useRef<HTMLDivElement>(null);
-    const volumeContainerRef = useRef<HTMLDivElement>(null);
     const speedMenuRef = useRef<HTMLDivElement>(null);
     const prevSyncActiveRef = useRef(isSyncActive);
 
@@ -224,9 +222,6 @@ export function VideoControls({
     // Close menus when clicking outside
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
-            if (volumeContainerRef.current && !volumeContainerRef.current.contains(e.target as Node)) {
-                setShowVolumeSlider(false);
-            }
             if (speedMenuRef.current && !speedMenuRef.current.contains(e.target as Node)) {
                 setShowSpeedMenu(false);
             }
@@ -273,28 +268,27 @@ export function VideoControls({
                     </button>
 
                     {/* Volume */}
-                    <div ref={volumeContainerRef} className="relative flex items-center">
+                    <div className="flex items-center gap-2">
                         <button
                             onClick={handleMuteToggle}
-                            onMouseEnter={() => setShowVolumeSlider(true)}
                             className="p-1 text-white hover:text-white/80 transition-colors"
                             title={isMuted ? "Unmute" : "Mute"}
                         >
                             <VolumeIcon className="w-5 h-5" />
                         </button>
 
-                        {/* Volume slider */}
                         <div
                             className={cn(
-                                "flex items-center overflow-hidden transition-all duration-200",
-                                showVolumeSlider || isDraggingVolume ? "w-20 ml-2" : "w-0 ml-0"
+                                "flex items-center w-24 sm:w-28 py-2",
+                                isDraggingVolume && "cursor-grabbing"
                             )}
-                            onMouseEnter={() => setShowVolumeSlider(true)}
-                            onMouseLeave={() => !isDraggingVolume && setShowVolumeSlider(false)}
                         >
                             <div
                                 ref={volumeSliderRef}
-                                className="w-full h-1 bg-white/30 rounded-full cursor-pointer"
+                                className={cn(
+                                    "w-full h-1.5 bg-white/30 rounded-full cursor-pointer transition-colors",
+                                    isDraggingVolume ? "bg-white/40" : "hover:bg-white/40"
+                                )}
                                 onClick={handleVolumeClick}
                                 onMouseDown={handleVolumeMouseDown}
                             >

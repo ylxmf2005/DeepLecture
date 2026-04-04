@@ -9,6 +9,7 @@
  */
 
 import { toError } from "@/lib/utils/errorUtils";
+import { isAPIError } from "@/lib/api/errors";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -43,6 +44,24 @@ class Logger {
         this.minLevel = this.isDev ? "debug" : "warn";
     }
 
+    private getEffectiveLevel(level: LogLevel, error?: Error): LogLevel {
+        if (level !== "error" || !error) {
+            return level;
+        }
+
+        if (isAPIError(error)) {
+            if (error.isCancelled()) {
+                return "debug";
+            }
+
+            if (error.isClientError()) {
+                return "warn";
+            }
+        }
+
+        return level;
+    }
+
     private shouldLog(level: LogLevel): boolean {
         return LOG_LEVELS[level] >= LOG_LEVELS[this.minLevel];
     }
@@ -63,10 +82,11 @@ class Logger {
         context?: LogContext,
         error?: Error
     ): void {
-        if (!this.shouldLog(level)) return;
+        const effectiveLevel = this.getEffectiveLevel(level, error);
+        if (!this.shouldLog(effectiveLevel)) return;
 
         const entry: LogEntry = {
-            level,
+            level: effectiveLevel,
             message,
             timestamp: new Date().toISOString(),
             context,
@@ -75,7 +95,7 @@ class Logger {
 
         const formatted = this.formatEntry(entry);
 
-        switch (level) {
+        switch (effectiveLevel) {
             case "debug":
                 console.debug(formatted, context || "");
                 break;

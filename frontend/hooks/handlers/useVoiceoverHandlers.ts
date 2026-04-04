@@ -5,6 +5,7 @@ import { generateVoiceover, listVoiceovers, deleteVoiceover, updateVoiceover, ty
 import { useTaskNotification } from "@/hooks/useTaskNotification";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
+import { isUnresolvedAutoSourceLanguage } from "@/lib/sourceLanguage";
 
 const log = logger.scope("VoiceoverHandlers");
 
@@ -12,6 +13,7 @@ export interface UseVoiceoverHandlersOptions {
     videoId: string;
     voiceoverName: string;
     originalLanguage: string;
+    detectedSourceLanguage?: string | null;
     translatedLanguage: string;
     selectedVoiceoverId: string | null;
     setVoiceoverProcessing: (source: SubtitleSource | null) => void;
@@ -32,6 +34,7 @@ export function useVoiceoverHandlers({
     videoId,
     voiceoverName,
     originalLanguage,
+    detectedSourceLanguage,
     translatedLanguage,
     selectedVoiceoverId,
     setVoiceoverProcessing,
@@ -45,6 +48,17 @@ export function useVoiceoverHandlers({
             const name = voiceoverName.trim();
             if (!name) {
                 notifyOperation("voiceover_name_required", "error");
+                return;
+            }
+            if (
+                source === "original" &&
+                isUnresolvedAutoSourceLanguage(originalLanguage, detectedSourceLanguage)
+            ) {
+                notifyTaskComplete(
+                    "voiceover_generation",
+                    "error",
+                    "Source language is set to Auto. Generate subtitles first so the detected language can be reused for voiceover generation."
+                );
                 return;
             }
 
@@ -70,6 +84,7 @@ export function useVoiceoverHandlers({
             videoId,
             voiceoverName,
             originalLanguage,
+            detectedSourceLanguage,
             translatedLanguage,
             setVoiceoverProcessing,
             setVoiceovers,

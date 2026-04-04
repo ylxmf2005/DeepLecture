@@ -91,10 +91,17 @@ class SubtitleUseCase:
         try:
             # Run ASR
             video_path = Path(metadata.source_file)
-            segments = self._asr.transcribe(video_path, language=request.language)
+            transcription = self._asr.transcribe(video_path, language=request.language)
+            segments = transcription.segments
+            resolved_language = transcription.resolved_language
 
             # Save subtitles
-            self._subtitles.save(request.content_id, segments, request.language)
+            self._subtitles.save(request.content_id, segments, resolved_language)
+
+            if request.language == "auto":
+                metadata.detected_source_language = resolved_language
+            else:
+                metadata.detected_source_language = None
 
             # Update status
             metadata = metadata.with_status(FeatureType.SUBTITLE.value, FeatureStatus.READY)
@@ -103,7 +110,7 @@ class SubtitleUseCase:
             return SubtitleResult(
                 content_id=request.content_id,
                 segments=segments,
-                language=request.language,
+                language=resolved_language,
             )
 
         except Exception as e:

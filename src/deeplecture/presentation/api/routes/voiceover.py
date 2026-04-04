@@ -23,6 +23,10 @@ from deeplecture.presentation.api.shared import (
 from deeplecture.presentation.api.shared.model_resolution import resolve_models_for_task
 from deeplecture.presentation.api.shared.validation import validate_content_id, validate_filename, validate_language
 from deeplecture.use_cases.dto.voiceover import GenerateVoiceoverRequest
+from deeplecture.use_cases.shared.source_language import (
+    SourceLanguageResolutionError,
+    resolve_source_language,
+)
 
 if TYPE_CHECKING:
     from flask import Response
@@ -61,7 +65,7 @@ def generate_voiceover(content_id: str) -> Response:
     if not voiceover_name:
         return bad_request("voiceover_name is required")
 
-    language = validate_language(data.get("language"), field_name="language", default="")
+    language = validate_language(data.get("language"), field_name="language", default="", allow_auto=True)
     if not language:
         return bad_request("language is required")
 
@@ -69,6 +73,16 @@ def generate_voiceover(content_id: str) -> Response:
     tts_model = data.get("tts_model") or None
 
     container = get_container()
+    metadata = container.content_usecase.get_content(content_id)
+    try:
+        resolved_language = resolve_source_language(
+            language,
+            metadata=metadata,
+            field_name="language",
+        )
+    except SourceLanguageResolutionError as exc:
+        return bad_request(str(exc))
+
     _, tts_model = resolve_models_for_task(
         container=container,
         content_id=content_id,
@@ -79,7 +93,6 @@ def generate_voiceover(content_id: str) -> Response:
 
     video_path = container.artifact_storage.get_path(content_id, "video", fallback_kinds=["source"])
     if video_path is None:
-        metadata = container.content_usecase.get_content(content_id)
         for candidate in (getattr(metadata, "video_file", None), getattr(metadata, "source_file", None)):
             if not candidate:
                 continue
@@ -97,8 +110,8 @@ def generate_voiceover(content_id: str) -> Response:
         content_id=content_id,
         video_path=video_path,
         output_dir=output_dir,
-        language=language,
-        subtitle_language=language,
+        language=resolved_language,
+        subtitle_language=resolved_language,
         audio_basename=voiceover_name,
         tts_model=tts_model,
     )
@@ -107,7 +120,7 @@ def generate_voiceover(content_id: str) -> Response:
     voiceover_entry = {
         "id": voiceover_name,
         "name": voiceover_name,
-        "language": language,
+        "language": resolved_language,
         "status": "processing",
     }
     container.voiceover_storage.add_entry(content_id, voiceover_entry)
@@ -133,7 +146,11 @@ def generate_voiceover(content_id: str) -> Response:
             content_id=content_id,
             task_type="voiceover_generation",
             task=_run_generation,
-            metadata={"voiceover_name": voiceover_name, "language": language},
+            metadata={
+                "voiceover_name": voiceover_name,
+                "language": language,
+                "resolved_language": resolved_language,
+            },
         )
     except Exception:
         # Rollback: remove the entry if submit fails
@@ -145,7 +162,7 @@ def generate_voiceover(content_id: str) -> Response:
             "voiceover": {
                 "id": voiceover_name,
                 "name": voiceover_name,
-                "language": language,
+                "language": resolved_language,
                 "created_at": datetime.now(UTC).isoformat(),
                 "status": "processing",
             },

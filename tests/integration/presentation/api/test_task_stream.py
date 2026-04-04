@@ -105,3 +105,29 @@ class TestTaskStreamEndpoint:
 
         text = data.decode("utf-8")
         assert "id:" in text or "id: " in text, f"Expected id: field in SSE events, got: {text[:300]}"
+
+    def test_stream_serializes_task_metadata_payload(self, client, mock_container) -> None:
+        """Initial task snapshots should preserve metadata for clients."""
+        mock_task = MagicMock()
+        mock_task.id = "t1"
+        mock_task.type = "subtitle_generation"
+        mock_task.content_id = "test_content_123"
+        mock_task.status = "ready"
+        mock_task.progress = 100
+        mock_task.error = None
+        mock_task.metadata = {
+            "language": "auto",
+            "resolved_language": "ja",
+            "detected_source_language": "ja",
+        }
+        mock_task.created_at = None
+        mock_task.updated_at = None
+        mock_container.task_manager.get_tasks_by_content.return_value = [mock_task]
+
+        response = client.get("/api/task/content/test_content_123")
+
+        assert response.status_code == 200
+        task = response.json["data"]["tasks"][0]
+        assert task["metadata"]["language"] == "auto"
+        assert task["metadata"]["resolved_language"] == "ja"
+        assert task["metadata"]["detected_source_language"] == "ja"

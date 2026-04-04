@@ -21,7 +21,6 @@ import { useDndTabLayout } from "@/hooks/useDndTabLayout";
 import { useLive2DAudioSync } from "@/hooks/useLive2DAudioSync";
 import { Settings, Wand2, Loader2 } from "lucide-react";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
-import { VideoConfigProvider } from "@/contexts/VideoConfigContext";
 
 // Lazy load dialogs - only loaded when opened
 const ActionsDialog = dynamic(
@@ -53,6 +52,7 @@ import { useVideoPageSettings } from "@/hooks/useVideoPageSettings";
 import { TAB_CONFIG } from "@/components/dnd/DraggableTabBar";
 import { getResumeCandidate } from "@/lib/videoResume";
 import { applyResumeSeek } from "@/lib/videoResumeSeek";
+import { resolveConfiguredSourceLanguage } from "@/lib/sourceLanguage";
 
 export { type ProcessingAction } from "@/hooks/useVideoPageState";
 
@@ -138,6 +138,8 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
         generatingNote,
         setGeneratingNote,
     } = pageState;
+    const resolvedOriginalLanguage =
+        resolveConfiguredSourceLanguage(originalLanguage, content?.detectedSourceLanguage) ?? originalLanguage;
 
     // Store hooks
     const skipRamblingEnabled = useSmartSkipEnabled(videoId);
@@ -342,6 +344,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
     const handlers = useVideoPageHandlers({
         videoId,
         originalLanguage,
+        detectedSourceLanguage: content?.detectedSourceLanguage,
         targetLanguage,
         learnerProfile,
         subtitleContextWindowSeconds,
@@ -634,7 +637,6 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
     }).format(new Date(content.createdAt));
 
     return (
-        <VideoConfigProvider contentId={videoId}>
         <DndContext
             id={dndContextId}
             sensors={sensors}
@@ -732,7 +734,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             subtitlesDual={subtitlesDual}
                             subtitlesDualReversed={subtitlesDualReversed}
                             subtitlesLoading={subtitlesLoading}
-                            originalLanguage={originalLanguage}
+                            originalLanguage={resolvedOriginalLanguage}
                             processing={processing}
                             processingAction={processingAction}
                             timelineEntries={timelineEntries}
@@ -773,7 +775,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                         subtitlesDual={subtitlesDual}
                         subtitlesDualReversed={subtitlesDualReversed}
                         subtitlesLoading={subtitlesLoading}
-                        originalLanguage={originalLanguage}
+                        originalLanguage={resolvedOriginalLanguage}
                         processing={processing}
                         processingAction={processingAction}
                         timelineEntries={timelineEntries}
@@ -815,7 +817,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             subtitlesDual={subtitlesDual}
                             subtitlesDualReversed={subtitlesDualReversed}
                             subtitlesLoading={subtitlesLoading}
-                            originalLanguage={originalLanguage}
+                            originalLanguage={resolvedOriginalLanguage}
                             processing={processing}
                             processingAction={processingAction}
                             timelineEntries={timelineEntries}
@@ -851,7 +853,7 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
                             subtitlesDual={subtitlesDual}
                             subtitlesDualReversed={subtitlesDualReversed}
                             subtitlesLoading={subtitlesLoading}
-                            originalLanguage={originalLanguage}
+                            originalLanguage={resolvedOriginalLanguage}
                             processing={processing}
                             processingAction={processingAction}
                             timelineEntries={timelineEntries}
@@ -982,6 +984,5 @@ export default function VideoPageClient({ videoId, initialContent, initialVoiceo
             </DragOverlay>
         </div>
         </DndContext>
-        </VideoConfigProvider>
     );
 }

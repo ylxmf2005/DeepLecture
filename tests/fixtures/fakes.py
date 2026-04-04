@@ -169,9 +169,10 @@ class FakeASR:
         audio_path: Path,
         *,
         language: str = "en",
-    ) -> list:
+    ):
         """Return list of Segment objects."""
         from deeplecture.domain.entities import Segment
+        from deeplecture.use_cases.dto.subtitle import ASRTranscriptionResult
 
         self._calls.append({"audio_path": audio_path, "language": language})
 
@@ -179,10 +180,13 @@ class FakeASR:
             raise RuntimeError(self.fail_message)
 
         # Return default fake segments
-        return [
-            Segment(start=0.0, end=2.0, text="This is a fake transcript."),
-            Segment(start=2.0, end=4.0, text="For testing purposes only."),
-        ]
+        return ASRTranscriptionResult(
+            segments=[
+                Segment(start=0.0, end=2.0, text="This is a fake transcript."),
+                Segment(start=2.0, end=4.0, text="For testing purposes only."),
+            ],
+            resolved_language="ja" if language == "auto" else language,
+        )
 
 
 # =============================================================================

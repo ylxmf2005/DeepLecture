@@ -247,8 +247,9 @@ export function VideoList({ refreshTrigger, projectId }: VideoListProps) {
 
     if (items.length === 0) {
         return (
-            <div className="text-center py-12 text-muted-foreground">
-                No content uploaded yet.
+            <div className="text-center py-16 text-muted-foreground">
+                <p className="text-lg font-medium text-foreground/60">No content yet</p>
+                <p className="text-sm mt-1">Upload a video or PDF above to get started.</p>
             </div>
         );
     }
