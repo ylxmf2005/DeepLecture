@@ -11,6 +11,10 @@ from deeplecture.presentation.api.shared import accepted, bad_request, handle_er
 from deeplecture.presentation.api.shared.model_resolution import resolve_models_for_task
 from deeplecture.presentation.api.shared.validation import validate_content_id, validate_language
 from deeplecture.use_cases.dto.timeline import GenerateTimelineRequest
+from deeplecture.use_cases.shared.source_language import (
+    SourceLanguageResolutionError,
+    resolve_source_language,
+)
 
 if TYPE_CHECKING:
     from flask import Response
@@ -52,7 +56,12 @@ def generate_timeline(content_id: str) -> Response:
     data = request.get_json() or {}
 
     # Validate both language parameters
-    subtitle_language = validate_language(data.get("subtitle_language"), field_name="subtitle_language", default="")
+    subtitle_language = validate_language(
+        data.get("subtitle_language"),
+        field_name="subtitle_language",
+        default="",
+        allow_auto=True,
+    )
     output_language = validate_language(data.get("output_language"), field_name="output_language", default="")
     if not subtitle_language:
         return bad_request("subtitle_language is required")
@@ -67,6 +76,15 @@ def generate_timeline(content_id: str) -> Response:
     prompts = data.get("prompts") or None
 
     container = get_container()
+    metadata = container.content_usecase.get_content(content_id)
+    try:
+        resolved_subtitle_language = resolve_source_language(
+            subtitle_language,
+            metadata=metadata,
+            field_name="subtitle_language",
+        )
+    except SourceLanguageResolutionError as exc:
+        return bad_request(str(exc))
 
     llm_model, _ = resolve_models_for_task(
         container=container,
@@ -78,7 +96,7 @@ def generate_timeline(content_id: str) -> Response:
 
     req = GenerateTimelineRequest(
         content_id=content_id,
-        subtitle_language=subtitle_language,
+        subtitle_language=resolved_subtitle_language,
         output_language=output_language,
         learner_profile=learner_profile,
         force=force,
@@ -102,6 +120,7 @@ def generate_timeline(content_id: str) -> Response:
         task=_run_generation,
         metadata={
             "subtitle_language": subtitle_language,
+            "resolved_subtitle_language": resolved_subtitle_language,
             "output_language": output_language,
             "learner_profile": learner_profile,
         },

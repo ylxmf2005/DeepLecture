@@ -46,6 +46,14 @@ class YtdlpDownloader:
         "login required",
     )
 
+    _BILIBILI_AUTH_REQUIRED_MARKERS: ClassVar[tuple[str, ...]] = (
+        "http error 412",
+        "precondition failed",
+        "unable to download webpage",
+        "risk control",
+        "request blocked",
+    )
+
     DEFAULT_ALLOWED_DOMAINS: ClassVar[list[str]] = [
         "youtube.com",
         "youtu.be",
@@ -132,24 +140,25 @@ class YtdlpDownloader:
                 "error": "yt-dlp is required for URL video import. Install it with 'uv add yt-dlp'.",
             }
 
-        is_youtube = self._is_youtube_url(url)
+        source_type = self._detect_source_type(url)
 
-        if is_youtube:
+        if self._should_try_browser_cookie(source_type):
             opts_with_chrome_cookie = {**ydl_opts, "cookiesfrombrowser": ("chrome",)}
 
             try:
                 return self._download_once(yt_dlp, opts_with_chrome_cookie, url)
             except Exception as first_exc:
                 if not self._is_cookie_unavailable_error(first_exc):
-                    logger.error("yt-dlp download failed for %s: %s", url, first_exc)
+                    logger.error("yt-dlp download failed for %s with browser cookies: %s", url, first_exc)
                     return {
                         "success": False,
-                        "error": self._format_download_error(first_exc),
+                        "error": self._format_download_error(first_exc, source_type=source_type),
                     }
 
                 logger.warning(
-                    "Chrome cookie loading failed for %s, retrying without cookies: %s",
+                    "Chrome cookie loading failed for %s (%s), retrying without cookies: %s",
                     url,
+                    source_type,
                     first_exc,
                 )
                 try:
@@ -160,6 +169,7 @@ class YtdlpDownloader:
                         "success": False,
                         "error": self._format_download_error(
                             second_exc,
+                            source_type=source_type,
                             cookie_unavailable_before_failure=True,
                         ),
                     }
@@ -170,7 +180,7 @@ class YtdlpDownloader:
             logger.error("yt-dlp download failed for %s: %s", url, exc)
             return {
                 "success": False,
-                "error": self._format_download_error(exc),
+                "error": self._format_download_error(exc, source_type=source_type),
             }
 
     def _download_once(self, yt_dlp_module: Any, ydl_opts: dict[str, Any], url: str) -> dict[str, Any]:
@@ -212,16 +222,37 @@ class YtdlpDownloader:
         u = (url or "").lower()
         return "youtube.com" in u or "youtu.be" in u
 
+    @classmethod
+    def _is_bilibili_url(cls, url: str) -> bool:
+        u = (url or "").lower()
+        return "bilibili.com" in u
+
+    @classmethod
+    def _should_try_browser_cookie(cls, source_type: str) -> bool:
+        return source_type in {"youtube", "bilibili"}
+
+    @classmethod
+    def _is_bilibili_auth_required_error(cls, error_message: str) -> bool:
+        msg = (error_message or "").lower()
+        return any(marker in msg for marker in cls._BILIBILI_AUTH_REQUIRED_MARKERS)
+
     def _format_download_error(
         self,
         exc: Exception,
         *,
+        source_type: str,
         cookie_unavailable_before_failure: bool = False,
     ) -> str:
         raw_error = str(exc) or "unknown error"
 
-        if cookie_unavailable_before_failure or self._is_youtube_auth_required_error(raw_error):
+        if source_type == "youtube" and (
+            cookie_unavailable_before_failure or self._is_youtube_auth_required_error(raw_error)
+        ):
             return self._build_youtube_troubleshooting_message(raw_error)
+        if source_type == "bilibili" and (
+            cookie_unavailable_before_failure or self._is_bilibili_auth_required_error(raw_error)
+        ):
+            return self._build_bilibili_troubleshooting_message(raw_error)
 
         return raw_error
 
@@ -233,6 +264,17 @@ class YtdlpDownloader:
             "2) Close all Chrome windows completely and retry (release cookie DB lock). "
             "3) Update yt-dlp to the latest version and retry. "
             "4) If it still fails, export cookies.txt and verify with '--cookies cookies.txt'. "
+            f"Original error: {raw_error}"
+        )
+
+    @staticmethod
+    def _build_bilibili_troubleshooting_message(raw_error: str) -> str:
+        return (
+            "Bilibili download failed. Suggested fixes: "
+            "1) Sign in to Bilibili in Chrome and confirm the video plays in the browser. "
+            "2) Retry the import so yt-dlp can reuse your Chrome cookies. "
+            "3) If it still fails, update yt-dlp and retry in case Bilibili changed its anti-bot checks. "
+            "4) If needed, export cookies.txt and verify with '--cookies cookies.txt'. "
             f"Original error: {raw_error}"
         )
 

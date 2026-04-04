@@ -93,9 +93,10 @@ def stream_task_events(content_id: str) -> FlaskResponse:
 def _serialize_task(task: Task) -> dict:
     """Serialize Task entity to API format."""
     status_str = task.status.value if isinstance(task.status, TaskStatus) else str(task.status)
+    metadata = dict(task.metadata or {})
 
     result = None
-    result_kind = task.metadata.get("result_kind") if task.metadata else None
+    result_kind = metadata.get("result_kind")
     if result_kind and task.is_ready():
         result = {"kind": result_kind}
 
@@ -107,7 +108,7 @@ def _serialize_task(task: Task) -> dict:
         "progress": task.progress,
         "error": task.error,
         "result": result,
-        "metadata": task.metadata or {},
+        "metadata": metadata,
         "created_at": _format_datetime(task.created_at),
         "updated_at": _format_datetime(task.updated_at),
     }

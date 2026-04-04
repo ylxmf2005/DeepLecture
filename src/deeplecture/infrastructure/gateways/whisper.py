@@ -7,6 +7,7 @@ Implements ASRProtocol for speech-to-text transcription.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import subprocess
@@ -14,6 +15,7 @@ import uuid
 from pathlib import Path
 
 from deeplecture.domain import Segment
+from deeplecture.use_cases.dto.subtitle import ASRTranscriptionResult
 
 logger = logging.getLogger(__name__)
 
@@ -226,7 +228,7 @@ class WhisperASR:
                 sha256.update(chunk)
         return sha256.hexdigest()
 
-    def transcribe(self, audio_path: Path, language: str = "en") -> list[Segment]:
+    def transcribe(self, audio_path: Path, *, language: str = "en") -> ASRTranscriptionResult:
         """
         Transcribe audio file to segments.
 
@@ -256,9 +258,12 @@ class WhisperASR:
             logger.error("ffmpeg failed: %s", e.stderr.decode() if e.stderr else str(e))
             raise RuntimeError("Audio conversion failed") from e
 
+        requested_language = (language or "en").strip().lower() or "en"
+
         try:
             # Run whisper-cli
             output_base = tmp_wav.with_suffix("")
+            json_path = output_base.with_suffix(".json")
             cmd = [
                 str(self._whisper_bin),
                 "-m",
@@ -269,7 +274,7 @@ class WhisperASR:
                 "-of",
                 str(output_base),
                 "-l",
-                language,
+                requested_language,
                 "-t",
                 str(min(4, self._hw_info["cpu_count"])),
                 "-bs",
@@ -277,6 +282,9 @@ class WhisperASR:
                 "-mc",
                 "0",  # max context = 0 (anti-hallucination)
             ]
+
+            if requested_language == "auto":
+                cmd.append("-oj")
 
             # Enable flash attention for GPU
             if self._hw_info["has_metal"] or self._hw_info["has_cuda"]:
@@ -290,16 +298,36 @@ class WhisperASR:
                 raise RuntimeError("SRT output not found")
 
             segments = self._parse_srt(srt_path.read_text(encoding="utf-8"))
+            resolved_language = requested_language
+            if requested_language == "auto":
+                resolved_language = self._parse_resolved_language(json_path)
 
             # Cleanup
             srt_path.unlink(missing_ok=True)
-            return segments
+            json_path.unlink(missing_ok=True)
+            return ASRTranscriptionResult(segments=segments, resolved_language=resolved_language)
 
         except subprocess.TimeoutExpired as exc:
             logger.error("Whisper transcription timed out")
             raise RuntimeError("Transcription timed out") from exc
         finally:
             tmp_wav.unlink(missing_ok=True)
+
+    def _parse_resolved_language(self, json_path: Path) -> str:
+        """Extract the resolved language code from whisper JSON output."""
+        if not json_path.exists():
+            raise RuntimeError("Whisper JSON output not found for auto-detect")
+
+        try:
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Failed to parse Whisper JSON output") from exc
+
+        language = payload.get("result", {}).get("language")
+        resolved = str(language or "").strip().lower()
+        if not resolved:
+            raise RuntimeError("Whisper auto-detect did not return a language")
+        return resolved
 
     def _parse_srt(self, content: str) -> list[Segment]:
         """Parse SRT content to Segment list."""

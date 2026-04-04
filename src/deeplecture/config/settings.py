@@ -33,7 +33,7 @@ class ServerConfig(BaseModel):
 
     max_upload_bytes: int = 10737418240  # 10GB
     max_note_image_bytes: int = 104857600  # 100MB
-    cors_allow_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    cors_allow_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3001"])
     rate_limit_storage_uri: str = "memory://"
     api_key: str = ""
     run_worker: bool = True

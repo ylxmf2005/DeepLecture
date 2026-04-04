@@ -9,15 +9,12 @@ import {
     Inbox,
     LayoutGrid,
     MoreHorizontal,
-    Edit2,
-    Trash2,
     X,
 } from "lucide-react";
-import { listProjects, deleteProject } from "@/lib/api";
+import { listProjects } from "@/lib/api";
 import type { Project } from "@/lib/api/types";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { EditProjectDialog } from "./EditProjectDialog";
-import { useConfirmDialog } from "@/contexts/ConfirmDialogContext";
 
 interface ProjectSidebarProps {
     selectedProjectId: string | null;
@@ -39,10 +36,7 @@ export function ProjectSidebar({
     });
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [editingProject, setEditingProject] = useState<Project | null>(null);
-    const [contextMenuId, setContextMenuId] = useState<string | null>(null);
     const [mobileOpen, setMobileOpen] = useState(false);
-
-    const { confirm } = useConfirmDialog();
 
     const fetchProjects = useCallback(async () => {
         try {
@@ -62,27 +56,6 @@ export function ProjectSidebar({
         setCollapsed(next);
         if (typeof window !== "undefined") {
             window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
-        }
-    };
-
-    const handleDeleteProject = async (projectId: string) => {
-        setContextMenuId(null);
-        const confirmed = await confirm({
-            title: "Delete Project",
-            message: "Delete this project? Content in it will become ungrouped.",
-            confirmLabel: "Delete",
-            cancelLabel: "Cancel",
-            variant: "danger",
-        });
-        if (!confirmed) return;
-        try {
-            await deleteProject(projectId);
-            if (selectedProjectId === projectId) {
-                onSelectProject(null);
-            }
-            fetchProjects();
-        } catch {
-            // ignore
         }
     };
 
@@ -172,41 +145,17 @@ export function ProjectSidebar({
 
                         {/* Context menu trigger */}
                         <button
+                            type="button"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                setContextMenuId(contextMenuId === p.id ? null : p.id);
+                                setEditingProject(p);
                             }}
-                            className="p-0.5 rounded opacity-0 group-hover/item:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+                            className="relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/80 transition-colors hover:bg-background/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                            aria-label={`Edit project ${p.name}`}
+                            title={`Edit ${p.name}`}
                         >
                             <MoreHorizontal className="w-3.5 h-3.5" />
                         </button>
-
-                        {/* Dropdown menu */}
-                        {contextMenuId === p.id && (
-                            <div className="absolute right-0 top-full z-50 mt-1 w-36 bg-popover border border-border rounded-lg shadow-lg py-1">
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setContextMenuId(null);
-                                        setEditingProject(p);
-                                    }}
-                                    className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-foreground hover:bg-muted"
-                                >
-                                    <Edit2 className="w-3.5 h-3.5" />
-                                    Edit
-                                </button>
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDeleteProject(p.id);
-                                    }}
-                                    className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-muted"
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    Delete
-                                </button>
-                            </div>
-                        )}
                     </div>
                 ))}
 
@@ -221,14 +170,6 @@ export function ProjectSidebar({
             </nav>
         </div>
     );
-
-    // Close context menu when clicking outside
-    useEffect(() => {
-        if (!contextMenuId) return;
-        const handler = () => setContextMenuId(null);
-        document.addEventListener("click", handler);
-        return () => document.removeEventListener("click", handler);
-    }, [contextMenuId]);
 
     return (
         <>

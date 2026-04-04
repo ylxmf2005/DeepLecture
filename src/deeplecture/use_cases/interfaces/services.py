@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-    from deeplecture.domain.entities import Segment
+    from deeplecture.use_cases.dto.subtitle import ASRTranscriptionResult
 
 
 class LLMProtocol(Protocol):
@@ -34,7 +34,7 @@ class ASRProtocol(Protocol):
     Implementations: WhisperEngine, FasterWhisperEngine
     """
 
-    def transcribe(self, audio_path: Path, *, language: str = "en") -> list[Segment]:
+    def transcribe(self, audio_path: Path, *, language: str = "en") -> ASRTranscriptionResult:
         """
         Transcribe audio file to segments.
 
@@ -43,7 +43,7 @@ class ASRProtocol(Protocol):
             language: Language code for transcription
 
         Returns:
-            List of transcribed segments with timing
+            Transcribed segments plus the resolved language used for storage
         """
         ...
 

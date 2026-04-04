@@ -102,6 +102,7 @@ class ContentMetadata:
     # Source info
     source_type: SourceType = "local"
     source_url: str | None = None
+    detected_source_language: str | None = None
 
     # Feature statuses (stored as strings for flexibility)
     video_status: str = "none"

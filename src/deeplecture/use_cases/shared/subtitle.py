@@ -67,6 +67,24 @@ def load_subtitle_segments_with_fallback(
     )
 
 
+def build_subtitle_language_candidates(
+    available: list[str],
+    *,
+    preferred_base_language: str | None,
+) -> list[str]:
+    """Build ordered subtitle language candidates with an optional preferred base language."""
+    prioritized = prioritize_subtitle_languages(available)
+    if not preferred_base_language:
+        return prioritized
+
+    preferred: list[str] = []
+    for lang in get_preferred_subtitle_languages(preferred_base_language):
+        if lang in available and lang not in preferred:
+            preferred.append(lang)
+
+    return preferred + [lang for lang in prioritized if lang not in preferred]
+
+
 def prioritize_subtitle_languages(available: list[str]) -> list[str]:
     """
     Sort available language codes so enhanced versions come before base versions.

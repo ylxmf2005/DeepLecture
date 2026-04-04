@@ -5,14 +5,14 @@
 ## 前提条件
 
 - 后端运行在开发模式
-- 前端运行在 `localhost:3000`
+- 前端运行在 `localhost:3001`
 - 浏览器开发者工具已打开
 
 ## 测试 1：后端重启恢复
 
 1. 上传一个视频/PDF，触发 `subtitle_generation`
 2. 在任务进行中（进度 < 100%），终止后端进程：`Ctrl+C`
-3. 重新启动后端：`uv run python -m deeplecture`
+3. 重新启动服务：`uv run deeplecture`
 4. 观察浏览器：
    - SSE 自动重连（Network 面板可见新的 `stream/` 请求）
    - 任务状态从 "processing" 变为 "error"

@@ -6,6 +6,7 @@ import { useTaskNotification } from "@/hooks/useTaskNotification";
 import type { ProcessingAction } from "../useVideoPageState";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
+import { isUnresolvedAutoSourceLanguage } from "@/lib/sourceLanguage";
 
 const log = logger.scope("TimelineHandlers");
 
@@ -13,6 +14,7 @@ export interface UseTimelineHandlersOptions {
     videoId: string;
     /** Source language of the video - subtitles are loaded from this language */
     originalLanguage: string;
+    detectedSourceLanguage?: string | null;
     /** Target language for LLM output - timeline explanations will be in this language */
     targetLanguage: string;
     learnerProfile: string;
@@ -34,6 +36,7 @@ export interface UseTimelineHandlersReturn {
 export function useTimelineHandlers({
     videoId,
     originalLanguage,
+    detectedSourceLanguage,
     targetLanguage,
     learnerProfile,
     hasSubtitles,
@@ -46,6 +49,14 @@ export function useTimelineHandlers({
 
     const handleGenerateTimeline = useCallback(async () => {
         if (!hasSubtitles) return;
+        if (isUnresolvedAutoSourceLanguage(originalLanguage, detectedSourceLanguage)) {
+            notifyTaskComplete(
+                "timeline_generation",
+                "error",
+                "Source language is set to Auto. Generate subtitles first so the detected language can be reused here."
+            );
+            return;
+        }
 
         try {
             setProcessing(true);
@@ -85,6 +96,7 @@ export function useTimelineHandlers({
     }, [
         videoId,
         originalLanguage,
+        detectedSourceLanguage,
         targetLanguage,
         learnerProfile,
         hasSubtitles,

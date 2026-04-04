@@ -10,6 +10,7 @@ from deeplecture.config import SubtitleEnhanceTranslateConfig
 from deeplecture.domain import ContentMetadata, Segment
 from deeplecture.domain.errors import ContentNotFoundError
 from deeplecture.use_cases.dto.subtitle import (
+    ASRTranscriptionResult,
     GenerateSubtitleRequest,
     SubtitleResult,
 )
@@ -35,8 +36,16 @@ def mock_asr() -> MagicMock:
 
 
 @pytest.fixture
-def mock_llm() -> MagicMock:
-    """Create mock LLM service."""
+def mock_llm_provider() -> MagicMock:
+    """Create mock LLM provider."""
+    provider = MagicMock()
+    provider.get.return_value = MagicMock()
+    return provider
+
+
+@pytest.fixture
+def mock_prompt_registry() -> MagicMock:
+    """Create mock prompt registry."""
     return MagicMock()
 
 
@@ -60,7 +69,8 @@ def usecase(
     mock_metadata_storage: MagicMock,
     mock_subtitle_storage: MagicMock,
     mock_asr: MagicMock,
-    mock_llm: MagicMock,
+    mock_llm_provider: MagicMock,
+    mock_prompt_registry: MagicMock,
     mock_parallel_runner: MagicMock,
     config: SubtitleEnhanceTranslateConfig,
 ) -> SubtitleUseCase:
@@ -69,7 +79,8 @@ def usecase(
         metadata_storage=mock_metadata_storage,
         subtitle_storage=mock_subtitle_storage,
         asr=mock_asr,
-        llm=mock_llm,
+        llm_provider=mock_llm_provider,
+        prompt_registry=mock_prompt_registry,
         config=config,
         parallel_runner=mock_parallel_runner,
     )
@@ -113,7 +124,10 @@ class TestSubtitleUseCaseGenerate:
     ) -> None:
         """generate() should transcribe audio and save subtitles."""
         mock_metadata_storage.get.return_value = sample_metadata
-        mock_asr.transcribe.return_value = sample_segments
+        mock_asr.transcribe.return_value = ASRTranscriptionResult(
+            segments=sample_segments,
+            resolved_language="en",
+        )
 
         request = GenerateSubtitleRequest(
             content_id="test-content-id",
@@ -125,7 +139,7 @@ class TestSubtitleUseCaseGenerate:
         assert result.language == "en"
         assert len(result.segments) == 3
         mock_asr.transcribe.assert_called_once()
-        mock_subtitle_storage.save.assert_called_once()
+        mock_subtitle_storage.save.assert_called_once_with("test-content-id", sample_segments, "en")
 
     @pytest.mark.unit
     def test_generate_content_not_found(
@@ -155,7 +169,10 @@ class TestSubtitleUseCaseGenerate:
     ) -> None:
         """generate() should update metadata status to READY."""
         mock_metadata_storage.get.return_value = sample_metadata
-        mock_asr.transcribe.return_value = sample_segments
+        mock_asr.transcribe.return_value = ASRTranscriptionResult(
+            segments=sample_segments,
+            resolved_language="en",
+        )
 
         request = GenerateSubtitleRequest(
             content_id="test-content-id",
@@ -169,6 +186,34 @@ class TestSubtitleUseCaseGenerate:
         # Last call should have status='ready'
         final_metadata = mock_metadata_storage.save.call_args_list[-1][0][0]
         assert final_metadata.subtitle_status == "ready"
+        assert final_metadata.detected_source_language is None
+
+    @pytest.mark.unit
+    def test_generate_persists_detected_source_language_for_auto(
+        self,
+        usecase: SubtitleUseCase,
+        mock_metadata_storage: MagicMock,
+        mock_asr: MagicMock,
+        sample_metadata: ContentMetadata,
+        sample_segments: list[Segment],
+    ) -> None:
+        """Auto-detect runs should persist the resolved language on metadata."""
+        mock_metadata_storage.get.return_value = sample_metadata
+        mock_asr.transcribe.return_value = ASRTranscriptionResult(
+            segments=sample_segments,
+            resolved_language="ja",
+        )
+
+        result = usecase.generate(
+            GenerateSubtitleRequest(
+                content_id="test-content-id",
+                language="auto",
+            )
+        )
+
+        assert result.language == "ja"
+        final_metadata = mock_metadata_storage.save.call_args_list[-1][0][0]
+        assert final_metadata.detected_source_language == "ja"
 
 
 class TestSubtitleUseCaseGetSubtitles:

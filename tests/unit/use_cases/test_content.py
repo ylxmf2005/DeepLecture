@@ -70,6 +70,21 @@ class TestContentUseCase:
             source_file="/data/content/content-123/source.mp4",
         )
 
+    @pytest.mark.unit
+    def test_get_content_preserves_detected_source_language(
+        self,
+        usecase: ContentUseCase,
+        mock_metadata_storage: MagicMock,
+        sample_content: ContentMetadata,
+    ) -> None:
+        """get_content should return detected source language when present."""
+        sample_content.detected_source_language = "ja"
+        mock_metadata_storage.get.return_value = sample_content
+
+        result = usecase.get_content("content-123")
+
+        assert result.detected_source_language == "ja"
+
     # =========================================================================
     # get_content tests
     # =========================================================================

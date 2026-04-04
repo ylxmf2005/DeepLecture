@@ -6,6 +6,7 @@ import { VideoPlayer, VideoPlayerRef, SubtitlePlayerMode } from "@/components/vi
 import { ContentItem, API_BASE_URL, SyncTimeline } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
+    AlertCircle,
     BookOpen,
     ChevronsLeftRight,
     ChevronsRightLeft,
@@ -266,14 +267,24 @@ export const VideoPlayerSection = forwardRef<VideoPlayerRef, VideoPlayerSectionP
                                 </button>
                             </div>
                         </div>
-                    ) : content.type === "video" && content.videoStatus !== "ready" ? (
-                        // Video content still processing (merge in progress)
+                    ) : content.type === "video" && content.videoStatus === "processing" ? (
+                        // Video content still processing (merge/import in progress)
                         <div className="relative w-full aspect-video bg-card rounded-xl border border-border shadow-sm overflow-hidden flex items-center justify-center">
                             <div className="text-center p-8 max-w-md">
                                 <Loader2 className="w-16 h-16 mx-auto mb-4 opacity-40 animate-spin" />
                                 <p className="text-lg font-medium mb-2">Processing Video</p>
                                 <p className="text-sm text-gray-500 mb-4">
                                     Your video is being processed. This may take a moment...
+                                </p>
+                            </div>
+                        </div>
+                    ) : content.type === "video" && content.videoStatus === "error" ? (
+                        <div className="relative w-full aspect-video bg-card rounded-xl border border-border shadow-sm overflow-hidden flex items-center justify-center">
+                            <div className="text-center p-8 max-w-md">
+                                <AlertCircle className="w-16 h-16 mx-auto mb-4 text-destructive opacity-80" />
+                                <p className="text-lg font-medium mb-2">Video Processing Failed</p>
+                                <p className="text-sm text-gray-500 mb-4">
+                                    We could not finish processing this video. Please retry the import or upload another file.
                                 </p>
                             </div>
                         </div>

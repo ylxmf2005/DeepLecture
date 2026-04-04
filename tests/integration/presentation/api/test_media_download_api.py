@@ -126,3 +126,46 @@ class TestMediaDownloadAPI:
         srt = subtitle_path.read_text(encoding="utf-8")
         assert "Hello" in srt
         assert "你好" in srt
+
+    @pytest.mark.integration
+    def test_download_with_auto_source_language_uses_detected_language(
+        self,
+        client,
+        mock_container: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        content_dir = tmp_path / "content-c1"
+        video_path = _write_bytes(content_dir / "video.mp4", b"fake-mp4")
+
+        metadata = SimpleNamespace(
+            video_file=str(video_path),
+            source_file=None,
+            original_filename="lesson.mp4",
+            detected_source_language="ja",
+        )
+        mock_container.content_usecase.get_content.return_value = metadata
+        mock_container.path_resolver.get_content_dir.return_value = str(content_dir)
+
+        mock_container.subtitle_storage = MagicMock()
+        source_segments = [SimpleNamespace(start=0.0, end=1.0, text="こんにちは")]
+
+        def _load(_content_id: str, language: str):
+            if language == "ja_enhanced":
+                return source_segments
+            return None
+
+        mock_container.subtitle_storage.load.side_effect = _load
+        mock_container.video_processor = MagicMock()
+
+        def _fake_export(video_path_arg: str, output_path_arg: str, **_kwargs) -> None:
+            _write_bytes(Path(output_path_arg), b"rendered-mp4")
+
+        mock_container.video_processor.export_mp4.side_effect = _fake_export
+
+        response = client.get(
+            "/api/content/c1/video/download" "?burn_source_subtitle=1&burn_target_subtitle=0&source_language=auto"
+        )
+
+        assert response.status_code == 200
+        calls = [call.args for call in mock_container.subtitle_storage.load.call_args_list]
+        assert ("c1", "ja_enhanced") in calls

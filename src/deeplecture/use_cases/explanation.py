@@ -13,8 +13,8 @@ from deeplecture.use_cases.dto.explanation import (
 )
 from deeplecture.use_cases.shared.prompt_safety import sanitize_learner_profile
 from deeplecture.use_cases.shared.subtitle import (
+    build_subtitle_language_candidates,
     load_first_available_subtitle_segments,
-    prioritize_subtitle_languages,
 )
 
 if TYPE_CHECKING:
@@ -163,14 +163,10 @@ class ExplanationUseCase:
     ) -> str:
         """Get subtitle text around the specified timestamp."""
         available_languages = self._subtitles.list_languages(content_id)
-
-        # If preferred language specified and available, put it first
-        if preferred_language and preferred_language in available_languages:
-            candidate_languages = [preferred_language] + [
-                lang for lang in prioritize_subtitle_languages(available_languages) if lang != preferred_language
-            ]
-        else:
-            candidate_languages = prioritize_subtitle_languages(available_languages)
+        candidate_languages = build_subtitle_language_candidates(
+            available_languages,
+            preferred_base_language=preferred_language,
+        )
 
         loaded = load_first_available_subtitle_segments(
             self._subtitles,

@@ -3,14 +3,17 @@
 import { useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useGlobalSettingsStore } from "@/stores";
+import { useVideoConfigOptional } from "@/contexts/VideoConfigContext";
 
 /**
  * Optimized hook for video page settings.
  * Uses shallow equality to prevent unnecessary re-renders.
  */
 export function useVideoPageSettings() {
+    const videoCtx = useVideoConfigOptional();
+
     // Single shallow selector for all settings - prevents 25+ individual subscriptions
-    const settings = useGlobalSettingsStore(
+    const globalSettings = useGlobalSettingsStore(
         useShallow((s) => ({
             playback: s.playback,
             language: s.language,
@@ -20,6 +23,7 @@ export function useVideoPageSettings() {
             live2d: s.live2d,
         }))
     );
+    const settings = videoCtx?.resolved ?? globalSettings;
 
     // Derived values for convenience
     const derived = {

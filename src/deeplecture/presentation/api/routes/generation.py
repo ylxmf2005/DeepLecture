@@ -12,6 +12,10 @@ from deeplecture.presentation.api.shared import accepted, bad_request, handle_er
 from deeplecture.presentation.api.shared.model_resolution import resolve_models_for_task
 from deeplecture.presentation.api.shared.validation import validate_content_id, validate_language
 from deeplecture.use_cases.dto.slide import SlideGenerationRequest
+from deeplecture.use_cases.shared.source_language import (
+    SourceLanguageResolutionError,
+    resolve_source_language,
+)
 
 if TYPE_CHECKING:
     from flask import Response
@@ -27,7 +31,12 @@ def generate_slide_video(content_id: str) -> Response:
     content_id = validate_content_id(content_id)
     data = request.get_json(silent=True) or {}
 
-    source_language = validate_language(data.get("source_language"), field_name="source_language", default="")
+    source_language = validate_language(
+        data.get("source_language"),
+        field_name="source_language",
+        default="",
+        allow_auto=True,
+    )
     target_language = validate_language(data.get("target_language"), field_name="target_language", default="")
 
     if not source_language:
@@ -61,12 +70,24 @@ def generate_slide_video(content_id: str) -> Response:
     if metadata.type != ContentType.SLIDE:
         return bad_request("generate-video is only supported for slide content")
 
+    try:
+        resolved_source_language = resolve_source_language(
+            source_language,
+            metadata=metadata,
+            field_name="source_language",
+        )
+    except SourceLanguageResolutionError:
+        return bad_request(
+            "source_language is set to auto, but slide video generation needs a concrete source language. "
+            "Choose a specific source language before generating the video."
+        )
+
     if not force and getattr(metadata, "video_status", "none") == FeatureStatus.READY.value:
         return success({"deck_id": content_id, "status": "ready", "message": "Video already generated"})
 
     gen_request = SlideGenerationRequest(
         content_id=content_id,
-        source_language=source_language,
+        source_language=resolved_source_language,
         target_language=target_language,
         tts_language=tts_language,
         llm_model=llm_model,
@@ -82,7 +103,12 @@ def generate_slide_video(content_id: str) -> Response:
         content_id=content_id,
         task_type="video_generation",
         task=_run,
-        metadata={"source_language": source_language, "target_language": target_language, "tts_language": tts_language},
+        metadata={
+            "source_language": source_language,
+            "resolved_source_language": resolved_source_language,
+            "target_language": target_language,
+            "tts_language": tts_language,
+        },
     )
 
     container.content_usecase.update_feature_status(content_id, "video", "processing", job_id=task_id)

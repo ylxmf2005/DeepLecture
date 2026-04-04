@@ -3,16 +3,24 @@
 import { useState, useEffect } from "react";
 import { BrainCircuit, Globe, Sparkles } from "lucide-react";
 import { CustomSelect } from "@/components/ui/CustomSelect";
-import { WHISPER_LANGUAGES } from "@/lib/languages";
+import { SOURCE_LANGUAGE_OPTIONS, WHISPER_LANGUAGES, getLanguageLabel } from "@/lib/languages";
+import { isAutoSourceLanguage } from "@/lib/sourceLanguage";
 import { SettingsSection, SettingsCard } from "./SettingsSection";
 import { ScopeAwareField } from "./ScopeAwareField";
 import type { SettingsTabProps } from "./types";
 
-export function GeneralTab({ scope, settings }: SettingsTabProps) {
+export function GeneralTab({ video, scope, settings }: SettingsTabProps) {
     const isVideoScope = scope === "video";
     const { values, isOverridden, clearField } = settings;
 
     const [draftLearnerProfile, setDraftLearnerProfile] = useState(values.learnerProfile);
+    const detectedSourceLanguage = video?.detectedSourceLanguage ?? null;
+    const sourceLanguageIsAuto = isAutoSourceLanguage(values.language.original);
+    const sourceLanguageHint = sourceLanguageIsAuto
+        ? detectedSourceLanguage
+            ? `Whisper will keep using auto-detect. Current detected language: ${getLanguageLabel(detectedSourceLanguage)}.`
+            : "Whisper will detect the spoken language when subtitles are generated. Source-subtitle actions stay limited until that detection exists."
+        : "The language spoken in the video audio.";
 
     useEffect(() => {
         setDraftLearnerProfile(values.learnerProfile);
@@ -69,11 +77,11 @@ export function GeneralTab({ scope, settings }: SettingsTabProps) {
                                 <CustomSelect
                                     value={values.language.original}
                                     onChange={settings.setOriginalLanguage}
-                                    options={WHISPER_LANGUAGES}
+                                    options={SOURCE_LANGUAGE_OPTIONS}
                                     accent="emerald"
                                 />
                                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                                    The language spoken in the video audio.
+                                    {sourceLanguageHint}
                                 </p>
                             </div>
                         </ScopeAwareField>

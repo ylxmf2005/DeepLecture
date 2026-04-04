@@ -13,6 +13,10 @@ from deeplecture.presentation.api.shared import accepted, bad_request, handle_er
 from deeplecture.presentation.api.shared.model_resolution import resolve_models_for_task
 from deeplecture.presentation.api.shared.validation import validate_content_id, validate_language
 from deeplecture.use_cases.dto.subtitle import EnhanceTranslateRequest, GenerateSubtitleRequest
+from deeplecture.use_cases.shared.source_language import (
+    SourceLanguageResolutionError,
+    resolve_source_language,
+)
 
 if TYPE_CHECKING:
     from flask import Response
@@ -74,7 +78,7 @@ def generate_subtitle(content_id: str) -> Response:
     """Generate subtitles using ASR."""
     content_id = validate_content_id(content_id)
     data = request.get_json() or {}
-    language = validate_language(data.get("language"), field_name="language", default="")
+    language = validate_language(data.get("language"), field_name="language", default="", allow_auto=True)
     if not language:
         return bad_request("language is required")
 
@@ -89,7 +93,11 @@ def generate_subtitle(content_id: str) -> Response:
 
     def _run(ctx: object) -> dict:
         result = container.subtitle_usecase.generate(req)
-        return {"content_id": result.content_id, "language": result.language}
+        return {
+            "content_id": result.content_id,
+            "language": language,
+            "resolved_language": result.language,
+        }
 
     task_id = container.task_manager.submit(
         content_id=content_id,
@@ -112,7 +120,12 @@ def enhance_and_translate(content_id: str) -> Response:
     """Enhance and translate subtitles using LLM."""
     content_id = validate_content_id(content_id)
     data = request.get_json() or {}
-    source_language = validate_language(data.get("source_language"), field_name="source_language", default="")
+    source_language = validate_language(
+        data.get("source_language"),
+        field_name="source_language",
+        default="",
+        allow_auto=True,
+    )
     target_language = validate_language(data.get("target_language"), field_name="target_language", default="")
 
     if not source_language:
@@ -122,6 +135,15 @@ def enhance_and_translate(content_id: str) -> Response:
 
     container = get_container()
     metadata = container.content_usecase.get_content(content_id)
+    try:
+        resolved_source_language = resolve_source_language(
+            source_language,
+            metadata=metadata,
+            field_name="source_language",
+        )
+    except SourceLanguageResolutionError as exc:
+        return bad_request(str(exc))
+
     force = bool(data.get("force", False))
 
     # Model and prompt selection (optional, None = use defaults)
@@ -143,7 +165,7 @@ def enhance_and_translate(content_id: str) -> Response:
 
     req = EnhanceTranslateRequest(
         content_id=content_id,
-        source_language=source_language,
+        source_language=resolved_source_language,
         target_language=target_language,
         llm_model=llm_model,
         prompts=prompts,
@@ -151,13 +173,22 @@ def enhance_and_translate(content_id: str) -> Response:
 
     def _run(ctx: object) -> dict:
         container.subtitle_usecase.enhance_and_translate(req)
-        return {"content_id": content_id, "source_language": source_language, "target_language": target_language}
+        return {
+            "content_id": content_id,
+            "source_language": source_language,
+            "resolved_source_language": resolved_source_language,
+            "target_language": target_language,
+        }
 
     task_id = container.task_manager.submit(
         content_id=content_id,
         task_type="subtitle_translation",
         task=_run,
-        metadata={"source_language": source_language, "target_language": target_language},
+        metadata={
+            "source_language": source_language,
+            "resolved_source_language": resolved_source_language,
+            "target_language": target_language,
+        },
     )
 
     container.content_usecase.update_feature_status(content_id, "enhance_translate", "processing", job_id=task_id)

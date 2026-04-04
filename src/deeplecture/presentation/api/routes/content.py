@@ -136,6 +136,7 @@ def _serialize_content_item(metadata: object) -> dict:
         "page_count": getattr(metadata, "pdf_page_count", None),
         "source_type": getattr(metadata, "source_type", None),
         "project_id": getattr(metadata, "project_id", None),
+        "detected_source_language": getattr(metadata, "detected_source_language", None),
     }
 
 

@@ -35,6 +35,9 @@ class _FakeYDL:
         if behavior == "cookie_unavailable_then_success":
             if has_cookie:
                 raise Exception("failed to load cookies")
+        elif behavior == "bilibili_auth_then_cookie_success":
+            if not has_cookie:
+                raise Exception("HTTP Error 412: Precondition Failed")
         elif behavior == "cookie_unavailable_then_auth_fail":
             if has_cookie:
                 raise Exception("failed to load cookies")
@@ -71,7 +74,7 @@ def reset_fake() -> None:
 
 
 class TestYtdlpDownloaderCookieBehavior:
-    """Tests for YouTube cookie fallback behavior."""
+    """Tests for platform cookie fallback behavior."""
 
     @staticmethod
     def _install_fake_yt_dlp(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -134,6 +137,50 @@ class TestYtdlpDownloaderCookieBehavior:
         assert result["success"] is True
         assert len(_FakeYDL.options_seen) == 1
         assert "cookiesfrombrowser" not in _FakeYDL.options_seen[0]
+
+    @pytest.mark.unit
+    def test_bilibili_uses_chrome_cookie_first(
+        self, downloader: YtdlpDownloader, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._install_fake_yt_dlp(monkeypatch)
+
+        result = downloader.download_video("https://www.bilibili.com/video/BV1t9wfzME2A", "source")
+
+        assert result["success"] is True
+        assert len(_FakeYDL.options_seen) == 1
+        assert _FakeYDL.options_seen[0]["cookiesfrombrowser"] == ("chrome",)
+
+    @pytest.mark.unit
+    def test_bilibili_uses_browser_cookie_to_avoid_412(
+        self,
+        downloader: YtdlpDownloader,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _FakeYDL.behavior = "bilibili_auth_then_cookie_success"
+        self._install_fake_yt_dlp(monkeypatch)
+
+        result = downloader.download_video("https://www.bilibili.com/video/BV1t9wfzME2A", "source")
+
+        assert result["success"] is True
+        assert len(_FakeYDL.options_seen) == 1
+        assert _FakeYDL.options_seen[0]["cookiesfrombrowser"] == ("chrome",)
+
+    @pytest.mark.unit
+    def test_bilibili_cookie_fallback_failure_contains_suggestions(
+        self,
+        downloader: YtdlpDownloader,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _FakeYDL.behavior = "cookie_unavailable_then_auth_fail"
+        self._install_fake_yt_dlp(monkeypatch)
+
+        result = downloader.download_video("https://www.bilibili.com/video/BV1t9wfzME2A", "source")
+
+        assert result["success"] is False
+        error = result["error"]
+        assert "Bilibili download failed" in error
+        assert "Chrome" in error
+        assert "Original error" in error
 
     @pytest.mark.unit
     def test_url_allowlist_unchanged(self, downloader: YtdlpDownloader) -> None:

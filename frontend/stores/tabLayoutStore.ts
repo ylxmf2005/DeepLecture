@@ -303,8 +303,11 @@ export const useTabLayoutStore = create<TabLayoutState>()(
  * Prevents flash of default content before persisted state loads.
  */
 export function useTabLayoutHydrated(): boolean {
-    const storeHydrated = useTabLayoutStore((state) => state._hasHydrated);
-    return storeHydrated || useTabLayoutStore.persist.hasHydrated();
+    // Only rely on the reactive store flag here. `persist.hasHydrated()` can
+    // already be true on the client's first render, which makes the client
+    // render the draggable tab DOM while the server still rendered the
+    // placeholder skeleton, causing hydration mismatches.
+    return useTabLayoutStore((state) => state._hasHydrated);
 }
 
 export function findTabPanel(panels: TabLayoutState["panels"], tabId: TabId): PanelId | null {

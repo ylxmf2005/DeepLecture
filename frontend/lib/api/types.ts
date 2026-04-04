@@ -35,6 +35,7 @@ export interface ContentItem {
     sourceType?: string;
     sourceUrl?: string;
     projectId?: string | null;
+    detectedSourceLanguage?: string | null;
 }
 
 export interface ContentListResponse {

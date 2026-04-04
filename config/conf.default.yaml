@@ -2,7 +2,7 @@ server:
   max_upload_bytes: 10737418240  # 10GB
   max_note_image_bytes: 104857600  # 100MB
   cors_allow_origins:
-    - "http://localhost:3000"
+    - "http://localhost:3001"
   rate_limit_storage_uri: "memory://"
   api_key: ""
   run_worker: true

@@ -21,6 +21,10 @@ from deeplecture.presentation.api.shared import (
 from deeplecture.presentation.api.shared.model_resolution import resolve_models_for_task
 from deeplecture.presentation.api.shared.validation import validate_content_id, validate_language
 from deeplecture.use_cases.dto.explanation import GenerateExplanationRequest
+from deeplecture.use_cases.shared.source_language import (
+    SourceLanguageResolutionError,
+    resolve_source_language,
+)
 
 if TYPE_CHECKING:
     from flask import Response
@@ -42,7 +46,12 @@ def create_explanation(content_id: str) -> Response:
     context_window = data.get("subtitle_context_window_seconds", 60)
 
     # Language parameters (subtitle_language → output_language order)
-    subtitle_language = validate_language(data.get("subtitle_language"), field_name="subtitle_language", default="")
+    subtitle_language = validate_language(
+        data.get("subtitle_language"),
+        field_name="subtitle_language",
+        default="",
+        allow_auto=True,
+    )
     output_language = validate_language(data.get("output_language"), field_name="output_language", default="")
 
     if not image_url:
@@ -63,6 +72,18 @@ def create_explanation(content_id: str) -> Response:
     prompts = data.get("prompts") or None
 
     container = get_container()
+    metadata = container.content_usecase.get_content(content_id)
+    resolved_subtitle_language: str | None = None
+    if subtitle_language:
+        try:
+            resolved_subtitle_language = resolve_source_language(
+                subtitle_language,
+                metadata=metadata,
+                field_name="subtitle_language",
+            )
+        except SourceLanguageResolutionError as exc:
+            return bad_request(str(exc))
+
     llm_model, _ = resolve_models_for_task(
         container=container,
         content_id=content_id,
@@ -94,7 +115,7 @@ def create_explanation(content_id: str) -> Response:
         image_path=image_path,
         image_url=image_url,
         timestamp=timestamp,
-        subtitle_language=subtitle_language or None,
+        subtitle_language=resolved_subtitle_language,
         output_language=output_language,
         learner_profile=learner_profile,
         subtitle_context_window_seconds=context_window,
@@ -114,6 +135,7 @@ def create_explanation(content_id: str) -> Response:
             "entry_id": entry_id,
             "timestamp": timestamp,
             "subtitle_language": subtitle_language,
+            "resolved_subtitle_language": resolved_subtitle_language,
             "output_language": output_language,
             "learner_profile": learner_profile,
         },

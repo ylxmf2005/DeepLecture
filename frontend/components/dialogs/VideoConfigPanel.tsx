@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getAppConfig, type ModelOption } from "@/lib/api";
-import { WHISPER_LANGUAGES } from "@/lib/languages";
+import { SOURCE_LANGUAGE_OPTIONS, WHISPER_LANGUAGES } from "@/lib/languages";
 import { logger } from "@/shared/infrastructure";
 import { toError } from "@/lib/utils/errorUtils";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
@@ -173,7 +173,7 @@ export function VideoConfigPanel({
                                         description="Language spoken in the video"
                                         value={overrides.language?.original ?? ""}
                                         onChange={(v) => setOverrides({ language: { original: v } })}
-                                        options={WHISPER_LANGUAGES}
+                                        options={SOURCE_LANGUAGE_OPTIONS}
                                         isOverridden={isOverridden("language.original")}
                                         onReset={() => clearOverride("language.original")}
                                         accent="emerald"
